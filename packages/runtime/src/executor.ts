@@ -1,5 +1,5 @@
 import type { Guard, Return, Step, Suggestion, Tool, Where } from "./ir.js";
-import { extract, filterWhere, interpolate, queryLocators, setNativeValue } from "./dom.js";
+import { extract, filterWhere, interpolate, queryLocators, resolvePath, setNativeValue } from "./dom.js";
 
 export interface ToolResult {
   ok: boolean;
@@ -91,9 +91,18 @@ function firstMatch(locators: string[], where: Where | undefined): Element | und
   return filtered[0];
 }
 
+/** Human-readable target for error messages (path or flat locators). */
+function describeTarget(step: Step): string {
+  if (step.path) return `query path ${JSON.stringify(step.path.map((p) => p.locators.join("|")))}`;
+  return `locators ${JSON.stringify(step.locators ?? [])}`;
+}
+
 async function runStep(step: Step, args: Record<string, unknown>, opts: ResolvedOptions): Promise<Record<string, string>[] | undefined> {
   const locators = step.locators ?? [];
   const where = interpWhere(step.where, args);
+  // A step targets either a compquery path (scoped descendant chain) or the flat
+  // locators+where shorthand. `target()` resolves the first matching element.
+  const target = (): Element | undefined => (step.path ? resolvePath(step.path, args)[0] : firstMatch(locators, where));
 
   switch (step.op) {
     case "navigate": {
@@ -104,14 +113,14 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
       return undefined;
     }
     case "fill": {
-      const el = firstMatch(locators, where);
-      if (!el) throw new Error(`fill: no element for locators ${JSON.stringify(locators)}`);
+      const el = target();
+      if (!el) throw new Error(`fill: no element for ${describeTarget(step)}`);
       setNativeValue(el, interpolate(step.value ?? "", args));
       return undefined;
     }
     case "click": {
-      const el = firstMatch(locators, where);
-      if (!el) throw new Error(`click: no element for locators ${JSON.stringify(locators)}`);
+      const el = target();
+      if (!el) throw new Error(`click: no element for ${describeTarget(step)}`);
       (el as HTMLElement).click();
       return undefined;
     }
@@ -119,9 +128,9 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
       const deadline = Date.now() + (step.timeoutMs ?? 5000);
       for (;;) {
         if (opts.signal?.aborted) throw new Error("aborted");
-        if (firstMatch(locators, where)) return undefined;
+        if (target()) return undefined;
         if (Date.now() >= deadline) {
-          throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5000}ms for ${JSON.stringify(locators)}`);
+          throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5000}ms for ${describeTarget(step)}`);
         }
         await sleep(opts.pollMs);
       }

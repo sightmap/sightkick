@@ -1,4 +1,4 @@
-import type { Extractor, Where } from "./ir.js";
+import type { Extractor, PathPart, Pred, Where } from "./ir.js";
 
 /**
  * Shadow-piercing querySelectorAll: matches within the document and recurses
@@ -76,6 +76,54 @@ function directText(el: Element): string {
 /** Filter candidates by a where-clause (already-interpolated). */
 export function filterWhere(candidates: Element[], where: Where): Element[] {
   return candidates.filter((el) => extract(el, where.extractor) === where.equals);
+}
+
+/** Does a single path-part predicate hold for an element? (op/ci per compquery.) */
+function matchPred(el: Element, pred: Pred, args: Record<string, unknown>): boolean {
+  let a = extract(el, pred.extractor);
+  let b = interpolate(pred.value, args);
+  if (pred.ci) {
+    a = a.toLowerCase();
+    b = b.toLowerCase();
+  }
+  switch (pred.op) {
+    case "^=":
+      return a.startsWith(b);
+    case "*=":
+      return a.includes(b);
+    default:
+      return a === b;
+  }
+}
+
+/**
+ * Resolve a compquery path against the live DOM by containment scoping: each
+ * part's matches are found *within* the previous part's matches (the last part is
+ * the target). This is the runtime half of the sightmap-free path the generator
+ * compiles — it addresses "the OptionButton labelled X within the OptionGroup
+ * named Y" without any matcher, using plain DOM descendant containment.
+ */
+export function resolvePath(path: PathPart[], args: Record<string, unknown>): Element[] {
+  let scopes: ParentNode[] = [document];
+  let matched: Element[] = [];
+  for (const part of path) {
+    const found: Element[] = [];
+    const seen = new Set<Element>();
+    for (const root of scopes) {
+      for (const loc of part.locators) {
+        for (const el of deepQueryAll(loc, root)) {
+          if (seen.has(el)) continue;
+          if ((part.preds ?? []).every((p) => matchPred(el, p, args))) {
+            seen.add(el);
+            found.push(el);
+          }
+        }
+      }
+    }
+    matched = found;
+    scopes = found;
+  }
+  return matched;
 }
 
 /**

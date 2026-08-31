@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/sightmap/sightmap/go/compquery"
 	sm "github.com/sightmap/sightmap/go/sightmap"
 )
 
@@ -89,22 +90,19 @@ func candidateList(names []string) string {
 type resolvedRef struct {
 	locators []string
 	props    []sm.ComponentPropertyDef
-	isCSS    bool
 }
 
-// resolveRef turns a component ref (by name, or a css escape hatch) into
-// concrete locators + declared properties. Returns false on an unknown name.
+// resolveRef turns a component ref (by name) into concrete locators + declared
+// properties. Returns false on an unknown name. (There is deliberately no css
+// escape hatch: the manifest addresses the DOM only through corpus components.)
 func (cc *compiler) resolveRef(
-	component, css string,
+	component string,
 	comps map[string]sm.ComponentDef,
 	names []string,
 	toolName string,
 ) (resolvedRef, bool) {
-	if css != "" {
-		return resolvedRef{locators: []string{css}, isCSS: true}, true
-	}
 	if component == "" {
-		cc.errf("compile.ref", toolName, "a step in %q references neither component nor css", toolName)
+		cc.errf("compile.ref", toolName, "a step in %q references no component", toolName)
 		return resolvedRef{}, false
 	}
 	def, ok := comps[component]
@@ -116,25 +114,66 @@ func (cc *compiler) resolveRef(
 	return resolvedRef{locators: def.Selectors, props: def.Properties}, true
 }
 
-// resolveProperty resolves a property name to an extractor. For css refs the
-// name is treated as raw extract grammar; for component refs it must be a
-// declared property.
-func (cc *compiler) resolveProperty(propName string, r resolvedRef, toolName string) (Extractor, bool) {
-	if r.isCSS {
-		return parseExtractor(propName), true
-	}
-	for _, p := range r.props {
+// resolvePropertyDef resolves a declared property name to its extractor against a
+// component's property set.
+func (cc *compiler) resolvePropertyDef(propName string, props []sm.ComponentPropertyDef, toolName string) (Extractor, bool) {
+	for _, p := range props {
 		if p.Name == propName {
 			return parseExtractor(p.Extract), true
 		}
 	}
 	var have []string
-	for _, p := range r.props {
+	for _, p := range props {
 		have = append(have, p.Name)
 	}
 	cc.errf("compile.prop-unresolved", toolName,
 		"property %q is not declared on the referenced component (have: %s)", propName, candidateList(have))
 	return Extractor{}, false
+}
+
+// resolveProperty resolves a property name against a resolved component ref.
+func (cc *compiler) resolveProperty(propName string, r resolvedRef, toolName string) (Extractor, bool) {
+	return cc.resolvePropertyDef(propName, r.props, toolName)
+}
+
+// compileQuery parses a compquery path and resolves each part against the
+// in-scope components: component name -> selectors, each predicate's property ->
+// extractor. The result is a sightmap-free descendant chain the runtime resolves
+// by DOM containment. Reuses the sightmap library's parser (grammar parity with
+// `sightmap browser` queries); the library's live resolver stays out of the
+// runtime (the firewall).
+func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentDef, names []string, known map[string]bool, toolName string) (Path, bool) {
+	q, err := compquery.ParseQuery(queryStr)
+	if err != nil {
+		cc.errf("compile.query-parse", toolName, "tool %q has an invalid query %q: %v", toolName, queryStr, err)
+		return nil, false
+	}
+	ok := true
+	var path Path
+	for _, part := range q.Parts {
+		def, found := comps[part.Name]
+		if !found {
+			cc.errf("compile.query-ref", toolName,
+				"tool %q query references unknown component %q. Available: %s", toolName, part.Name, candidateList(names))
+			ok = false
+			continue
+		}
+		pp := PathPart{Locators: def.Selectors}
+		for _, pr := range part.Preds {
+			ex, pok := cc.resolvePropertyDef(pr.Prop, def.Properties, toolName)
+			if !pok {
+				ok = false
+				continue
+			}
+			cc.validateTemplate(pr.Val, known, toolName)
+			pp.Preds = append(pp.Preds, Pred{Property: pr.Prop, Extractor: ex, Op: pr.Op, Value: pr.Val, CI: pr.CI})
+		}
+		path = append(path, pp)
+	}
+	if q.Index >= 0 {
+		cc.warnf("compile.query-index", toolName, "tool %q query occurrence index #%d is not yet supported; ignoring", toolName, q.Index)
+	}
+	return path, ok
 }
 
 func (cc *compiler) validateTemplate(s string, known map[string]bool, toolName string) {
@@ -207,7 +246,15 @@ func (cc *compiler) compileStep(
 		return Step{Op: "navigate", View: v.Name, Route: v.Route}, true
 
 	case "fill":
-		r, ok := cc.resolveRef(body.Component, body.CSS, comps, names, toolName)
+		if body.Query != "" {
+			path, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
+			if !ok {
+				return Step{}, false
+			}
+			cc.validateTemplate(body.Value, known, toolName)
+			return Step{Op: "fill", Path: path, Value: body.Value}, true
+		}
+		r, ok := cc.resolveRef(body.Component, comps, names, toolName)
 		if !ok {
 			return Step{}, false
 		}
@@ -215,25 +262,39 @@ func (cc *compiler) compileStep(
 		return Step{Op: "fill", Locators: r.locators, Value: body.Value, Where: cc.compileWhere(body.Where, r, known, toolName)}, true
 
 	case "click":
-		r, ok := cc.resolveRef(body.Component, body.CSS, comps, names, toolName)
+		if body.Query != "" {
+			path, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
+			if !ok {
+				return Step{}, false
+			}
+			return Step{Op: "click", Path: path}, true
+		}
+		r, ok := cc.resolveRef(body.Component, comps, names, toolName)
 		if !ok {
 			return Step{}, false
 		}
 		return Step{Op: "click", Locators: r.locators, Where: cc.compileWhere(body.Where, r, known, toolName)}, true
 
 	case "wait_for":
-		r, ok := cc.resolveRef(body.Component, body.CSS, comps, names, toolName)
-		if !ok {
-			return Step{}, false
-		}
 		timeout := body.TimeoutMs
 		if timeout == 0 {
 			timeout = 5000
 		}
+		if body.Query != "" {
+			path, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
+			if !ok {
+				return Step{}, false
+			}
+			return Step{Op: "waitFor", Path: path, TimeoutMs: timeout}, true
+		}
+		r, ok := cc.resolveRef(body.Component, comps, names, toolName)
+		if !ok {
+			return Step{}, false
+		}
 		return Step{Op: "waitFor", Locators: r.locators, TimeoutMs: timeout, Where: cc.compileWhere(body.Where, r, known, toolName)}, true
 
 	case "collect":
-		r, ok := cc.resolveRef(body.Component, body.CSS, comps, names, toolName)
+		r, ok := cc.resolveRef(body.Component, comps, names, toolName)
 		if !ok {
 			return Step{}, false
 		}
@@ -269,7 +330,7 @@ func (cc *compiler) compileReturn(ret *ReturnDef, comps map[string]sm.ComponentD
 		}
 		return out
 	}
-	r, ok := cc.resolveRef(ret.Extract.Component, ret.Extract.CSS, comps, names, toolName)
+	r, ok := cc.resolveRef(ret.Extract.Component, comps, names, toolName)
 	if !ok {
 		return nil
 	}
@@ -298,7 +359,7 @@ func (cc *compiler) compileToolGuard(g *GuardBody, comps map[string]sm.Component
 		cc.errf("compile.guard", toolName, "tool %q guard must have a present: or absent: reference", toolName)
 		return nil
 	}
-	r, ok := cc.resolveRef(ref.Component, ref.CSS, comps, names, toolName)
+	r, ok := cc.resolveRef(ref.Component, comps, names, toolName)
 	if !ok {
 		return nil
 	}

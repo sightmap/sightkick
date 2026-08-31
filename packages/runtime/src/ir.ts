@@ -25,11 +25,28 @@ export interface Field {
   extractor: Extractor;
 }
 
+/** One property constraint on a path part (compiled from a compquery predicate). */
+export interface Pred {
+  property?: string;
+  extractor: Extractor;
+  op: "=" | "^=" | "*=";
+  value: string;
+  ci?: boolean;
+}
+
+/** One component in a descendant chain: elements matching a locator for which every pred holds. */
+export interface PathPart {
+  locators: string[];
+  preds?: Pred[];
+}
+
 export interface Step {
   op: "navigate" | "fill" | "click" | "waitFor" | "collect";
   view?: string;
   route?: string;
   locators?: string[];
+  /** A compquery path (descendant chain); when present it replaces locators+where. */
+  path?: PathPart[];
   value?: string;
   where?: Where;
   timeoutMs?: number;

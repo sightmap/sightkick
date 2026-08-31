@@ -27,9 +27,14 @@ type FieldDef struct {
 // StepBody is the (single) value under a step's op key. Each step map has
 // exactly one key — the op name — and this struct is its body. Only the fields
 // relevant to a given op are populated.
+//
+// Query is a compquery path (e.g. `OptionGroup[name={{group}}] OptionButton[label={{option}}]`)
+// that addresses the target by component identity + descendant scope. It is the
+// preferred form; Component + Where are the flat shorthand for a single component.
+// For collect, Query (or Component) selects the rows.
 type StepBody struct {
+	Query     string              `yaml:"query"`
 	Component string              `yaml:"component"`
-	CSS       string              `yaml:"css"`
 	Value     string              `yaml:"value"`
 	Where     map[string]string   `yaml:"where"`
 	TimeoutMs int                 `yaml:"timeout_ms"`
@@ -39,8 +44,8 @@ type StepBody struct {
 
 // ExtractRef is a returns.extract reference.
 type ExtractRef struct {
+	Query     string            `yaml:"query"`
 	Component string            `yaml:"component"`
-	CSS       string            `yaml:"css"`
 	Where     map[string]string `yaml:"where"`
 	Property  string            `yaml:"property"`
 }
@@ -51,10 +56,10 @@ type ReturnDef struct {
 	Extract     *ExtractRef `yaml:"extract"`
 }
 
-// GuardRef is the component/css a guard checks, with an optional where-clause.
+// GuardRef is the component a guard checks, with an optional where-clause.
 type GuardRef struct {
+	Query     string            `yaml:"query"`
 	Component string            `yaml:"component"`
-	CSS       string            `yaml:"css"`
 	Where     map[string]string `yaml:"where"`
 }
 

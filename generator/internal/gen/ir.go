@@ -31,6 +31,30 @@ type Where struct {
 	Equals    string    `json:"equals"`
 }
 
+// Pred is one property constraint on a path part: extract a declared property and
+// compare it to a (possibly templated) value. Op is "=", "^=", or "*="; CI makes
+// the comparison case-insensitive. Compiled from a compquery predicate.
+type Pred struct {
+	Property  string    `json:"property,omitempty"`
+	Extractor Extractor `json:"extractor"`
+	Op        string    `json:"op"`
+	Value     string    `json:"value"`
+	CI        bool      `json:"ci,omitempty"`
+}
+
+// PathPart matches a single component in a descendant chain: elements matching
+// any of Locators for which every Pred holds.
+type PathPart struct {
+	Locators []string `json:"locators"`
+	Preds    []Pred   `json:"preds,omitempty"`
+}
+
+// A Path is a compiled compquery: an ordered descendant chain whose LAST part is
+// the target. The runtime resolves it by DOM containment (each part scoped within
+// the previous part's matches), so it addresses "the OptionButton labelled X
+// within the OptionGroup named Y" without any sightmap constructs.
+type Path = []PathPart
+
 // Field is one output column of a collect step.
 type Field struct {
 	Property  string    `json:"property,omitempty"`
@@ -44,6 +68,7 @@ type Step struct {
 	View      string           `json:"view,omitempty"`
 	Route     string           `json:"route,omitempty"`
 	Locators  []string         `json:"locators,omitempty"`
+	Path      Path             `json:"path,omitempty"`
 	Value     string           `json:"value,omitempty"`
 	Where     *Where           `json:"where,omitempty"`
 	TimeoutMs int              `json:"timeoutMs,omitempty"`

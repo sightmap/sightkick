@@ -38,20 +38,26 @@ tools:
 
   - name: choose_option
     description: >-
-      Pick a customization option on the item detail page (e.g. "steak",
-      "guacamole"). Use the exact option label.
+      Pick a customization option within a group on the item detail page
+      (e.g. group "Protein", option "steak"). Scoped by group so repeated labels
+      like "none" are unambiguous.
     mode: live
     ensure_view: ItemDetailView
     params:
+      - name: group
+        type: string
+        required: true
+        description: The option group (Protein, Rice, Beans, Salsa, Extras).
       - name: option
         type: string
         required: true
-        description: The option label to select (e.g. chicken, white, black, guacamole).
+        description: The option label within that group (e.g. steak, white, none, guacamole).
     steps:
+      # A compquery path scopes the button to its group. Labels are matched
+      # case-insensitively (i): sightmap snapshots show CSS text-transformed
+      # values (e.g. "Protein"), while the DOM's textContent is "protein".
       - click:
-          component: OptionButton
-          where:
-            label: "{{option}}"
+          query: 'OptionGroup[name="{{group}}" i] OptionButton[label="{{option}}" i]'
 
   - name: add_to_cart
     description: Add the customized item to the cart. Navigates to the cart.
@@ -60,6 +66,28 @@ tools:
     steps:
       - click:
           component: AddToCartButton
+
+  - name: set_field
+    description: >-
+      Fill a checkout field by its label. The checkout form is pre-filled, so
+      this is only needed to change a value.
+    mode: live
+    ensure_view: CheckoutView
+    params:
+      - name: field
+        type: string
+        required: true
+        description: The field label (Street, City, State, ZIP, Card number, Expiry, CVC).
+      - name: value
+        type: string
+        required: true
+        description: The value to enter.
+    steps:
+      # Scope the input to the labelled TextField (delivery fields have no
+      # distinctive own-property, so the parent's label is what disambiguates).
+      - fill:
+          query: 'TextField[label="{{field}}" i] FieldInput'
+          value: "{{value}}"
 
   - name: view_cart
     description: List the items currently in the cart.
@@ -90,12 +118,12 @@ tools:
       - click:
           component: SummaryCta
       - wait_for:
-          css: ".confirmation-order-id"
+          component: OrderId
     returns:
       description: The order confirmation id.
       extract:
-        css: ".confirmation-order-id"
-        property: text
+        component: OrderId
+        property: id
 
 # The ordering journey -> per-tool guidance breadcrumbs.
 journeys:
