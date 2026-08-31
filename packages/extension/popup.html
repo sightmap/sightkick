@@ -16,6 +16,14 @@
       #tools { margin-top: 10px; }
       code { background: #f2f2f2; padding: 0 3px; border-radius: 3px; }
       .none { color: #999; }
+      .badge { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: #eee; color: #555; margin-left: 6px; }
+      .badge.local { background: #e7f0ff; color: #2456b8; }
+      .del { border: none; background: none; color: #c00; cursor: pointer; float: right; padding: 0 2px; }
+      details { margin-top: 12px; border-top: 1px solid #eee; padding-top: 8px; }
+      summary { cursor: pointer; font-weight: 600; }
+      form input, form textarea { width: 100%; box-sizing: border-box; margin: 4px 0; font: inherit; }
+      form textarea { height: 80px; font-family: ui-monospace, monospace; font-size: 11px; }
+      .err { color: #c00; font-size: 12px; }
     </style>
   </head>
   <body>
@@ -27,6 +35,18 @@
       <button id="refresh" type="button">Refresh</button>
     </div>
     <div id="tools"></div>
+
+    <details>
+      <summary>Add a local corpus</summary>
+      <form id="add-form">
+        <input id="c-name" placeholder="name (e.g. Acme Store)" />
+        <input id="c-match" placeholder="match patterns, comma-separated (e.g. https://acme.test/*)" />
+        <textarea id="c-ir" placeholder="IR JSON (output of: sightkick build <app-dir>)"></textarea>
+        <button type="submit">Add corpus</button>
+        <div id="add-err" class="err"></div>
+      </form>
+    </details>
+
     <script src="popup.js"></script>
   </body>
 </html>

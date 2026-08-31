@@ -6,32 +6,24 @@
  * see. This is what makes injection win the race against an agent's first
  * getTools(): the runtime (also at document_start) picks the IR up immediately.
  *
+ * Corpus resolution (bundled + local, atlas later) goes through the shared
+ * CorpusSource seam, so a locally-added corpus injects with no code change here.
  * The content-script registration match is a coarse, port-stripped filter, so we
- * re-check the precise pattern (port + path) here before doing anything.
+ * re-check the precise pattern (port + path) with matchUrl.
  *
  * Channel contract mirrors packages/runtime/src/channel.ts (data attrs on <html>
  * + a bare ready event). Kept in sync by hand, like the IR JSON contract.
  */
 import { matchUrl } from "./match.js";
+import { listCorpora, getIr } from "./corpus.js";
 
 const IR_ATTR = "data-sightkick-ir";
 const HOST_ATTR = "data-sightkick-host";
 const IR_EVENT = "sightkick:ir";
 
-interface CorpusMeta {
-  id: string;
-  match: string[];
-  irFile: string;
-  source: string;
-  version: string;
-  defaultEnabled?: boolean;
-}
-
-const resourceUrl = (p: string) => chrome.runtime.getURL(p);
-
 void (async () => {
   try {
-    const corpora = (await (await fetch(resourceUrl("corpora/index.json"))).json()) as CorpusMeta[];
+    const corpora = await listCorpora();
     const stored = (await chrome.storage.local.get("enabled")) as { enabled?: Record<string, boolean> };
     const enabled = stored.enabled ?? {};
 
@@ -40,7 +32,7 @@ void (async () => {
     );
     if (!meta) return;
 
-    const ir = await (await fetch(resourceUrl("corpora/" + meta.irFile))).json();
+    const ir = await getIr(meta);
     const de = document.documentElement;
     de.setAttribute(IR_ATTR, JSON.stringify(ir));
     de.setAttribute(HOST_ATTR, JSON.stringify({ corpus: meta.id, source: meta.source, version: meta.version }));

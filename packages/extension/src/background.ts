@@ -16,17 +16,15 @@
  * registerContentScripts isn't available.
  */
 import { pickCorpus, toChromeMatchPattern } from "./match.js";
-
-interface CorpusMeta {
-  id: string;
-  name: string;
-  description: string;
-  match: string[];
-  irFile: string;
-  source: string;
-  version: string;
-  defaultEnabled?: boolean;
-}
+import {
+  listCorpora,
+  getIr,
+  addLocalCorpus,
+  removeLocalCorpus,
+  validateCorpus,
+  type CorpusMeta,
+  type NewCorpusInput,
+} from "./corpus.js";
 
 interface Provenance {
   source: string;
@@ -38,22 +36,12 @@ const CS_IDS = ["sightkick-bridge", "sightkick-main"];
 let contentScriptsSupported = true;
 let lastSyncStatus = "pending";
 
-const url = (p: string) => chrome.runtime.getURL(p);
-
-async function loadCorpora(): Promise<CorpusMeta[]> {
-  return (await (await fetch(url("corpora/index.json"))).json()) as CorpusMeta[];
-}
-
-async function loadIr(meta: CorpusMeta): Promise<unknown> {
-  return (await fetch(url("corpora/" + meta.irFile))).json();
-}
-
 /** Enabled map, seeded once from each corpus's defaultEnabled. */
 async function getEnabled(): Promise<Record<string, boolean>> {
   const stored = (await chrome.storage.local.get("enabled")) as { enabled?: Record<string, boolean> };
   if (stored.enabled) return stored.enabled;
   const seed: Record<string, boolean> = {};
-  for (const c of await loadCorpora()) seed[c.id] = !!c.defaultEnabled;
+  for (const c of await listCorpora()) seed[c.id] = !!c.defaultEnabled;
   await chrome.storage.local.set({ enabled: seed });
   return seed;
 }
@@ -65,9 +53,9 @@ async function setEnabled(id: string, on: boolean): Promise<void> {
 }
 
 async function corpusForUrl(pageUrl: string): Promise<CorpusMeta | undefined> {
-  const [corpora, enabled] = await Promise.all([loadCorpora(), getEnabled()]);
+  const [corpora, enabled] = await Promise.all([listCorpora(), getEnabled()]);
   return pickCorpus(
-    corpora.filter((c) => enabled[c.id]),
+    corpora.filter((c) => enabled[c.id] ?? c.defaultEnabled),
     pageUrl,
   );
 }
@@ -87,11 +75,11 @@ function syncContentScripts(): Promise<void> {
 async function doSyncContentScripts(): Promise<void> {
   try {
     await chrome.storage.local.set({ syncStatus: "running" });
-    const [corpora, enabled] = await Promise.all([loadCorpora(), getEnabled()]);
+    const [corpora, enabled] = await Promise.all([listCorpora(), getEnabled()]);
     const matches = [
       ...new Set(
         corpora
-          .filter((c) => enabled[c.id])
+          .filter((c) => enabled[c.id] ?? c.defaultEnabled)
           .flatMap((c) => c.match)
           .map(toChromeMatchPattern)
           .filter((m): m is string => m !== null),
@@ -158,7 +146,7 @@ async function readTools(tabId: number): Promise<string[] | null> {
  * already-booted document just reloads the IR (no second boot).
  */
 async function inject(tabId: number, meta: CorpusMeta): Promise<{ how: string; tools: string[] | null }> {
-  const ir = await loadIr(meta);
+  const ir = await getIr(meta);
   const prov: Provenance = { source: meta.source, corpus: meta.id, version: meta.version };
 
   const [primed] = await chrome.scripting.executeScript({
@@ -217,24 +205,37 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 });
 
 // Popup RPC.
-chrome.runtime.onMessage.addListener((msg: { type: string; id?: string; on?: boolean }, _sender, sendResponse) => {
-  void (async () => {
-    if (msg.type === "getState") {
-      const [corpora, enabled] = await Promise.all([loadCorpora(), getEnabled()]);
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      const tools = tab?.id ? await readTools(tab.id) : null;
-      sendResponse({ corpora, enabled, tab: tab ? { id: tab.id, url: tab.url } : null, tools, sync: lastSyncStatus });
-    } else if (msg.type === "toggle" && msg.id != null) {
-      await setEnabled(msg.id, !!msg.on);
-      await syncContentScripts(); // future loads of newly enabled sites get injected
-      sendResponse({ ok: true });
-    } else if (msg.type === "injectNow") {
+chrome.runtime.onMessage.addListener(
+  (msg: { type: string; id?: string; on?: boolean; corpus?: NewCorpusInput }, _sender, sendResponse) => {
+    void (async () => {
+      if (msg.type === "getState") {
+        const [corpora, enabled] = await Promise.all([listCorpora(), getEnabled()]);
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const tools = tab?.id ? await readTools(tab.id) : null;
+        sendResponse({ corpora, enabled, tab: tab ? { id: tab.id, url: tab.url } : null, tools, sync: lastSyncStatus });
+      } else if (msg.type === "toggle" && msg.id != null) {
+        await setEnabled(msg.id, !!msg.on);
+        await syncContentScripts(); // future loads of newly enabled sites get injected
+        sendResponse({ ok: true });
+      } else if (msg.type === "addCorpus" && msg.corpus) {
+        const result = validateCorpus(msg.corpus);
+        if (!result.ok) return sendResponse({ ok: false, error: result.error });
+        await addLocalCorpus(result.corpus);
+        await setEnabled(result.corpus.id, true);
+        await syncContentScripts();
+        sendResponse({ ok: true, id: result.corpus.id });
+      } else if (msg.type === "removeCorpus" && msg.id != null) {
+        await removeLocalCorpus(msg.id);
+        await syncContentScripts();
+        sendResponse({ ok: true });
+      } else if (msg.type === "injectNow") {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id || !tab.url) return sendResponse({ ok: false, error: "no active tab" });
       const meta = await corpusForUrl(tab.url);
       if (!meta) return sendResponse({ ok: false, error: "no enabled corpus matches this URL" });
       sendResponse({ ok: true, corpus: meta.id, ...(await inject(tab.id, meta)) });
-    }
-  })();
-  return true; // keep the message channel open for the async sendResponse
-});
+      }
+    })();
+    return true; // keep the message channel open for the async sendResponse
+  },
+);
