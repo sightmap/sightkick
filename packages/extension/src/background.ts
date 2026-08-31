@@ -177,6 +177,14 @@ async function inject(tabId: number, meta: CorpusMeta): Promise<{ how: string; t
   return { how, tools: await readTools(tabId) };
 }
 
+// A keyboard command opens the corpus manager (options_ui page) in a tab. Some
+// Chromium embeddings (e.g. ChatGPT's browser) surface no extensions toolbar, so
+// the action popup is unreachable; this + chrome-extension://<id>/popup.html are
+// the ways in. (Bind a key on the Keyboard shortcuts page.)
+chrome.commands.onCommand.addListener((command) => {
+  if (command === "open_manager") void chrome.runtime.openOptionsPage();
+});
+
 // Reconcile content-script registration on EVERY service-worker start. In MV3 the
 // SW is torn down when idle and re-run on wake, and onInstalled/onStartup do NOT
 // fire on wake — so a top-level call is what keeps registration live across the

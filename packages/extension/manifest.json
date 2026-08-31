@@ -8,6 +8,12 @@
   "background": { "service_worker": "background.js", "type": "module" },
   "action": { "default_popup": "popup.html", "default_title": "sightkick" },
   "options_ui": { "page": "popup.html", "open_in_tab": true },
+  "commands": {
+    "open_manager": {
+      "suggested_key": { "default": "Alt+Shift+K" },
+      "description": "Open the sightkick corpus manager (in a tab)"
+    }
+  },
   "web_accessible_resources": [
     {
       "resources": ["sightkick-runtime.js", "corpora/*"],
