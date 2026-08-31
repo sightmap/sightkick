@@ -1,0 +1,118 @@
+version: 1
+name: burrito
+# sightkick as an external consumer of a third-party app's sightmap corpus.
+# Resolves to potemkin/village/burrito/.sightmap (sibling repo under subtext/).
+corpus: ../../../potemkin/village/burrito/.sightmap
+
+# A same-document SPA ordering flow: Menu (/) -> Item detail (/items/**) ->
+# Cart (/cart) -> Checkout (/checkout) -> Confirmation (/confirmation). Tools are
+# atomic + view-scoped; the journey compiles into guidance breadcrumbs.
+tools:
+  - name: list_menu
+    description: List the menu items (name + price).
+    mode: live
+    ensure_view: MenuView
+    steps:
+      - collect:
+          component: MenuCard
+          fields:
+            item:
+              property: itemName
+            price:
+              property: price
+
+  - name: open_item
+    description: Open a menu item's detail page to customize it. Navigates to the item view.
+    mode: live
+    ensure_view: MenuView
+    params:
+      - name: item
+        type: string
+        required: true
+        description: The exact menu item name (see list_menu).
+    steps:
+      - click:
+          component: MenuCard
+          where:
+            itemName: "{{item}}"
+
+  - name: choose_option
+    description: >-
+      Pick a customization option on the item detail page (e.g. "steak",
+      "guacamole"). Use the exact option label.
+    mode: live
+    ensure_view: ItemDetailView
+    params:
+      - name: option
+        type: string
+        required: true
+        description: The option label to select (e.g. chicken, white, black, guacamole).
+    steps:
+      - click:
+          component: OptionButton
+          where:
+            label: "{{option}}"
+
+  - name: add_to_cart
+    description: Add the customized item to the cart. Navigates to the cart.
+    mode: live
+    ensure_view: ItemDetailView
+    steps:
+      - click:
+          component: AddToCartButton
+
+  - name: view_cart
+    description: List the items currently in the cart.
+    mode: live
+    ensure_view: CartView
+    steps:
+      - collect:
+          component: CartLine
+          fields:
+            name:
+              property: name
+
+  - name: go_to_checkout
+    description: Proceed from the cart to checkout. Navigates to the checkout page.
+    mode: live
+    ensure_view: CartView
+    steps:
+      - click:
+          component: SummaryCta
+
+  - name: place_order
+    description: >-
+      Place the order from checkout (the form is pre-filled). Navigates to the
+      confirmation page and returns the order id.
+    mode: live
+    ensure_view: CheckoutView
+    steps:
+      - click:
+          component: SummaryCta
+      - wait_for:
+          css: ".confirmation-order-id"
+    returns:
+      description: The order confirmation id.
+      extract:
+        css: ".confirmation-order-id"
+        property: text
+
+# The ordering journey -> per-tool guidance breadcrumbs.
+journeys:
+  - name: order_flow
+    description: Browse the menu, customize an item, and check out.
+    steps:
+      - tool: list_menu
+        reason: see what's available
+      - tool: open_item
+        reason: open an item to customize it
+      - tool: choose_option
+        reason: customize the item
+      - tool: add_to_cart
+        reason: add the customized item to the cart
+      - tool: view_cart
+        reason: review the cart
+      - tool: go_to_checkout
+        reason: proceed to checkout
+      - tool: place_order
+        reason: place the order
