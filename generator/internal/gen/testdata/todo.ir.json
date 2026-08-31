@@ -10,7 +10,7 @@
   "tools": [
     {
       "name": "add_todo",
-      "description": "Add a new todo item to the list.",
+      "description": "Add a new todo item to the list. Returns `value` (string): The text of the newly created todo row.",
       "mode": "live",
       "inputSchema": {
         "type": "object",
@@ -117,7 +117,7 @@
     },
     {
       "name": "list_todos",
-      "description": "List the current todos and whether each is completed.",
+      "description": "List the current todos and whether each is completed. Returns `items`: a list of objects with keys {text}. The current todo rows.",
       "mode": "live",
       "inputSchema": {
         "type": "object",

@@ -26,7 +26,7 @@
   "tools": [
     {
       "name": "list_menu",
-      "description": "List the menu items (name + price).",
+      "description": "List the menu items (name + price). Returns `items`: a list of objects with keys {item, price}. The menu items.",
       "mode": "live",
       "inputSchema": {
         "type": "object",
@@ -298,7 +298,7 @@
     },
     {
       "name": "view_cart",
-      "description": "List the items currently in the cart.",
+      "description": "List the items currently in the cart. Returns `items`: a list of objects with keys {name}. The cart line items.",
       "mode": "live",
       "inputSchema": {
         "type": "object",
@@ -376,7 +376,7 @@
     },
     {
       "name": "place_order",
-      "description": "Place the order from checkout (the form is pre-filled). Navigates to the confirmation page and returns the order id.",
+      "description": "Place the order from checkout (the form is pre-filled). Navigates to the confirmation page and returns the order id. Returns `value` (string): The order confirmation id.",
       "mode": "live",
       "inputSchema": {
         "type": "object",

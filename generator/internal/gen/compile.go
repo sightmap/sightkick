@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -362,7 +363,61 @@ func (cc *compiler) compileTool(t ToolDef) Tool {
 		tool.Steps = []Step{}
 	}
 	tool.Returns = cc.compileReturn(t.Returns, comps, names, known, t.Name)
+	// Make the result self-describing: agents read the tool description in
+	// getTools(), so baking the result shape (envelope key + list field names)
+	// there lets them parse first-try instead of guessing 'items'/field names.
+	if hint := returnHint(tool.Returns); hint != "" {
+		tool.Description = strings.TrimSpace(tool.Description + " " + hint)
+	}
 	return tool
+}
+
+// returnHint renders a one-line description of a tool's result shape, naming the
+// envelope key the runtime actually uses (`value` or `items`) and, for a list,
+// the per-row field keys. Empty when there is nothing to read.
+func returnHint(ret *Return) string {
+	if ret == nil {
+		return ""
+	}
+	switch ret.Kind {
+	case "list":
+		keys := make([]string, 0, len(ret.Fields))
+		for k := range ret.Fields {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var hint string
+		if len(keys) == 0 {
+			hint = "Returns `items`: a list."
+		} else {
+			hint = fmt.Sprintf("Returns `items`: a list of objects with keys {%s}.", strings.Join(keys, ", "))
+		}
+		if ret.Description != "" {
+			hint += " " + ensureSentence(ret.Description)
+		}
+		return hint
+	case "value":
+		if ret.Query == nil && ret.Extractor == nil {
+			return "" // description-only return with nothing to read
+		}
+		if ret.Description != "" {
+			return "Returns `value` (string): " + ensureSentence(ret.Description)
+		}
+		return "Returns `value`: a single string."
+	}
+	return ""
+}
+
+// ensureSentence trims and adds a trailing period if missing (for clean joins).
+func ensureSentence(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	if !strings.HasSuffix(s, ".") && !strings.HasSuffix(s, "!") && !strings.HasSuffix(s, "?") {
+		s += "."
+	}
+	return s
 }
 
 func toolNames(ir *IR) []string {
@@ -402,6 +457,10 @@ func (cc *compiler) attachGuidance(ir *IR, journeys []JourneyDef) {
 			}
 			if tb == nil {
 				cc.errf("compile.journey-ref", j.Name, "journey %q references unknown tool %q (have: %s)", j.Name, b.Tool, candidateList(toolNames(ir)))
+				continue
+			}
+			if a.Tool == b.Tool {
+				cc.errf("compile.journey-self-loop", j.Name, "journey %q lists %q twice in a row (a self-edge yields no guidance)", j.Name, a.Tool)
 				continue
 			}
 			// If the next tool lives on a different view, reaching it requires a

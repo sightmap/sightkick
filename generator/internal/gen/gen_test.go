@@ -330,6 +330,60 @@ func TestFieldDefShorthand(t *testing.T) {
 	}
 }
 
+// TestReturnHint: the generator bakes a self-describing result shape into the
+// tool description (yak-8a56) so agents don't guess the envelope key/field names.
+func TestReturnHint(t *testing.T) {
+	ir, diags, err := Build(searchDir)
+	if err != nil || HasErrors(diags) {
+		t.Fatalf("build failed: err=%v diags=%s", err, Format(diags))
+	}
+	list := findTool(t, ir, "list_results")
+	for _, want := range []string{"`items`", "id", "title", "price"} {
+		if !strings.Contains(list.Description, want) {
+			t.Errorf("list_results description %q missing %q", list.Description, want)
+		}
+	}
+	book := findTool(t, ir, "book")
+	if !strings.Contains(book.Description, "`value`") {
+		t.Errorf("book description %q should name the `value` result", book.Description)
+	}
+}
+
+// TestJourneySelfLoopReported: a journey listing a tool twice in a row is a
+// self-edge (yields no guidance) and is reported (yak-9206).
+func TestJourneySelfLoopReported(t *testing.T) {
+	dir := t.TempDir()
+	corpus := filepath.Join(dir, ".sightmap")
+	os.MkdirAll(corpus, 0o755)
+	writeFile(t, filepath.Join(corpus, "views.yaml"), `version: 1
+views:
+  - name: Home
+    route: /
+    components:
+      - name: Field
+        selector: ".field"
+`)
+	writeFile(t, filepath.Join(dir, "webmcp.tools.yaml"), `version: 1
+corpus: ./.sightmap
+tools:
+  - name: do_thing
+    mode: live
+    ensure_view: Home
+    steps:
+      - click:
+          query: Field
+journeys:
+  - name: flow
+    steps:
+      - do_thing
+      - do_thing
+`)
+	_, diags, _ := Build(dir)
+	if findDiag(diags, "compile.journey-self-loop") == nil {
+		t.Fatalf("expected compile.journey-self-loop, got:\n%s", Format(diags))
+	}
+}
+
 func findTool(t *testing.T, ir IR, name string) Tool {
 	t.Helper()
 	for _, tool := range ir.Tools {

@@ -70,7 +70,7 @@
     },
     {
       "name": "list_results",
-      "description": "List the current search results (id, title, price).",
+      "description": "List the current search results (id, title, price). Returns `items`: a list of objects with keys {id, price, title}. The current results.",
       "mode": "live",
       "inputSchema": {
         "type": "object",
@@ -127,7 +127,7 @@
     },
     {
       "name": "set_sort",
-      "description": "Cycle the result sort order and return the reordered results.",
+      "description": "Cycle the result sort order and return the reordered results. Returns `items`: a list of objects with keys {id, price, title}. The reordered results.",
       "mode": "live",
       "inputSchema": {
         "type": "object",
@@ -190,7 +190,7 @@
     },
     {
       "name": "select_flight",
-      "description": "Select a flight by id. Idempotent — selecting the same flight again is a no-op.",
+      "description": "Select a flight by id. Idempotent — selecting the same flight again is a no-op. Returns `value` (string): The selected flight summary.",
       "mode": "live",
       "inputSchema": {
         "type": "object",
@@ -317,7 +317,7 @@
     },
     {
       "name": "book",
-      "description": "Book the currently-selected flight. Idempotent — re-booking returns the existing reference.",
+      "description": "Book the currently-selected flight. Idempotent — re-booking returns the existing reference. Returns `value` (string): The booking reference.",
       "mode": "live",
       "inputSchema": {
         "type": "object",
