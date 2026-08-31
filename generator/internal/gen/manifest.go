@@ -19,9 +19,26 @@ type ParamDef struct {
 	Values      []string `yaml:"values"` // for type: enum
 }
 
-// FieldDef maps a collect output field to a declared property.
+// FieldDef maps a collect output field to a declared property. Authored either
+// as a scalar shorthand (`item: itemName`) or a mapping (`item: {property:
+// itemName}`); the mapping form leaves room for future per-field richness.
 type FieldDef struct {
 	Property string `yaml:"property"`
+}
+
+func (f *FieldDef) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		f.Property = value.Value
+		return nil
+	}
+	// Alias to shed the custom unmarshaler and avoid infinite recursion.
+	type raw FieldDef
+	var r raw
+	if err := value.Decode(&r); err != nil {
+		return err
+	}
+	*f = FieldDef(r)
+	return nil
 }
 
 // StepBody is the (single) value under a step's op key. Each step map has

@@ -28,12 +28,9 @@ tools:
       - collect:
           rows: ResultItem
           fields:
-            id:
-              property: id
-            title:
-              property: title
-            price:
-              property: price
+            id: id
+            title: title
+            price: price
 
   - name: set_sort
     description: Cycle the result sort order and return the reordered results.
@@ -47,12 +44,9 @@ tools:
       - collect:
           rows: ResultItem
           fields:
-            id:
-              property: id
-            title:
-              property: title
-            price:
-              property: price
+            id: id
+            title: title
+            price: price
 
   - name: select_flight
     description: Select a flight by id. Idempotent — selecting the same flight again is a no-op.

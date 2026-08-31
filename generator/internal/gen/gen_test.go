@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // exampleDir is the todo example, relative to this test file.
@@ -295,6 +297,26 @@ tools:
 	_, diags, _ := Build(dir)
 	if findDiag(diags, "compile.param") == nil {
 		t.Fatalf("expected compile.param, got:\n%s", Format(diags))
+	}
+}
+
+// TestFieldDefShorthand: a collect field parses from the scalar shorthand
+// (`item: itemName`) and the mapping form (`item: {property: itemName}`) to the
+// same declared property.
+func TestFieldDefShorthand(t *testing.T) {
+	var scalar FieldDef
+	if err := yaml.Unmarshal([]byte("itemName\n"), &scalar); err != nil {
+		t.Fatal(err)
+	}
+	if scalar.Property != "itemName" {
+		t.Errorf("scalar field = %+v, want Property=itemName", scalar)
+	}
+	var mapping FieldDef
+	if err := yaml.Unmarshal([]byte("property: itemName\n"), &mapping); err != nil {
+		t.Fatal(err)
+	}
+	if mapping.Property != "itemName" {
+		t.Errorf("mapping field = %+v, want Property=itemName", mapping)
 	}
 }
 

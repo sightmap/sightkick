@@ -37,8 +37,7 @@ tools:
       - collect:
           rows: TodoItem
           fields:
-            text:
-              property: text
+            text: text
 
   - name: set_filter
     description: Switch the todo list filter to All, Active, or Completed.
