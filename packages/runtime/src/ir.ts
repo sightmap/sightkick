@@ -45,21 +45,26 @@ export interface Query {
 }
 
 export interface Step {
-  op: "navigate" | "fill" | "click" | "waitFor" | "collect";
+  op: "navigate" | "fill" | "click" | "waitFor";
   view?: string;
   route?: string;
   /** The target, addressed by a compquery. Absent only for navigate. */
   query?: Query;
   value?: string;
   timeoutMs?: number;
-  fields?: Record<string, Field>;
 }
 
+/**
+ * A tool's result, computed after the steps run. `value` reads one property
+ * (query -> first match, extractor); `list` maps the query over every match,
+ * emitting one `fields`-shaped object per row. The single result mechanism.
+ */
 export interface Return {
   description?: string;
   kind: "value" | "list";
   query?: Query;
   extractor?: Extractor;
+  fields?: Record<string, Field>;
 }
 
 export interface SchemaProp {

@@ -36,36 +36,36 @@
         "view": "MenuView",
         "route": "/"
       },
-      "steps": [
-        {
-          "op": "collect",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  ".menu-card"
-                ]
-              }
-            ]
+      "steps": [],
+      "returns": {
+        "description": "The menu items.",
+        "kind": "list",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                ".menu-card"
+              ]
+            }
+          ]
+        },
+        "fields": {
+          "item": {
+            "property": "itemName",
+            "extractor": {
+              "kind": "text",
+              "within": ".menu-card-name"
+            }
           },
-          "fields": {
-            "item": {
-              "property": "itemName",
-              "extractor": {
-                "kind": "text",
-                "within": ".menu-card-name"
-              }
-            },
-            "price": {
-              "property": "price",
-              "extractor": {
-                "kind": "text",
-                "within": ".menu-card-price"
-              }
+          "price": {
+            "property": "price",
+            "extractor": {
+              "kind": "text",
+              "within": ".menu-card-price"
             }
           }
         }
-      ],
+      },
       "guidance": [
         {
           "tool": "open_item",
@@ -308,29 +308,29 @@
         "view": "CartView",
         "route": "/cart"
       },
-      "steps": [
-        {
-          "op": "collect",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  ".cart-line"
-                ]
-              }
-            ]
-          },
-          "fields": {
-            "name": {
-              "property": "name",
-              "extractor": {
-                "kind": "text",
-                "within": ".cart-line-name"
-              }
+      "steps": [],
+      "returns": {
+        "description": "The cart line items.",
+        "kind": "list",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                ".cart-line"
+              ]
+            }
+          ]
+        },
+        "fields": {
+          "name": {
+            "property": "name",
+            "extractor": {
+              "kind": "text",
+              "within": ".cart-line-name"
             }
           }
         }
-      ],
+      },
       "guidance": [
         {
           "tool": "go_to_checkout",

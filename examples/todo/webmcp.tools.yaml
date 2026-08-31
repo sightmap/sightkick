@@ -33,11 +33,12 @@ tools:
     description: List the current todos and whether each is completed.
     mode: live
     ensure_view: TodoList
-    steps:
-      - collect:
-          rows: TodoItem
-          fields:
-            text: text
+    returns:
+      description: The current todo rows.
+      list:
+        rows: TodoItem
+        fields:
+          text: text
 
   - name: set_filter
     description: Switch the todo list filter to All, Active, or Completed.

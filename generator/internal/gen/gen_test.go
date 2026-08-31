@@ -157,17 +157,27 @@ func TestCrossViewGuidance(t *testing.T) {
 	if len(list.Guidance) != 1 || list.Guidance[0].Tool != "select_flight" || list.Guidance[0].When != "now" {
 		t.Errorf("list_results guidance = %+v", list.Guidance)
 	}
-	// Rich return: list_results collects a machine id + human fields.
-	if _, ok := list.Steps[0].Fields["id"]; !ok {
-		t.Errorf("list_results should collect an id; fields=%v", list.Steps[0].Fields)
+	// Rich return: list_results is a read tool (no steps) whose list return maps a
+	// machine id + human fields over every row.
+	if len(list.Steps) != 0 {
+		t.Errorf("list_results should have no steps (read-only), got %d", len(list.Steps))
 	}
-	// set_sort folds the read in (a trailing collect) instead of emitting guidance.
+	if list.Returns == nil || list.Returns.Kind != "list" {
+		t.Fatalf("list_results returns = %+v, want kind=list", list.Returns)
+	}
+	if _, ok := list.Returns.Fields["id"]; !ok {
+		t.Errorf("list_results list return should include an id; fields=%v", list.Returns.Fields)
+	}
+	// set_sort folds the read into the mutation via a list return, not guidance.
 	sort := findTool(t, ir, "set_sort")
 	if len(sort.Guidance) != 0 {
 		t.Errorf("set_sort should have no guidance (fold-in), got %+v", sort.Guidance)
 	}
-	if sort.Steps[len(sort.Steps)-1].Op != "collect" {
-		t.Errorf("set_sort should end with a collect (rich return)")
+	if sort.Steps[len(sort.Steps)-1].Op != "click" {
+		t.Errorf("set_sort should end with the click action")
+	}
+	if sort.Returns == nil || sort.Returns.Kind != "list" {
+		t.Errorf("set_sort should return a list (rich return), got %+v", sort.Returns)
 	}
 }
 

@@ -230,53 +230,72 @@ func (cc *compiler) compileStep(
 		}
 		return Step{Op: "waitFor", Query: q, TimeoutMs: timeout}, true
 
-	case "collect":
-		q, props, ok := cc.compileQuery(body.Rows, comps, names, known, toolName)
-		if !ok {
-			return Step{}, false
-		}
-		fields := map[string]Field{}
-		fieldNames := make([]string, 0, len(body.Fields))
-		for f := range body.Fields {
-			fieldNames = append(fieldNames, f)
-		}
-		sort.Strings(fieldNames)
-		for _, f := range fieldNames {
-			spec := body.Fields[f]
-			ex, ok := cc.resolvePropertyDef(spec.Property, props, toolName)
-			if ok {
-				fields[f] = Field{Property: spec.Property, Extractor: ex}
-			}
-		}
-		return Step{Op: "collect", Query: q, Fields: fields}, true
-
 	default:
 		cc.errf("compile.step", toolName, "tool %q has an unrecognized step op %q", toolName, op)
 		return Step{}, false
 	}
 }
 
+// compileFields resolves a set of output fields against a row component's
+// declared properties (deterministic order). Shared by list returns.
+func (cc *compiler) compileFields(fields map[string]FieldDef, props []sm.ComponentPropertyDef, toolName string) map[string]Field {
+	out := map[string]Field{}
+	names := make([]string, 0, len(fields))
+	for f := range fields {
+		names = append(names, f)
+	}
+	sort.Strings(names)
+	for _, f := range names {
+		spec := fields[f]
+		if ex, ok := cc.resolvePropertyDef(spec.Property, props, toolName); ok {
+			out[f] = Field{Property: spec.Property, Extractor: ex}
+		}
+	}
+	return out
+}
+
 func (cc *compiler) compileReturn(ret *ReturnDef, comps map[string]sm.ComponentDef, names []string, known map[string]bool, toolName string) *Return {
 	if ret == nil {
 		return nil
 	}
-	if ret.Extract == nil {
-		out := &Return{Kind: "value"}
+	if ret.Extract != nil && ret.List != nil {
+		cc.errf("compile.return-shape", toolName, "tool %q returns has both extract and list; use exactly one", toolName)
+		return nil
+	}
+
+	// list: map a compquery over every match -> one Fields-shaped object per row.
+	if ret.List != nil {
+		q, props, ok := cc.compileQuery(ret.List.Rows, comps, names, known, toolName)
+		if !ok {
+			return nil
+		}
+		out := &Return{Kind: "list", Query: q, Fields: cc.compileFields(ret.List.Fields, props, toolName)}
 		if ret.Description != "" {
 			out.Description = ret.Description
 		}
 		return out
 	}
-	q, props, ok := cc.compileQuery(ret.Extract.Query, comps, names, known, toolName)
-	if !ok {
-		return nil
+
+	// extract: read one declared property off the first match.
+	if ret.Extract != nil {
+		q, props, ok := cc.compileQuery(ret.Extract.Query, comps, names, known, toolName)
+		if !ok {
+			return nil
+		}
+		out := &Return{Kind: "value", Query: q}
+		if ret.Description != "" {
+			out.Description = ret.Description
+		}
+		if ex, ok := cc.resolvePropertyDef(ret.Extract.Property, props, toolName); ok {
+			out.Extractor = &ex
+		}
+		return out
 	}
-	out := &Return{Kind: "value", Query: q}
+
+	// description-only: a value return with nothing to read.
+	out := &Return{Kind: "value"}
 	if ret.Description != "" {
 		out.Description = ret.Description
-	}
-	if ex, ok := cc.resolvePropertyDef(ret.Extract.Property, props, toolName); ok {
-		out.Extractor = &ex
 	}
 	return out
 }

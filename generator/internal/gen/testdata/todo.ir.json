@@ -127,29 +127,29 @@
         "view": "TodoList",
         "route": "/"
       },
-      "steps": [
-        {
-          "op": "collect",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  ".todo-item"
-                ]
-              }
-            ]
-          },
-          "fields": {
-            "text": {
-              "property": "text",
-              "extractor": {
-                "kind": "text",
-                "within": ".todo-item-text"
-              }
+      "steps": [],
+      "returns": {
+        "description": "The current todo rows.",
+        "kind": "list",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                ".todo-item"
+              ]
+            }
+          ]
+        },
+        "fields": {
+          "text": {
+            "property": "text",
+            "extractor": {
+              "kind": "text",
+              "within": ".todo-item-text"
             }
           }
         }
-      ]
+      }
     },
     {
       "name": "set_filter",

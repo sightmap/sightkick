@@ -12,12 +12,13 @@ tools:
     description: List the menu items (name + price).
     mode: live
     ensure_view: MenuView
-    steps:
-      - collect:
-          rows: MenuCard
-          fields:
-            item: itemName
-            price: price
+    returns:
+      description: The menu items.
+      list:
+        rows: MenuCard
+        fields:
+          item: itemName
+          price: price
 
   - name: open_item
     description: Open a menu item's detail page to customize it. Navigates to the item view.
@@ -89,11 +90,12 @@ tools:
     description: List the items currently in the cart.
     mode: live
     ensure_view: CartView
-    steps:
-      - collect:
-          rows: CartLine
-          fields:
-            name: name
+    returns:
+      description: The cart line items.
+      list:
+        rows: CartLine
+        fields:
+          name: name
 
   - name: go_to_checkout
     description: Proceed from the cart to checkout. Navigates to the checkout page.

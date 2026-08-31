@@ -1,11 +1,11 @@
-import type { Guard, Return, Step, Suggestion, Tool } from "./ir.js";
+import type { Field, Guard, Return, Step, Suggestion, Tool } from "./ir.js";
 import { extract, interpolate, resolveQuery, setNativeValue } from "./dom.js";
 
 export interface ToolResult {
   ok: boolean;
   /** Single value result (from returns.kind == "value"). */
   value?: string;
-  /** List result (from a collect step or returns.kind == "list"). */
+  /** List result (from returns.kind == "list"). */
   items?: Record<string, string>[];
   /** Human-readable note (errors, warnings). */
   message?: string;
@@ -84,9 +84,9 @@ function describeTarget(step: Step): string {
   return `query ${JSON.stringify(parts.map((p) => p.locators.join("|")))}`;
 }
 
-async function runStep(step: Step, args: Record<string, unknown>, opts: ResolvedOptions): Promise<Record<string, string>[] | undefined> {
+async function runStep(step: Step, args: Record<string, unknown>, opts: ResolvedOptions): Promise<void> {
   // Every DOM-addressing step resolves the same way: a compquery to the target
-  // element(s). Single-target ops take the first; collect consumes all.
+  // element. Reads are not steps — the result is declared by returns.
   const target = (): Element | undefined => (step.query ? resolveQuery(step.query, args)[0] : undefined);
 
   switch (step.op) {
@@ -95,56 +95,57 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
       if (step.route && !routeMatches(step.route, path)) {
         opts.log(`navigate: single-page slice cannot leave ${path} for ${step.route} (deferred to journey work)`);
       }
-      return undefined;
+      return;
     }
     case "fill": {
       const el = target();
       if (!el) throw new Error(`fill: no element for ${describeTarget(step)}`);
       setNativeValue(el, interpolate(step.value ?? "", args));
-      return undefined;
+      return;
     }
     case "click": {
       const el = target();
       if (!el) throw new Error(`click: no element for ${describeTarget(step)}`);
       (el as HTMLElement).click();
-      return undefined;
+      return;
     }
     case "waitFor": {
       const deadline = Date.now() + (step.timeoutMs ?? 5000);
       for (;;) {
         if (opts.signal?.aborted) throw new Error("aborted");
-        if (target()) return undefined;
+        if (target()) return;
         if (Date.now() >= deadline) {
           throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5000}ms for ${describeTarget(step)}`);
         }
         await sleep(opts.pollMs);
       }
     }
-    case "collect": {
-      const rows = step.query ? resolveQuery(step.query, args) : [];
-      const fields = step.fields ?? {};
-      return rows.map((el) => {
-        const obj: Record<string, string> = {};
-        for (const [name, f] of Object.entries(fields)) {
-          obj[name] = extract(el, f.extractor);
-        }
-        return obj;
-      });
-    }
     default:
       throw new Error(`unknown step op ${(step as Step).op}`);
   }
 }
 
-function computeReturn(ret: Return, args: Record<string, unknown>): ToolResult {
-  if (ret.kind === "value") {
-    const el = ret.query ? resolveQuery(ret.query, args)[0] : undefined;
-    const value = el && ret.extractor ? extract(el, ret.extractor) : undefined;
-    const out: ToolResult = { ok: true };
-    if (value !== undefined) out.value = value;
-    return out;
+/** Extract a row's declared fields into a flat object. */
+function extractFields(el: Element, fields: Record<string, Field>): Record<string, string> {
+  const obj: Record<string, string> = {};
+  for (const [name, f] of Object.entries(fields)) {
+    obj[name] = extract(el, f.extractor);
   }
-  return { ok: true };
+  return obj;
+}
+
+function computeReturn(ret: Return, args: Record<string, unknown>): ToolResult {
+  if (ret.kind === "list") {
+    const rows = ret.query ? resolveQuery(ret.query, args) : [];
+    const fields = ret.fields ?? {};
+    return { ok: true, items: rows.map((el) => extractFields(el, fields)) };
+  }
+  // value
+  const el = ret.query ? resolveQuery(ret.query, args)[0] : undefined;
+  const value = el && ret.extractor ? extract(el, ret.extractor) : undefined;
+  const out: ToolResult = { ok: true };
+  if (value !== undefined) out.value = value;
+  return out;
 }
 
 /**
@@ -170,21 +171,15 @@ export async function runTool(tool: Tool, args: Record<string, unknown> = {}, op
     return skipped;
   }
 
-  let lastCollect: Record<string, string>[] | undefined;
   try {
     for (const step of tool.steps) {
-      const collected = await runStep(step, args, opts);
-      if (collected) lastCollect = collected;
+      await runStep(step, args, opts);
     }
   } catch (err) {
     return { ok: false, message: (err as Error).message };
   }
 
-  const result = tool.returns
-    ? computeReturn(tool.returns, args)
-    : lastCollect
-      ? { ok: true, items: lastCollect }
-      : { ok: true };
+  const result = tool.returns ? computeReturn(tool.returns, args) : { ok: true };
   // Attach next-step guidance so the agent gets it in the tool's own response —
   // the reliable channel (more so than proactively re-reading getTools()).
   if (tool.guidance && tool.guidance.length) result.guidance = tool.guidance;

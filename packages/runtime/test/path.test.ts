@@ -66,8 +66,8 @@ describe("resolveQuery — occurrence index (#N)", () => {
   });
 });
 
-describe("collect over a path (rows: <query>)", () => {
-  it("resolves rows via the path and extracts each row's fields", async () => {
+describe("list return over a query (rows -> field objects)", () => {
+  it("maps the query over every match and extracts each row's fields", async () => {
     document.body.innerHTML = `
       <div class="row"><span class="n">Alpha</span><span class="p">$1</span></div>
       <div class="row"><span class="n">Beta</span><span class="p">$2</span></div>`;
@@ -75,16 +75,15 @@ describe("collect over a path (rows: <query>)", () => {
       name: "list",
       mode: "live",
       inputSchema: { type: "object", properties: {} },
-      steps: [
-        {
-          op: "collect",
-          query: { parts: [{ locators: [".row"] }] },
-          fields: {
-            name: { property: "name", extractor: { kind: "text", within: ".n" } },
-            price: { property: "price", extractor: { kind: "text", within: ".p" } },
-          },
+      steps: [],
+      returns: {
+        kind: "list",
+        query: { parts: [{ locators: [".row"] }] },
+        fields: {
+          name: { property: "name", extractor: { kind: "text", within: ".n" } },
+          price: { property: "price", extractor: { kind: "text", within: ".p" } },
         },
-      ],
+      },
     };
     const res = await runTool(tool, {}, { currentPath: "/" });
     expect(res.items).toEqual([

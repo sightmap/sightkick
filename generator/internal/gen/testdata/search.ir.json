@@ -80,43 +80,43 @@
         "view": "Results",
         "route": "/results"
       },
-      "steps": [
-        {
-          "op": "collect",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  ".result"
-                ]
-              }
-            ]
+      "steps": [],
+      "returns": {
+        "description": "The current results.",
+        "kind": "list",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                ".result"
+              ]
+            }
+          ]
+        },
+        "fields": {
+          "id": {
+            "property": "id",
+            "extractor": {
+              "kind": "attr",
+              "attr": "data-id"
+            }
           },
-          "fields": {
-            "id": {
-              "property": "id",
-              "extractor": {
-                "kind": "attr",
-                "attr": "data-id"
-              }
-            },
-            "price": {
-              "property": "price",
-              "extractor": {
-                "kind": "text",
-                "within": ".result-price"
-              }
-            },
-            "title": {
-              "property": "title",
-              "extractor": {
-                "kind": "text",
-                "within": ".result-title"
-              }
+          "price": {
+            "property": "price",
+            "extractor": {
+              "kind": "text",
+              "within": ".result-price"
+            }
+          },
+          "title": {
+            "property": "title",
+            "extractor": {
+              "kind": "text",
+              "within": ".result-title"
             }
           }
         }
-      ],
+      },
       "guidance": [
         {
           "tool": "select_flight",
@@ -149,43 +149,44 @@
               }
             ]
           }
+        }
+      ],
+      "returns": {
+        "description": "The reordered results.",
+        "kind": "list",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                ".result"
+              ]
+            }
+          ]
         },
-        {
-          "op": "collect",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  ".result"
-                ]
-              }
-            ]
+        "fields": {
+          "id": {
+            "property": "id",
+            "extractor": {
+              "kind": "attr",
+              "attr": "data-id"
+            }
           },
-          "fields": {
-            "id": {
-              "property": "id",
-              "extractor": {
-                "kind": "attr",
-                "attr": "data-id"
-              }
-            },
-            "price": {
-              "property": "price",
-              "extractor": {
-                "kind": "text",
-                "within": ".result-price"
-              }
-            },
-            "title": {
-              "property": "title",
-              "extractor": {
-                "kind": "text",
-                "within": ".result-title"
-              }
+          "price": {
+            "property": "price",
+            "extractor": {
+              "kind": "text",
+              "within": ".result-price"
+            }
+          },
+          "title": {
+            "property": "title",
+            "extractor": {
+              "kind": "text",
+              "within": ".result-title"
             }
           }
         }
-      ]
+      }
     },
     {
       "name": "select_flight",

@@ -55,32 +55,35 @@ type Query struct {
 	Index *int `json:"index,omitempty"`
 }
 
-// Field is one output column of a collect step.
+// Field is one output column of a list return (one extracted property per row).
 type Field struct {
 	Property  string    `json:"property,omitempty"`
 	Extractor Extractor `json:"extractor"`
 }
 
 // Step is one imperative action in a tool. Op discriminates the shape; unused
-// fields are omitted. Ops: navigate, fill, click, waitFor, collect. Every
-// DOM-addressing op (fill/click/waitFor/collect) carries a Query; navigate does
-// not.
+// fields are omitted. Ops: navigate, fill, click, waitFor. Every DOM-addressing
+// op (fill/click/waitFor) carries a Query; navigate does not. Reads are not
+// steps — a tool's result is declared by Returns.
 type Step struct {
-	Op        string           `json:"op"`
-	View      string           `json:"view,omitempty"`
-	Route     string           `json:"route,omitempty"`
-	Query     *Query           `json:"query,omitempty"`
-	Value     string           `json:"value,omitempty"`
-	TimeoutMs int              `json:"timeoutMs,omitempty"`
-	Fields    map[string]Field `json:"fields,omitempty"`
+	Op        string `json:"op"`
+	View      string `json:"view,omitempty"`
+	Route     string `json:"route,omitempty"`
+	Query     *Query `json:"query,omitempty"`
+	Value     string `json:"value,omitempty"`
+	TimeoutMs int    `json:"timeoutMs,omitempty"`
 }
 
-// Return describes a tool's result value.
+// Return describes a tool's result, computed after the steps run. Kind "value"
+// reads one property (Query -> first match, Extractor); kind "list" maps Query
+// over every match, emitting one Fields-shaped object per row. This is the
+// single result mechanism (there is no collect step).
 type Return struct {
-	Description string     `json:"description,omitempty"`
-	Kind        string     `json:"kind"` // value | list
-	Query       *Query     `json:"query,omitempty"`
-	Extractor   *Extractor `json:"extractor,omitempty"`
+	Description string           `json:"description,omitempty"`
+	Kind        string           `json:"kind"` // value | list
+	Query       *Query           `json:"query,omitempty"`
+	Extractor   *Extractor       `json:"extractor,omitempty"`
+	Fields      map[string]Field `json:"fields,omitempty"`
 }
 
 // SchemaProp is one MCP-style JSON Schema property.

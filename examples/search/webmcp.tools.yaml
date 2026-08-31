@@ -24,13 +24,14 @@ tools:
     description: List the current search results (id, title, price).
     mode: live
     ensure_view: Results
-    steps:
-      - collect:
-          rows: ResultItem
-          fields:
-            id: id
-            title: title
-            price: price
+    returns:
+      description: The current results.
+      list:
+        rows: ResultItem
+        fields:
+          id: id
+          title: title
+          price: price
 
   - name: set_sort
     description: Cycle the result sort order and return the reordered results.
@@ -39,14 +40,16 @@ tools:
     steps:
       - click:
           query: SortControl
-      # Fold the read into the mutation: return the reordered list directly, so
-      # the agent needn't make a second list_results call.
-      - collect:
-          rows: ResultItem
-          fields:
-            id: id
-            title: title
-            price: price
+    # Fold the read into the mutation: return the reordered list directly, so the
+    # agent needn't make a second list_results call.
+    returns:
+      description: The reordered results.
+      list:
+        rows: ResultItem
+        fields:
+          id: id
+          title: title
+          price: price
 
   - name: select_flight
     description: Select a flight by id. Idempotent — selecting the same flight again is a no-op.

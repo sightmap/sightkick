@@ -46,29 +46,37 @@ func (f *FieldDef) UnmarshalYAML(value *yaml.Node) error {
 // relevant to a given op are populated.
 //
 // The target is addressed by a compquery (component identity + descendant scope),
-// e.g. `OptionGroup[name={{group}}] OptionButton[label={{option}}]`. Single-target
-// ops (fill/click/wait_for) use `query`; collect uses `rows` (a compquery whose
-// matches are the rows). There is no flat component/where shorthand.
+// e.g. `OptionGroup[name={{group}}] OptionButton[label={{option}}]`. Steps are
+// actions (fill/click/wait_for/navigate); reads are declared by `returns`, not
+// steps. There is no flat component/where shorthand.
 type StepBody struct {
-	Query     string              `yaml:"query"`
-	Rows      string              `yaml:"rows"` // collect: a compquery selecting the rows
-	Value     string              `yaml:"value"`
-	TimeoutMs int                 `yaml:"timeout_ms"`
-	Fields    map[string]FieldDef `yaml:"fields"`
-	View      string              `yaml:"view"` // navigate target
+	Query     string `yaml:"query"`
+	Value     string `yaml:"value"`
+	TimeoutMs int    `yaml:"timeout_ms"`
+	View      string `yaml:"view"` // navigate target
 }
 
 // ExtractRef is a returns.extract reference: a compquery addressing the element,
-// and the declared property to read off it.
+// and the declared property to read off it. Yields a single scalar value.
 type ExtractRef struct {
 	Query    string `yaml:"query"`
 	Property string `yaml:"property"`
 }
 
-// ReturnDef declares a tool's result.
+// ListRef is a returns.list reference: a compquery whose every match is a row,
+// and named output fields (each a declared property of the row component).
+// Yields an array of field-shaped objects.
+type ListRef struct {
+	Rows   string              `yaml:"rows"`
+	Fields map[string]FieldDef `yaml:"fields"`
+}
+
+// ReturnDef declares a tool's result: exactly one of extract (scalar) or list
+// (array). A description-only returns yields no value.
 type ReturnDef struct {
 	Description string      `yaml:"description"`
 	Extract     *ExtractRef `yaml:"extract"`
+	List        *ListRef    `yaml:"list"`
 }
 
 // GuardRef is the compquery a guard checks for presence/absence.
@@ -180,8 +188,8 @@ func LoadManifest(path string) (*Manifest, []Diagnostic, error) {
 		if mode != "live" && mode != "api" {
 			diags = append(diags, errf("manifest.tool-mode", t.Name, "tool %q has unknown mode %q (expected live|api)", t.Name, mode))
 		}
-		if mode == "live" && len(t.Steps) == 0 {
-			diags = append(diags, errf("manifest.tool-steps", t.Name, "live tool %q needs at least one step", t.Name))
+		if mode == "live" && len(t.Steps) == 0 && t.Returns == nil {
+			diags = append(diags, errf("manifest.tool-steps", t.Name, "live tool %q needs at least one step or a returns", t.Name))
 		}
 	}
 
