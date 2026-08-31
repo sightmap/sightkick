@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { resolvePath } from "../src/dom.js";
-import type { PathPart } from "../src/ir.js";
+import { runTool } from "../src/executor.js";
+import type { PathPart, Tool } from "../src/ir.js";
 
 // Mirrors burrito's OptionGroup > OptionButton, where "none" repeats across groups.
 const group = (name: string): PathPart => ({
@@ -43,5 +44,33 @@ describe("resolvePath — compquery scoping", () => {
   it("supports prefix/substring + case-insensitive ops", () => {
     expect(resolvePath([button("wh", "^=")], {}).map((e) => e.textContent)).toEqual(["white"]);
     expect(resolvePath([button("LAC", "*=", true)], {}).map((e) => e.textContent)).toEqual(["black"]);
+  });
+});
+
+describe("collect over a path (rows: <query>)", () => {
+  it("resolves rows via the path and extracts each row's fields", async () => {
+    document.body.innerHTML = `
+      <div class="row"><span class="n">Alpha</span><span class="p">$1</span></div>
+      <div class="row"><span class="n">Beta</span><span class="p">$2</span></div>`;
+    const tool: Tool = {
+      name: "list",
+      mode: "live",
+      inputSchema: { type: "object", properties: {} },
+      steps: [
+        {
+          op: "collect",
+          path: [{ locators: [".row"] }],
+          fields: {
+            name: { property: "name", extractor: { kind: "text", within: ".n" } },
+            price: { property: "price", extractor: { kind: "text", within: ".p" } },
+          },
+        },
+      ],
+    };
+    const res = await runTool(tool, {}, { currentPath: "/" });
+    expect(res.items).toEqual([
+      { name: "Alpha", price: "$1" },
+      { name: "Beta", price: "$2" },
+    ]);
   });
 });

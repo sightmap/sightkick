@@ -39,8 +39,12 @@
       "steps": [
         {
           "op": "collect",
-          "locators": [
-            ".menu-card"
+          "path": [
+            {
+              "locators": [
+                ".menu-card"
+              ]
+            }
           ],
           "fields": {
             "item": {
@@ -286,8 +290,12 @@
       "steps": [
         {
           "op": "collect",
-          "locators": [
-            ".cart-line"
+          "path": [
+            {
+              "locators": [
+                ".cart-line"
+              ]
+            }
           ],
           "fields": {
             "name": {

@@ -34,6 +34,7 @@ type FieldDef struct {
 // For collect, Query (or Component) selects the rows.
 type StepBody struct {
 	Query     string              `yaml:"query"`
+	Rows      string              `yaml:"rows"` // collect: a compquery selecting the rows
 	Component string              `yaml:"component"`
 	Value     string              `yaml:"value"`
 	Where     map[string]string   `yaml:"where"`

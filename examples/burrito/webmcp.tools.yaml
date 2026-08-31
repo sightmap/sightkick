@@ -14,7 +14,7 @@ tools:
     ensure_view: MenuView
     steps:
       - collect:
-          component: MenuCard
+          rows: MenuCard
           fields:
             item:
               property: itemName
@@ -95,7 +95,7 @@ tools:
     ensure_view: CartView
     steps:
       - collect:
-          component: CartLine
+          rows: CartLine
           fields:
             name:
               property: name

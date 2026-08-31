@@ -136,7 +136,7 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
       }
     }
     case "collect": {
-      const rows = queryLocators(locators);
+      const rows = step.path ? resolvePath(step.path, args) : queryLocators(locators);
       const fields = step.fields ?? {};
       return rows.map((el) => {
         const obj: Record<string, string> = {};

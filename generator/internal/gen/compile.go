@@ -142,14 +142,17 @@ func (cc *compiler) resolveProperty(propName string, r resolvedRef, toolName str
 // by DOM containment. Reuses the sightmap library's parser (grammar parity with
 // `sightmap browser` queries); the library's live resolver stays out of the
 // runtime (the firewall).
-func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentDef, names []string, known map[string]bool, toolName string) (Path, bool) {
+// The returned props are the LAST part's declared properties (the target
+// component), so a collect can resolve its fields against the row.
+func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentDef, names []string, known map[string]bool, toolName string) (Path, []sm.ComponentPropertyDef, bool) {
 	q, err := compquery.ParseQuery(queryStr)
 	if err != nil {
 		cc.errf("compile.query-parse", toolName, "tool %q has an invalid query %q: %v", toolName, queryStr, err)
-		return nil, false
+		return nil, nil, false
 	}
 	ok := true
 	var path Path
+	var targetProps []sm.ComponentPropertyDef // last part's properties = the target
 	for _, part := range q.Parts {
 		def, found := comps[part.Name]
 		if !found {
@@ -158,6 +161,7 @@ func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentD
 			ok = false
 			continue
 		}
+		targetProps = def.Properties
 		pp := PathPart{Locators: def.Selectors}
 		for _, pr := range part.Preds {
 			ex, pok := cc.resolvePropertyDef(pr.Prop, def.Properties, toolName)
@@ -173,7 +177,7 @@ func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentD
 	if q.Index >= 0 {
 		cc.warnf("compile.query-index", toolName, "tool %q query occurrence index #%d is not yet supported; ignoring", toolName, q.Index)
 	}
-	return path, ok
+	return path, targetProps, ok
 }
 
 func (cc *compiler) validateTemplate(s string, known map[string]bool, toolName string) {
@@ -247,7 +251,7 @@ func (cc *compiler) compileStep(
 
 	case "fill":
 		if body.Query != "" {
-			path, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
+			path, _, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
 			if !ok {
 				return Step{}, false
 			}
@@ -263,7 +267,7 @@ func (cc *compiler) compileStep(
 
 	case "click":
 		if body.Query != "" {
-			path, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
+			path, _, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
 			if !ok {
 				return Step{}, false
 			}
@@ -281,7 +285,7 @@ func (cc *compiler) compileStep(
 			timeout = 5000
 		}
 		if body.Query != "" {
-			path, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
+			path, _, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
 			if !ok {
 				return Step{}, false
 			}
@@ -294,9 +298,21 @@ func (cc *compiler) compileStep(
 		return Step{Op: "waitFor", Locators: r.locators, TimeoutMs: timeout, Where: cc.compileWhere(body.Where, r, known, toolName)}, true
 
 	case "collect":
-		r, ok := cc.resolveRef(body.Component, comps, names, toolName)
-		if !ok {
-			return Step{}, false
+		var rowsPath Path
+		var rowLocators []string
+		var props []sm.ComponentPropertyDef
+		if body.Rows != "" {
+			var ok bool
+			rowsPath, props, ok = cc.compileQuery(body.Rows, comps, names, known, toolName)
+			if !ok {
+				return Step{}, false
+			}
+		} else {
+			r, ok := cc.resolveRef(body.Component, comps, names, toolName)
+			if !ok {
+				return Step{}, false
+			}
+			rowLocators, props = r.locators, r.props
 		}
 		fields := map[string]Field{}
 		fieldNames := make([]string, 0, len(body.Fields))
@@ -306,12 +322,18 @@ func (cc *compiler) compileStep(
 		sort.Strings(fieldNames)
 		for _, f := range fieldNames {
 			spec := body.Fields[f]
-			ex, ok := cc.resolveProperty(spec.Property, r, toolName)
+			ex, ok := cc.resolvePropertyDef(spec.Property, props, toolName)
 			if ok {
 				fields[f] = Field{Property: spec.Property, Extractor: ex}
 			}
 		}
-		return Step{Op: "collect", Locators: r.locators, Fields: fields}, true
+		step := Step{Op: "collect", Fields: fields}
+		if rowsPath != nil {
+			step.Path = rowsPath
+		} else {
+			step.Locators = rowLocators
+		}
+		return step, true
 
 	default:
 		cc.errf("compile.step", toolName, "tool %q has an unrecognized step op %q", toolName, op)
