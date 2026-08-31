@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font: 13px/1.45 system-ui, sans-serif; width: 320px; margin: 0; padding: 12px; color: #1a1a1a; }
+      h1 { font-size: 14px; margin: 0 0 8px; }
+      #site { color: #555; word-break: break-all; margin-bottom: 10px; font-size: 12px; }
+      ul { list-style: none; margin: 0; padding: 0; }
+      li { border: 1px solid #eee; border-radius: 8px; padding: 8px; margin-bottom: 6px; }
+      .name { font-weight: 600; }
+      .meta { color: #777; font-size: 11px; }
+      label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+      .row { display: flex; justify-content: space-between; gap: 8px; }
+      button { cursor: pointer; padding: 5px 10px; border-radius: 6px; border: 1px solid #bbb; background: #fff; }
+      #tools { margin-top: 10px; }
+      code { background: #f2f2f2; padding: 0 3px; border-radius: 3px; }
+      .none { color: #999; }
+    </style>
+  </head>
+  <body>
+    <h1>sightkick</h1>
+    <div id="site">…</div>
+    <ul id="corpora"></ul>
+    <div class="row">
+      <button id="inject" type="button">Inject now</button>
+      <button id="refresh" type="button">Refresh</button>
+    </div>
+    <div id="tools"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

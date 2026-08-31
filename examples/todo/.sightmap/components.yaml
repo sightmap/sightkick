@@ -1,0 +1,3 @@
+version: 1
+# Todo is a single-view app — all components live in views/todo.yaml.
+components: []

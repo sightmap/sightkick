@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sightkick — search (two-view SPA)</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 700px; padding: 0 1rem; color: #1a1a1a; }
+      h1 { font-size: 1.2rem; }
+      input { padding: .4rem .6rem; font-size: 1rem; }
+      button { cursor: pointer; padding: .45rem .8rem; }
+      #app { min-height: 8rem; }
+      .result { display: flex; gap: .75rem; align-items: center; padding: .4rem .2rem; border-bottom: 1px solid #eee; }
+      .result-title { flex: 1; }
+      .result-price { color: #0a7d2c; font-weight: 600; }
+      .selection { margin: .6rem 0 .3rem; font-weight: 600; }
+      .booking-confirmation { margin-top: .5rem; padding: .4rem .6rem; background: #e7f7ec; border-radius: 6px; color: #0a7d2c; }
+      .panel { border: 1px dashed #bbb; border-radius: 10px; padding: 1rem; background: #fafafa; margin-top: 1.5rem; font-size: .9rem; }
+      .panel button, .panel input { margin: .15rem .1rem; }
+      pre { background: #111; color: #b5e853; padding: .6rem; border-radius: 8px; overflow: auto; white-space: pre-wrap; }
+      code { background: #eee; padding: 0 .25rem; border-radius: 3px; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div class="panel">
+      <strong>Agent panel</strong> — tools here: <code id="tools">…</code>
+      <div>
+        <input id="p-q" placeholder="query" />
+        <button id="p-search" type="button">call search</button>
+        <button id="p-list" type="button">call list_results</button>
+        <button id="p-sort" type="button">call set_sort</button>
+        <input id="p-fid" placeholder="flight id (e.g. f1)" />
+        <button id="p-select" type="button">call select_flight</button>
+        <button id="p-book" type="button">call book</button>
+      </div>
+      <pre id="out">This is a single-document SPA. Tools re-register on the client-side route change (/ → /results) with no reload.</pre>
+    </div>
+
+    <script src="/search.bundle.js"></script>
+  </body>
+</html>

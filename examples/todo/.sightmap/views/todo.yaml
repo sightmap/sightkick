@@ -1,0 +1,78 @@
+version: 1
+views:
+  - name: TodoList
+    route: "/"
+    description: >
+      The single todo view. Data comes from the façade Service Worker at /api/todos.
+      Seeded with 4 todos (one completed). ?latency=N tunes API latency.
+    components:
+      - name: TodoApp
+        selector: ".todo-app"
+        source: village/todo/src/components/TodoApp.tsx
+        description: >
+          Root card. Header + new-todo input + item list + filter footer. State is
+          loaded from and mutated through /api (never IndexedDB directly).
+        children:
+          - name: TodoInput
+            selector: ".todo-input"
+            description: Form row with the new-todo text field and Add button.
+            children:
+              - name: NewTodoField
+                selector: ".todo-input-field"
+                description: Text input, placeholder "What needs doing?".
+                properties:
+                  - name: placeholder
+                    extract: attr=placeholder
+              - name: AddButton
+                selector: ".todo-input-add"
+                description: Submit button labeled "Add". Disabled while the field is empty.
+                properties:
+                  - name: label
+                    extract: text
+          - name: TodoListBody
+            selector: ".todo-app-list"
+            description: Scrollable list holding the visible TodoItem rows.
+          - name: FilterBar
+            selector: ".filter-bar"
+            description: Footer with active-count, All/Active/Completed filters, and clear-completed.
+            children:
+              - name: ItemCount
+                selector: ".filter-bar-count"
+                description: '"{n} items left" — active (uncompleted) count.'
+                properties:
+                  - name: count
+                    extract: text
+              - name: FilterButton
+                selector: ".filter-bar-filter"
+                description: One of All / Active / Completed. Active filter has class .active.
+                properties:
+                  - name: label
+                    extract: text
+              - name: ClearCompletedButton
+                selector: ".filter-bar-clear"
+                description: Removes all completed todos via POST /api/todos/clear-completed.
+                properties:
+                  - name: label
+                    extract: text
+
+      - name: TodoItem
+        selector: ".todo-item"
+        description: >
+          Single todo row: checkbox, text, delete button. Gets class .is-completed
+          when done (text shows strikethrough).
+        properties:
+          - name: text
+            extract: ".todo-item-text"
+        children:
+          - name: TodoCheckbox
+            selector: "input[type=\"checkbox\"]"
+            description: Toggles completion via PATCH /api/todos/:id. Use click, not fill.
+          - name: TodoText
+            selector: ".todo-item-text"
+            description: The todo label; strikethrough when completed.
+          - name: TodoDeleteButton
+            selector: ".todo-item-delete"
+            description: Deletes the todo via DELETE /api/todos/:id.
+            properties:
+              - name: label
+                extract: attr=aria-label

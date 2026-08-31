@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sightkick — standalone runtime demo (todo)</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; margin: 2rem auto; max-width: 720px; padding: 0 1rem; color: #1a1a1a; }
+      h1 { font-size: 1.2rem; }
+      .todo-app { border: 1px solid #ddd; border-radius: 10px; padding: 1rem; margin: 1rem 0; }
+      .todo-input { display: flex; gap: .5rem; }
+      .todo-input-field { flex: 1; padding: .4rem .6rem; }
+      .todo-app-list { list-style: none; padding: 0; }
+      .todo-item { display: flex; align-items: center; gap: .5rem; padding: .3rem 0; border-bottom: 1px solid #f0f0f0; }
+      .todo-item-text { flex: 1; }
+      .todo-item-delete { border: none; background: none; cursor: pointer; font-size: 1.1rem; color: #999; }
+      .filter-bar { display: flex; gap: .5rem; align-items: center; margin-top: .5rem; font-size: .85rem; }
+      .filter-bar-count { flex: 1; color: #666; }
+      .filter-bar-filter.active { font-weight: 700; text-decoration: underline; }
+      .panel { border: 1px dashed #bbb; border-radius: 10px; padding: 1rem; background: #fafafa; }
+      .panel button { cursor: pointer; }
+      pre { background: #111; color: #b5e853; padding: .75rem; border-radius: 8px; overflow: auto; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>sightkick — standalone runtime demo</h1>
+    <p>
+      The runtime is driving the todo UI below through the same clicks/fills a user would.
+      Open the console and try <code>await __sightkick.call('add_todo', { text: 'buy milk' })</code>,
+      or use the agent panel.
+    </p>
+
+    <div id="app"></div>
+
+    <div class="panel">
+      <strong>Agent panel</strong> (invokes tools programmatically)
+      <p>
+        <input id="add-text" placeholder="todo text" />
+        <button id="add">add_todo</button>
+        <button id="list">list_todos</button>
+        <button id="filter">set_filter: Completed</button>
+        <button id="clear">clear_completed</button>
+      </p>
+      <pre id="out">result appears here…</pre>
+    </div>
+
+    <script type="module" src="./demo.bundle.js"></script>
+  </body>
+</html>

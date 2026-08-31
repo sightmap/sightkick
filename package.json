@@ -1,0 +1,20 @@
+{
+  "name": "sightkick",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Generate WebMCP tools from sightmap corpora, and run them on arbitrary sites via a browser extension.",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  },
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "name": "todo",
+  "views": [
+    {
+      "name": "TodoList",
+      "route": "/"
+    }
+  ],
+  "tools": [
+    {
+      "name": "add_todo",
+      "description": "Add a new todo item to the list.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The text of the todo to add."
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "ensureView": {
+        "view": "TodoList",
+        "route": "/"
+      },
+      "steps": [
+        {
+          "op": "fill",
+          "locators": [
+            ".todo-app .todo-input .todo-input-field"
+          ],
+          "value": "{{text}}"
+        },
+        {
+          "op": "click",
+          "locators": [
+            ".todo-app .todo-input .todo-input-add"
+          ]
+        },
+        {
+          "op": "waitFor",
+          "locators": [
+            ".todo-item"
+          ],
+          "where": {
+            "property": "text",
+            "extractor": {
+              "kind": "text",
+              "within": ".todo-item-text"
+            },
+            "equals": "{{text}}"
+          },
+          "timeoutMs": 5000
+        }
+      ],
+      "returns": {
+        "description": "The text of the newly created todo row.",
+        "kind": "value",
+        "locators": [
+          ".todo-item"
+        ],
+        "where": {
+          "property": "text",
+          "extractor": {
+            "kind": "text",
+            "within": ".todo-item-text"
+          },
+          "equals": "{{text}}"
+        },
+        "extractor": {
+          "kind": "text",
+          "within": ".todo-item-text"
+        }
+      },
+      "guidance": [
+        {
+          "tool": "list_todos",
+          "reason": "see the todo you just added",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "list_todos",
+      "description": "List the current todos and whether each is completed.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "TodoList",
+        "route": "/"
+      },
+      "steps": [
+        {
+          "op": "collect",
+          "locators": [
+            ".todo-item"
+          ],
+          "fields": {
+            "text": {
+              "property": "text",
+              "extractor": {
+                "kind": "text",
+                "within": ".todo-item-text"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_filter",
+      "description": "Switch the todo list filter to All, Active, or Completed.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filter": {
+            "type": "string",
+            "description": "Which filter to activate.",
+            "enum": [
+              "All",
+              "Active",
+              "Completed"
+            ]
+          }
+        },
+        "required": [
+          "filter"
+        ]
+      },
+      "ensureView": {
+        "view": "TodoList",
+        "route": "/"
+      },
+      "steps": [
+        {
+          "op": "click",
+          "locators": [
+            ".todo-app .filter-bar .filter-bar-filter"
+          ],
+          "where": {
+            "property": "label",
+            "extractor": {
+              "kind": "text"
+            },
+            "equals": "{{filter}}"
+          }
+        }
+      ],
+      "guidance": [
+        {
+          "tool": "list_todos",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "clear_completed",
+      "description": "Remove all completed todos.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "TodoList",
+        "route": "/"
+      },
+      "steps": [
+        {
+          "op": "click",
+          "locators": [
+            ".todo-app .filter-bar .filter-bar-clear"
+          ]
+        }
+      ]
+    }
+  ]
+}

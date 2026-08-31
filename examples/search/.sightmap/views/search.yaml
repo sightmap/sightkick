@@ -1,0 +1,59 @@
+version: 1
+views:
+  - name: Search
+    route: /
+    description: The search entry page — a query box that navigates to results.
+    components:
+      - name: SearchField
+        selector: "#q"
+        description: The search query text input.
+      - name: SearchButton
+        selector: "#go"
+        description: Runs the search. Clicking it navigates to the results page.
+
+  - name: Results
+    route: /results
+    description: The results list for the last query, with select + book actions.
+    components:
+      - name: SortControl
+        selector: "#sort"
+        description: Cycles the result sort order (relevance / price).
+        properties:
+          - name: order
+            extract: text
+      - name: ResultItem
+        selector: ".result"
+        description: One result row. Carries a stable id for selection.
+        properties:
+          - name: id
+            extract: attr=data-id
+          - name: title
+            extract: ".result-title"
+          - name: price
+            extract: ".result-price"
+        children:
+          - name: SelectButton
+            selector: ".result-select"
+            description: Selects this row's flight. Carries the row's id.
+            properties:
+              - name: flight
+                extract: attr=data-id
+      - name: Selection
+        selector: ".selection"
+        description: Appears once a flight is selected; shows which one.
+        properties:
+          - name: flight
+            extract: attr=data-selected
+          - name: summary
+            extract: text
+      - name: BookButton
+        selector: ".book-button"
+        description: Books the currently-selected flight.
+      - name: BookingConfirmation
+        selector: ".booking-confirmation"
+        description: Appears once booking completes; carries the booking reference.
+        properties:
+          - name: ref
+            extract: attr=data-ref
+          - name: text
+            extract: text

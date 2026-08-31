@@ -1,0 +1,88 @@
+version: 1
+name: todo
+# Corpus is the copied Potemkin todo sightmap. sightkick references it purely at
+# the spec level — no dependency on the Potemkin app or the sightmap repo.
+corpus: ./.sightmap
+
+tools:
+  - name: add_todo
+    description: Add a new todo item to the list.
+    mode: live
+    ensure_view: TodoList
+    params:
+      - name: text
+        type: string
+        required: true
+        description: The text of the todo to add.
+    steps:
+      - fill:
+          component: NewTodoField
+          value: "{{text}}"
+      - click:
+          component: AddButton
+      # Verify the mutation landed by finding the new row (visible feedback).
+      - wait_for:
+          component: TodoItem
+          where:
+            text: "{{text}}"
+    returns:
+      description: The text of the newly created todo row.
+      extract:
+        component: TodoItem
+        where:
+          text: "{{text}}"
+        property: text
+
+  - name: list_todos
+    description: List the current todos and whether each is completed.
+    mode: live
+    ensure_view: TodoList
+    steps:
+      - collect:
+          component: TodoItem
+          fields:
+            text:
+              property: text
+
+  - name: set_filter
+    description: Switch the todo list filter to All, Active, or Completed.
+    mode: live
+    ensure_view: TodoList
+    params:
+      - name: filter
+        type: enum
+        required: true
+        values:
+          - All
+          - Active
+          - Completed
+        description: Which filter to activate.
+    steps:
+      - click:
+          component: FilterButton
+          where:
+            label: "{{filter}}"
+
+  - name: clear_completed
+    description: Remove all completed todos.
+    mode: live
+    ensure_view: TodoList
+    steps:
+      - click:
+          component: ClearCompletedButton
+
+# Journeys are not executed; they compile into guidance breadcrumbs attached to
+# tool results ("after this, consider <tool> next").
+journeys:
+  - name: add_and_review
+    description: Add a todo, then review the list.
+    steps:
+      - add_todo
+      - tool: list_todos
+        reason: see the todo you just added
+  - name: filter_and_review
+    description: Filter the list, then review it.
+    steps:
+      - tool: set_filter
+        reason: choose which todos to show
+      - list_todos

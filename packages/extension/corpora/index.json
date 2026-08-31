@@ -1,0 +1,22 @@
+[
+  {
+    "id": "search-demo",
+    "name": "Flight search (demo)",
+    "description": "Two-view flight search: search, list/sort results, select and book. Generated from examples/search.",
+    "match": ["https://localhost:5174/*", "http://localhost:5174/*"],
+    "irFile": "search.ir.json",
+    "source": "generator:examples/search",
+    "version": "0.0.1",
+    "defaultEnabled": true
+  },
+  {
+    "id": "todo-demo",
+    "name": "Todo (demo)",
+    "description": "Single-view todo list: add, list, filter, clear completed. Generated from examples/todo.",
+    "match": ["http://localhost:*/*todo*", "https://localhost:*/*todo*"],
+    "irFile": "todo.ir.json",
+    "source": "generator:examples/todo",
+    "version": "0.0.1",
+    "defaultEnabled": false
+  }
+]

@@ -1,0 +1,297 @@
+{
+  "version": 1,
+  "name": "search",
+  "views": [
+    {
+      "name": "Search",
+      "route": "/"
+    },
+    {
+      "name": "Results",
+      "route": "/results"
+    }
+  ],
+  "tools": [
+    {
+      "name": "search",
+      "description": "Run a search for a query. Navigates to the results page.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "What to search for."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "ensureView": {
+        "view": "Search",
+        "route": "/"
+      },
+      "steps": [
+        {
+          "op": "fill",
+          "locators": [
+            "#q"
+          ],
+          "value": "{{query}}"
+        },
+        {
+          "op": "click",
+          "locators": [
+            "#go"
+          ]
+        }
+      ],
+      "guidance": [
+        {
+          "tool": "list_results",
+          "reason": "read the results the search produced",
+          "when": "after_navigation",
+          "view": "Results"
+        }
+      ]
+    },
+    {
+      "name": "list_results",
+      "description": "List the current search results (id, title, price).",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "Results",
+        "route": "/results"
+      },
+      "steps": [
+        {
+          "op": "collect",
+          "locators": [
+            ".result"
+          ],
+          "fields": {
+            "id": {
+              "property": "id",
+              "extractor": {
+                "kind": "attr",
+                "attr": "data-id"
+              }
+            },
+            "price": {
+              "property": "price",
+              "extractor": {
+                "kind": "text",
+                "within": ".result-price"
+              }
+            },
+            "title": {
+              "property": "title",
+              "extractor": {
+                "kind": "text",
+                "within": ".result-title"
+              }
+            }
+          }
+        }
+      ],
+      "guidance": [
+        {
+          "tool": "select_flight",
+          "reason": "pick a flight by its id",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "set_sort",
+      "description": "Cycle the result sort order and return the reordered results.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "Results",
+        "route": "/results"
+      },
+      "steps": [
+        {
+          "op": "click",
+          "locators": [
+            "#sort"
+          ]
+        },
+        {
+          "op": "collect",
+          "locators": [
+            ".result"
+          ],
+          "fields": {
+            "id": {
+              "property": "id",
+              "extractor": {
+                "kind": "attr",
+                "attr": "data-id"
+              }
+            },
+            "price": {
+              "property": "price",
+              "extractor": {
+                "kind": "text",
+                "within": ".result-price"
+              }
+            },
+            "title": {
+              "property": "title",
+              "extractor": {
+                "kind": "text",
+                "within": ".result-title"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "select_flight",
+      "description": "Select a flight by id. Idempotent — selecting the same flight again is a no-op.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "flight_id": {
+            "type": "string",
+            "description": "The id of the result row to select."
+          }
+        },
+        "required": [
+          "flight_id"
+        ]
+      },
+      "ensureView": {
+        "view": "Results",
+        "route": "/results"
+      },
+      "guard": {
+        "kind": "present",
+        "locators": [
+          ".selection"
+        ],
+        "where": {
+          "property": "flight",
+          "extractor": {
+            "kind": "attr",
+            "attr": "data-selected"
+          },
+          "equals": "{{flight_id}}"
+        }
+      },
+      "steps": [
+        {
+          "op": "click",
+          "locators": [
+            ".result .result-select"
+          ],
+          "where": {
+            "property": "flight",
+            "extractor": {
+              "kind": "attr",
+              "attr": "data-id"
+            },
+            "equals": "{{flight_id}}"
+          }
+        },
+        {
+          "op": "waitFor",
+          "locators": [
+            ".selection"
+          ],
+          "where": {
+            "property": "flight",
+            "extractor": {
+              "kind": "attr",
+              "attr": "data-selected"
+            },
+            "equals": "{{flight_id}}"
+          },
+          "timeoutMs": 5000
+        }
+      ],
+      "returns": {
+        "description": "The selected flight summary.",
+        "kind": "value",
+        "locators": [
+          ".selection"
+        ],
+        "where": {
+          "property": "flight",
+          "extractor": {
+            "kind": "attr",
+            "attr": "data-selected"
+          },
+          "equals": "{{flight_id}}"
+        },
+        "extractor": {
+          "kind": "text"
+        }
+      },
+      "guidance": [
+        {
+          "tool": "book",
+          "reason": "book the selected flight",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "book",
+      "description": "Book the currently-selected flight. Idempotent — re-booking returns the existing reference.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "Results",
+        "route": "/results"
+      },
+      "guard": {
+        "kind": "present",
+        "locators": [
+          ".booking-confirmation"
+        ]
+      },
+      "steps": [
+        {
+          "op": "click",
+          "locators": [
+            ".book-button"
+          ]
+        },
+        {
+          "op": "waitFor",
+          "locators": [
+            ".booking-confirmation"
+          ],
+          "timeoutMs": 5000
+        }
+      ],
+      "returns": {
+        "description": "The booking reference.",
+        "kind": "value",
+        "locators": [
+          ".booking-confirmation"
+        ],
+        "extractor": {
+          "kind": "attr",
+          "attr": "data-ref"
+        }
+      }
+    }
+  ]
+}
