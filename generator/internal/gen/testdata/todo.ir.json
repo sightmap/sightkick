@@ -31,29 +31,50 @@
       "steps": [
         {
           "op": "fill",
-          "locators": [
-            ".todo-app .todo-input .todo-input-field"
-          ],
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".todo-app .todo-input .todo-input-field"
+                ]
+              }
+            ]
+          },
           "value": "{{text}}"
         },
         {
           "op": "click",
-          "locators": [
-            ".todo-app .todo-input .todo-input-add"
-          ]
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".todo-app .todo-input .todo-input-add"
+                ]
+              }
+            ]
+          }
         },
         {
           "op": "waitFor",
-          "locators": [
-            ".todo-item"
-          ],
-          "where": {
-            "property": "text",
-            "extractor": {
-              "kind": "text",
-              "within": ".todo-item-text"
-            },
-            "equals": "{{text}}"
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".todo-item"
+                ],
+                "preds": [
+                  {
+                    "property": "text",
+                    "extractor": {
+                      "kind": "text",
+                      "within": ".todo-item-text"
+                    },
+                    "op": "=",
+                    "value": "{{text}}"
+                  }
+                ]
+              }
+            ]
           },
           "timeoutMs": 5000
         }
@@ -61,16 +82,25 @@
       "returns": {
         "description": "The text of the newly created todo row.",
         "kind": "value",
-        "locators": [
-          ".todo-item"
-        ],
-        "where": {
-          "property": "text",
-          "extractor": {
-            "kind": "text",
-            "within": ".todo-item-text"
-          },
-          "equals": "{{text}}"
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                ".todo-item"
+              ],
+              "preds": [
+                {
+                  "property": "text",
+                  "extractor": {
+                    "kind": "text",
+                    "within": ".todo-item-text"
+                  },
+                  "op": "=",
+                  "value": "{{text}}"
+                }
+              ]
+            }
+          ]
         },
         "extractor": {
           "kind": "text",
@@ -100,9 +130,15 @@
       "steps": [
         {
           "op": "collect",
-          "locators": [
-            ".todo-item"
-          ],
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".todo-item"
+                ]
+              }
+            ]
+          },
           "fields": {
             "text": {
               "property": "text",
@@ -143,15 +179,24 @@
       "steps": [
         {
           "op": "click",
-          "locators": [
-            ".todo-app .filter-bar .filter-bar-filter"
-          ],
-          "where": {
-            "property": "label",
-            "extractor": {
-              "kind": "text"
-            },
-            "equals": "{{filter}}"
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".todo-app .filter-bar .filter-bar-filter"
+                ],
+                "preds": [
+                  {
+                    "property": "label",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "=",
+                    "value": "{{filter}}"
+                  }
+                ]
+              }
+            ]
           }
         }
       ],
@@ -177,9 +222,15 @@
       "steps": [
         {
           "op": "click",
-          "locators": [
-            ".todo-app .filter-bar .filter-bar-clear"
-          ]
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".todo-app .filter-bar .filter-bar-clear"
+                ]
+              }
+            ]
+          }
         }
       ]
     }

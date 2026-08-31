@@ -1,5 +1,5 @@
-import type { Guard, Return, Step, Suggestion, Tool, Where } from "./ir.js";
-import { extract, filterWhere, interpolate, queryLocators, resolvePath, setNativeValue } from "./dom.js";
+import type { Guard, Return, Step, Suggestion, Tool } from "./ir.js";
+import { extract, interpolate, resolveQuery, setNativeValue } from "./dom.js";
 
 export interface ToolResult {
   ok: boolean;
@@ -72,37 +72,22 @@ export function routeMatches(pattern: string, path: string): boolean {
   return new RegExp(rx).test(pth);
 }
 
-function interpWhere(where: Where | undefined, args: Record<string, unknown>): Where | undefined {
-  if (!where) return undefined;
-  return { ...where, equals: interpolate(where.equals, args) };
-}
-
 /** Does the guard hold for the current DOM? (present = something matches). */
 function guardHolds(guard: Guard, args: Record<string, unknown>): boolean {
-  const where = interpWhere(guard.where, args);
-  const candidates = queryLocators(guard.locators);
-  const matches = where ? filterWhere(candidates, where) : candidates;
-  return guard.kind === "present" ? matches.length > 0 : matches.length === 0;
+  const matches = resolveQuery(guard.query, args).length;
+  return guard.kind === "present" ? matches > 0 : matches === 0;
 }
 
-function firstMatch(locators: string[], where: Where | undefined): Element | undefined {
-  const candidates = queryLocators(locators);
-  const filtered = where ? filterWhere(candidates, where) : candidates;
-  return filtered[0];
-}
-
-/** Human-readable target for error messages (path or flat locators). */
+/** Human-readable target for error messages. */
 function describeTarget(step: Step): string {
-  if (step.path) return `query path ${JSON.stringify(step.path.map((p) => p.locators.join("|")))}`;
-  return `locators ${JSON.stringify(step.locators ?? [])}`;
+  const parts = step.query?.parts ?? [];
+  return `query ${JSON.stringify(parts.map((p) => p.locators.join("|")))}`;
 }
 
 async function runStep(step: Step, args: Record<string, unknown>, opts: ResolvedOptions): Promise<Record<string, string>[] | undefined> {
-  const locators = step.locators ?? [];
-  const where = interpWhere(step.where, args);
-  // A step targets either a compquery path (scoped descendant chain) or the flat
-  // locators+where shorthand. `target()` resolves the first matching element.
-  const target = (): Element | undefined => (step.path ? resolvePath(step.path, args)[0] : firstMatch(locators, where));
+  // Every DOM-addressing step resolves the same way: a compquery to the target
+  // element(s). Single-target ops take the first; collect consumes all.
+  const target = (): Element | undefined => (step.query ? resolveQuery(step.query, args)[0] : undefined);
 
   switch (step.op) {
     case "navigate": {
@@ -136,7 +121,7 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
       }
     }
     case "collect": {
-      const rows = step.path ? resolvePath(step.path, args) : queryLocators(locators);
+      const rows = step.query ? resolveQuery(step.query, args) : [];
       const fields = step.fields ?? {};
       return rows.map((el) => {
         const obj: Record<string, string> = {};
@@ -153,8 +138,7 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
 
 function computeReturn(ret: Return, args: Record<string, unknown>): ToolResult {
   if (ret.kind === "value") {
-    const where = interpWhere(ret.where, args);
-    const el = ret.locators ? firstMatch(ret.locators, where) : undefined;
+    const el = ret.query ? resolveQuery(ret.query, args)[0] : undefined;
     const value = el && ret.extractor ? extract(el, ret.extractor) : undefined;
     const out: ToolResult = { ok: true };
     if (value !== undefined) out.value = value;

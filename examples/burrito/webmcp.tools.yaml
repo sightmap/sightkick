@@ -32,9 +32,7 @@ tools:
         description: The exact menu item name (see list_menu).
     steps:
       - click:
-          component: MenuCard
-          where:
-            itemName: "{{item}}"
+          query: 'MenuCard[itemName="{{item}}"]'
 
   - name: choose_option
     description: >-
@@ -65,7 +63,7 @@ tools:
     ensure_view: ItemDetailView
     steps:
       - click:
-          component: AddToCartButton
+          query: AddToCartButton
 
   - name: set_field
     description: >-
@@ -106,7 +104,7 @@ tools:
     ensure_view: CartView
     steps:
       - click:
-          component: SummaryCta
+          query: SummaryCta
 
   - name: place_order
     description: >-
@@ -116,13 +114,13 @@ tools:
     ensure_view: CheckoutView
     steps:
       - click:
-          component: SummaryCta
+          query: SummaryCta
       - wait_for:
-          component: OrderId
+          query: OrderId
     returns:
       description: The order confirmation id.
       extract:
-        component: OrderId
+        query: OrderId
         property: id
 
 # The ordering journey -> per-tool guidance breadcrumbs.

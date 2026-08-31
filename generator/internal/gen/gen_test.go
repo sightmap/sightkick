@@ -67,15 +67,21 @@ func TestBuildTodoShape(t *testing.T) {
 	if add.EnsureView == nil || add.EnsureView.View != "TodoList" || add.EnsureView.Route != "/" {
 		t.Errorf("add_todo ensureView = %+v", add.EnsureView)
 	}
-	// The lib flattened the nested component chain into a compound locator.
+	// A compquery addresses the field; its single part carries the lib-flattened
+	// compound locator.
 	fill := add.Steps[0]
-	if fill.Op != "fill" || len(fill.Locators) != 1 || fill.Locators[0] != ".todo-app .todo-input .todo-input-field" {
+	if fill.Op != "fill" || fill.Query == nil || len(fill.Query.Parts) != 1 ||
+		len(fill.Query.Parts[0].Locators) != 1 || fill.Query.Parts[0].Locators[0] != ".todo-app .todo-input .todo-input-field" {
 		t.Errorf("add_todo fill step = %+v", fill)
 	}
-	// where resolved TodoItem.text -> descendant-scoped text extractor.
+	// The verify step scopes TodoItem by its text property (compiled predicate:
+	// TodoItem.text -> descendant-scoped text extractor).
 	wf := add.Steps[2]
-	if wf.Op != "waitFor" || wf.Where == nil || wf.Where.Extractor.Within != ".todo-item-text" || wf.Where.Equals != "{{text}}" {
-		t.Errorf("add_todo waitFor step = %+v", wf)
+	if wf.Op != "waitFor" || wf.Query == nil || len(wf.Query.Parts) != 1 || len(wf.Query.Parts[0].Preds) != 1 {
+		t.Fatalf("add_todo waitFor step = %+v", wf)
+	}
+	if p := wf.Query.Parts[0].Preds[0]; p.Extractor.Within != ".todo-item-text" || p.Value != "{{text}}" || p.Op != "=" {
+		t.Errorf("add_todo waitFor pred = %+v", wf.Query.Parts[0].Preds[0])
 	}
 
 	setFilter := findTool(t, ir, "set_filter")
@@ -170,15 +176,18 @@ func TestToolGuards(t *testing.T) {
 	}
 	// select_flight: idempotency guard keyed on the flight id.
 	sel := findTool(t, ir, "select_flight")
-	if sel.Guard == nil || sel.Guard.Kind != "present" || len(sel.Guard.Locators) != 1 || sel.Guard.Locators[0] != ".selection" {
+	if sel.Guard == nil || sel.Guard.Kind != "present" || sel.Guard.Query == nil ||
+		len(sel.Guard.Query.Parts) != 1 || len(sel.Guard.Query.Parts[0].Locators) != 1 ||
+		sel.Guard.Query.Parts[0].Locators[0] != ".selection" {
 		t.Fatalf("select_flight guard = %+v", sel.Guard)
 	}
-	if sel.Guard.Where == nil || sel.Guard.Where.Equals != "{{flight_id}}" {
-		t.Errorf("select_flight guard where = %+v", sel.Guard.Where)
+	if len(sel.Guard.Query.Parts[0].Preds) != 1 || sel.Guard.Query.Parts[0].Preds[0].Value != "{{flight_id}}" {
+		t.Errorf("select_flight guard pred = %+v", sel.Guard.Query.Parts[0].Preds)
 	}
-	// book: guard present the confirmation (no where).
+	// book: guard present the confirmation (no predicate).
 	book := findTool(t, ir, "book")
-	if book.Guard == nil || book.Guard.Kind != "present" || book.Guard.Locators[0] != ".booking-confirmation" {
+	if book.Guard == nil || book.Guard.Kind != "present" || book.Guard.Query == nil ||
+		book.Guard.Query.Parts[0].Locators[0] != ".booking-confirmation" {
 		t.Errorf("book guard = %+v", book.Guard)
 	}
 }
@@ -203,7 +212,7 @@ tools:
     ensure_view: Home
     steps:
       - click:
-          component: Field
+          query: Field
 journeys:
   - name: flow
     steps:
@@ -244,16 +253,16 @@ tools:
     ensure_view: Home
     steps:
       - click:
-          component: NoSuchThing
+          query: NoSuchThing
 `)
 
 	_, diags, err := Build(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := findDiag(diags, "compile.ref-unresolved")
+	d := findDiag(diags, "compile.query-ref")
 	if d == nil {
-		t.Fatalf("expected compile.ref-unresolved, got:\n%s", Format(diags))
+		t.Fatalf("expected compile.query-ref, got:\n%s", Format(diags))
 	}
 	if !strings.Contains(d.Message, "NoSuchThing") || !strings.Contains(d.Message, "Widget") {
 		t.Errorf("diagnostic missing name or candidate: %q", d.Message)
@@ -280,7 +289,7 @@ tools:
     ensure_view: Home
     steps:
       - fill:
-          component: Field
+          query: Field
           value: "{{missing}}"
 `)
 	_, diags, _ := Build(dir)

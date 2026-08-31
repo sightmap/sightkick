@@ -87,33 +87,6 @@ func candidateList(names []string) string {
 	return strings.Join(names, ", ")
 }
 
-type resolvedRef struct {
-	locators []string
-	props    []sm.ComponentPropertyDef
-}
-
-// resolveRef turns a component ref (by name) into concrete locators + declared
-// properties. Returns false on an unknown name. (There is deliberately no css
-// escape hatch: the manifest addresses the DOM only through corpus components.)
-func (cc *compiler) resolveRef(
-	component string,
-	comps map[string]sm.ComponentDef,
-	names []string,
-	toolName string,
-) (resolvedRef, bool) {
-	if component == "" {
-		cc.errf("compile.ref", toolName, "a step in %q references no component", toolName)
-		return resolvedRef{}, false
-	}
-	def, ok := comps[component]
-	if !ok {
-		cc.errf("compile.ref-unresolved", toolName,
-			"tool %q references unknown component %q. Available: %s", toolName, component, candidateList(names))
-		return resolvedRef{}, false
-	}
-	return resolvedRef{locators: def.Selectors, props: def.Properties}, true
-}
-
 // resolvePropertyDef resolves a declared property name to its extractor against a
 // component's property set.
 func (cc *compiler) resolvePropertyDef(propName string, props []sm.ComponentPropertyDef, toolName string) (Extractor, bool) {
@@ -131,11 +104,6 @@ func (cc *compiler) resolvePropertyDef(propName string, props []sm.ComponentProp
 	return Extractor{}, false
 }
 
-// resolveProperty resolves a property name against a resolved component ref.
-func (cc *compiler) resolveProperty(propName string, r resolvedRef, toolName string) (Extractor, bool) {
-	return cc.resolvePropertyDef(propName, r.props, toolName)
-}
-
 // compileQuery parses a compquery path and resolves each part against the
 // in-scope components: component name -> selectors, each predicate's property ->
 // extractor. The result is a sightmap-free descendant chain the runtime resolves
@@ -144,14 +112,18 @@ func (cc *compiler) resolveProperty(propName string, r resolvedRef, toolName str
 // runtime (the firewall).
 // The returned props are the LAST part's declared properties (the target
 // component), so a collect can resolve its fields against the row.
-func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentDef, names []string, known map[string]bool, toolName string) (Path, []sm.ComponentPropertyDef, bool) {
+func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentDef, names []string, known map[string]bool, toolName string) (*Query, []sm.ComponentPropertyDef, bool) {
+	if strings.TrimSpace(queryStr) == "" {
+		cc.errf("compile.query-missing", toolName, "a step/ref in %q has no query", toolName)
+		return nil, nil, false
+	}
 	q, err := compquery.ParseQuery(queryStr)
 	if err != nil {
 		cc.errf("compile.query-parse", toolName, "tool %q has an invalid query %q: %v", toolName, queryStr, err)
 		return nil, nil, false
 	}
 	ok := true
-	var path Path
+	var parts []PathPart
 	var targetProps []sm.ComponentPropertyDef // last part's properties = the target
 	for _, part := range q.Parts {
 		def, found := comps[part.Name]
@@ -172,12 +144,17 @@ func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentD
 			cc.validateTemplate(pr.Val, known, toolName)
 			pp.Preds = append(pp.Preds, Pred{Property: pr.Prop, Extractor: ex, Op: pr.Op, Value: pr.Val, CI: pr.CI})
 		}
-		path = append(path, pp)
+		parts = append(parts, pp)
 	}
+	if !ok {
+		return nil, nil, false
+	}
+	query := &Query{Parts: parts}
 	if q.Index >= 0 {
-		cc.warnf("compile.query-index", toolName, "tool %q query occurrence index #%d is not yet supported; ignoring", toolName, q.Index)
+		idx := q.Index
+		query.Index = &idx
 	}
-	return path, targetProps, ok
+	return query, targetProps, true
 }
 
 func (cc *compiler) validateTemplate(s string, known map[string]bool, toolName string) {
@@ -186,28 +163,6 @@ func (cc *compiler) validateTemplate(s string, known map[string]bool, toolName s
 			cc.errf("compile.param", toolName, "tool %q references unknown param {{%s}}", toolName, tok)
 		}
 	}
-}
-
-func (cc *compiler) compileWhere(where map[string]string, r resolvedRef, known map[string]bool, toolName string) *Where {
-	if len(where) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(where))
-	for k := range where {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys) // deterministic when (mis)authored with multiple keys
-	if len(keys) > 1 {
-		cc.warnf("compile.where-multi", toolName, "tool %q where-clause has multiple keys; using %q", toolName, keys[0])
-	}
-	prop := keys[0]
-	equals := where[prop]
-	cc.validateTemplate(equals, known, toolName)
-	ex, ok := cc.resolveProperty(prop, r, toolName)
-	if !ok {
-		return nil
-	}
-	return &Where{Property: prop, Extractor: ex, Equals: equals}
 }
 
 func inputSchema(params []ParamDef) InputSchema {
@@ -250,69 +205,35 @@ func (cc *compiler) compileStep(
 		return Step{Op: "navigate", View: v.Name, Route: v.Route}, true
 
 	case "fill":
-		if body.Query != "" {
-			path, _, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
-			if !ok {
-				return Step{}, false
-			}
-			cc.validateTemplate(body.Value, known, toolName)
-			return Step{Op: "fill", Path: path, Value: body.Value}, true
-		}
-		r, ok := cc.resolveRef(body.Component, comps, names, toolName)
+		q, _, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
 		if !ok {
 			return Step{}, false
 		}
 		cc.validateTemplate(body.Value, known, toolName)
-		return Step{Op: "fill", Locators: r.locators, Value: body.Value, Where: cc.compileWhere(body.Where, r, known, toolName)}, true
+		return Step{Op: "fill", Query: q, Value: body.Value}, true
 
 	case "click":
-		if body.Query != "" {
-			path, _, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
-			if !ok {
-				return Step{}, false
-			}
-			return Step{Op: "click", Path: path}, true
-		}
-		r, ok := cc.resolveRef(body.Component, comps, names, toolName)
+		q, _, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
 		if !ok {
 			return Step{}, false
 		}
-		return Step{Op: "click", Locators: r.locators, Where: cc.compileWhere(body.Where, r, known, toolName)}, true
+		return Step{Op: "click", Query: q}, true
 
 	case "wait_for":
 		timeout := body.TimeoutMs
 		if timeout == 0 {
 			timeout = 5000
 		}
-		if body.Query != "" {
-			path, _, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
-			if !ok {
-				return Step{}, false
-			}
-			return Step{Op: "waitFor", Path: path, TimeoutMs: timeout}, true
-		}
-		r, ok := cc.resolveRef(body.Component, comps, names, toolName)
+		q, _, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
 		if !ok {
 			return Step{}, false
 		}
-		return Step{Op: "waitFor", Locators: r.locators, TimeoutMs: timeout, Where: cc.compileWhere(body.Where, r, known, toolName)}, true
+		return Step{Op: "waitFor", Query: q, TimeoutMs: timeout}, true
 
 	case "collect":
-		var rowsPath Path
-		var rowLocators []string
-		var props []sm.ComponentPropertyDef
-		if body.Rows != "" {
-			var ok bool
-			rowsPath, props, ok = cc.compileQuery(body.Rows, comps, names, known, toolName)
-			if !ok {
-				return Step{}, false
-			}
-		} else {
-			r, ok := cc.resolveRef(body.Component, comps, names, toolName)
-			if !ok {
-				return Step{}, false
-			}
-			rowLocators, props = r.locators, r.props
+		q, props, ok := cc.compileQuery(body.Rows, comps, names, known, toolName)
+		if !ok {
+			return Step{}, false
 		}
 		fields := map[string]Field{}
 		fieldNames := make([]string, 0, len(body.Fields))
@@ -327,13 +248,7 @@ func (cc *compiler) compileStep(
 				fields[f] = Field{Property: spec.Property, Extractor: ex}
 			}
 		}
-		step := Step{Op: "collect", Fields: fields}
-		if rowsPath != nil {
-			step.Path = rowsPath
-		} else {
-			step.Locators = rowLocators
-		}
-		return step, true
+		return Step{Op: "collect", Query: q, Fields: fields}, true
 
 	default:
 		cc.errf("compile.step", toolName, "tool %q has an unrecognized step op %q", toolName, op)
@@ -352,19 +267,16 @@ func (cc *compiler) compileReturn(ret *ReturnDef, comps map[string]sm.ComponentD
 		}
 		return out
 	}
-	r, ok := cc.resolveRef(ret.Extract.Component, comps, names, toolName)
+	q, props, ok := cc.compileQuery(ret.Extract.Query, comps, names, known, toolName)
 	if !ok {
 		return nil
 	}
-	out := &Return{Kind: "value", Locators: r.locators}
+	out := &Return{Kind: "value", Query: q}
 	if ret.Description != "" {
 		out.Description = ret.Description
 	}
-	if ex, ok := cc.resolveProperty(ret.Extract.Property, r, toolName); ok {
+	if ex, ok := cc.resolvePropertyDef(ret.Extract.Property, props, toolName); ok {
 		out.Extractor = &ex
-	}
-	if w := cc.compileWhere(ret.Extract.Where, r, known, toolName); w != nil {
-		out.Where = w
 	}
 	return out
 }
@@ -381,15 +293,11 @@ func (cc *compiler) compileToolGuard(g *GuardBody, comps map[string]sm.Component
 		cc.errf("compile.guard", toolName, "tool %q guard must have a present: or absent: reference", toolName)
 		return nil
 	}
-	r, ok := cc.resolveRef(ref.Component, comps, names, toolName)
+	q, _, ok := cc.compileQuery(ref.Query, comps, names, known, toolName)
 	if !ok {
 		return nil
 	}
-	guard := &Guard{Kind: kind, Locators: r.locators}
-	if w := cc.compileWhere(ref.Where, r, known, toolName); w != nil {
-		guard.Where = w
-	}
-	return guard
+	return &Guard{Kind: kind, Query: q}
 }
 
 func (cc *compiler) compileTool(t ToolDef) Tool {

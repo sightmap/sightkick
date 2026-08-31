@@ -39,13 +39,15 @@
       "steps": [
         {
           "op": "collect",
-          "path": [
-            {
-              "locators": [
-                ".menu-card"
-              ]
-            }
-          ],
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".menu-card"
+                ]
+              }
+            ]
+          },
           "fields": {
             "item": {
               "property": "itemName",
@@ -95,16 +97,25 @@
       "steps": [
         {
           "op": "click",
-          "locators": [
-            ".menu-card"
-          ],
-          "where": {
-            "property": "itemName",
-            "extractor": {
-              "kind": "text",
-              "within": ".menu-card-name"
-            },
-            "equals": "{{item}}"
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".menu-card"
+                ],
+                "preds": [
+                  {
+                    "property": "itemName",
+                    "extractor": {
+                      "kind": "text",
+                      "within": ".menu-card-name"
+                    },
+                    "op": "=",
+                    "value": "{{item}}"
+                  }
+                ]
+              }
+            ]
           }
         }
       ],
@@ -145,41 +156,43 @@
       "steps": [
         {
           "op": "click",
-          "path": [
-            {
-              "locators": [
-                ".option-group"
-              ],
-              "preds": [
-                {
-                  "property": "name",
-                  "extractor": {
-                    "kind": "text",
-                    "within": ".option-group-label"
-                  },
-                  "op": "=",
-                  "value": "{{group}}",
-                  "ci": true
-                }
-              ]
-            },
-            {
-              "locators": [
-                ".option-group .option-button"
-              ],
-              "preds": [
-                {
-                  "property": "label",
-                  "extractor": {
-                    "kind": "text"
-                  },
-                  "op": "=",
-                  "value": "{{option}}",
-                  "ci": true
-                }
-              ]
-            }
-          ]
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".option-group"
+                ],
+                "preds": [
+                  {
+                    "property": "name",
+                    "extractor": {
+                      "kind": "text",
+                      "within": ".option-group-label"
+                    },
+                    "op": "=",
+                    "value": "{{group}}",
+                    "ci": true
+                  }
+                ]
+              },
+              {
+                "locators": [
+                  ".option-group .option-button"
+                ],
+                "preds": [
+                  {
+                    "property": "label",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "=",
+                    "value": "{{option}}",
+                    "ci": true
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "guidance": [
@@ -205,9 +218,15 @@
       "steps": [
         {
           "op": "click",
-          "locators": [
-            ".item-detail-view .item-detail-add"
-          ]
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".item-detail-view .item-detail-add"
+                ]
+              }
+            ]
+          }
         }
       ],
       "guidance": [
@@ -247,30 +266,32 @@
       "steps": [
         {
           "op": "fill",
-          "path": [
-            {
-              "locators": [
-                ".text-field"
-              ],
-              "preds": [
-                {
-                  "property": "label",
-                  "extractor": {
-                    "kind": "text",
-                    "within": ".text-field-label"
-                  },
-                  "op": "=",
-                  "value": "{{field}}",
-                  "ci": true
-                }
-              ]
-            },
-            {
-              "locators": [
-                ".text-field .text-field-input"
-              ]
-            }
-          ],
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".text-field"
+                ],
+                "preds": [
+                  {
+                    "property": "label",
+                    "extractor": {
+                      "kind": "text",
+                      "within": ".text-field-label"
+                    },
+                    "op": "=",
+                    "value": "{{field}}",
+                    "ci": true
+                  }
+                ]
+              },
+              {
+                "locators": [
+                  ".text-field .text-field-input"
+                ]
+              }
+            ]
+          },
           "value": "{{value}}"
         }
       ]
@@ -290,13 +311,15 @@
       "steps": [
         {
           "op": "collect",
-          "path": [
-            {
-              "locators": [
-                ".cart-line"
-              ]
-            }
-          ],
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".cart-line"
+                ]
+              }
+            ]
+          },
           "fields": {
             "name": {
               "property": "name",
@@ -331,9 +354,15 @@
       "steps": [
         {
           "op": "click",
-          "locators": [
-            ".order-summary .order-summary-cta"
-          ]
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".order-summary .order-summary-cta"
+                ]
+              }
+            ]
+          }
         }
       ],
       "guidance": [
@@ -360,24 +389,42 @@
       "steps": [
         {
           "op": "click",
-          "locators": [
-            ".order-summary .order-summary-cta"
-          ]
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".order-summary .order-summary-cta"
+                ]
+              }
+            ]
+          }
         },
         {
           "op": "waitFor",
-          "locators": [
-            ".confirmation-order-id"
-          ],
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".confirmation-order-id"
+                ]
+              }
+            ]
+          },
           "timeoutMs": 5000
         }
       ],
       "returns": {
         "description": "The order confirmation id.",
         "kind": "value",
-        "locators": [
-          ".confirmation-order-id"
-        ],
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                ".confirmation-order-id"
+              ]
+            }
+          ]
+        },
         "extractor": {
           "kind": "text"
         }

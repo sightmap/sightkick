@@ -35,16 +35,28 @@
       "steps": [
         {
           "op": "fill",
-          "locators": [
-            "#q"
-          ],
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "#q"
+                ]
+              }
+            ]
+          },
           "value": "{{query}}"
         },
         {
           "op": "click",
-          "locators": [
-            "#go"
-          ]
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "#go"
+                ]
+              }
+            ]
+          }
         }
       ],
       "guidance": [
@@ -71,9 +83,15 @@
       "steps": [
         {
           "op": "collect",
-          "locators": [
-            ".result"
-          ],
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".result"
+                ]
+              }
+            ]
+          },
           "fields": {
             "id": {
               "property": "id",
@@ -122,15 +140,27 @@
       "steps": [
         {
           "op": "click",
-          "locators": [
-            "#sort"
-          ]
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "#sort"
+                ]
+              }
+            ]
+          }
         },
         {
           "op": "collect",
-          "locators": [
-            ".result"
-          ],
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".result"
+                ]
+              }
+            ]
+          },
           "fields": {
             "id": {
               "property": "id",
@@ -179,45 +209,72 @@
       },
       "guard": {
         "kind": "present",
-        "locators": [
-          ".selection"
-        ],
-        "where": {
-          "property": "flight",
-          "extractor": {
-            "kind": "attr",
-            "attr": "data-selected"
-          },
-          "equals": "{{flight_id}}"
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                ".selection"
+              ],
+              "preds": [
+                {
+                  "property": "flight",
+                  "extractor": {
+                    "kind": "attr",
+                    "attr": "data-selected"
+                  },
+                  "op": "=",
+                  "value": "{{flight_id}}"
+                }
+              ]
+            }
+          ]
         }
       },
       "steps": [
         {
           "op": "click",
-          "locators": [
-            ".result .result-select"
-          ],
-          "where": {
-            "property": "flight",
-            "extractor": {
-              "kind": "attr",
-              "attr": "data-id"
-            },
-            "equals": "{{flight_id}}"
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".result .result-select"
+                ],
+                "preds": [
+                  {
+                    "property": "flight",
+                    "extractor": {
+                      "kind": "attr",
+                      "attr": "data-id"
+                    },
+                    "op": "=",
+                    "value": "{{flight_id}}"
+                  }
+                ]
+              }
+            ]
           }
         },
         {
           "op": "waitFor",
-          "locators": [
-            ".selection"
-          ],
-          "where": {
-            "property": "flight",
-            "extractor": {
-              "kind": "attr",
-              "attr": "data-selected"
-            },
-            "equals": "{{flight_id}}"
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".selection"
+                ],
+                "preds": [
+                  {
+                    "property": "flight",
+                    "extractor": {
+                      "kind": "attr",
+                      "attr": "data-selected"
+                    },
+                    "op": "=",
+                    "value": "{{flight_id}}"
+                  }
+                ]
+              }
+            ]
           },
           "timeoutMs": 5000
         }
@@ -225,16 +282,25 @@
       "returns": {
         "description": "The selected flight summary.",
         "kind": "value",
-        "locators": [
-          ".selection"
-        ],
-        "where": {
-          "property": "flight",
-          "extractor": {
-            "kind": "attr",
-            "attr": "data-selected"
-          },
-          "equals": "{{flight_id}}"
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                ".selection"
+              ],
+              "preds": [
+                {
+                  "property": "flight",
+                  "extractor": {
+                    "kind": "attr",
+                    "attr": "data-selected"
+                  },
+                  "op": "=",
+                  "value": "{{flight_id}}"
+                }
+              ]
+            }
+          ]
         },
         "extractor": {
           "kind": "text"
@@ -262,31 +328,55 @@
       },
       "guard": {
         "kind": "present",
-        "locators": [
-          ".booking-confirmation"
-        ]
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                ".booking-confirmation"
+              ]
+            }
+          ]
+        }
       },
       "steps": [
         {
           "op": "click",
-          "locators": [
-            ".book-button"
-          ]
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".book-button"
+                ]
+              }
+            ]
+          }
         },
         {
           "op": "waitFor",
-          "locators": [
-            ".booking-confirmation"
-          ],
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".booking-confirmation"
+                ]
+              }
+            ]
+          },
           "timeoutMs": 5000
         }
       ],
       "returns": {
         "description": "The booking reference.",
         "kind": "value",
-        "locators": [
-          ".booking-confirmation"
-        ],
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                ".booking-confirmation"
+              ]
+            }
+          ]
+        },
         "extractor": {
           "kind": "attr",
           "attr": "data-ref"

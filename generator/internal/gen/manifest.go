@@ -28,27 +28,24 @@ type FieldDef struct {
 // exactly one key — the op name — and this struct is its body. Only the fields
 // relevant to a given op are populated.
 //
-// Query is a compquery path (e.g. `OptionGroup[name={{group}}] OptionButton[label={{option}}]`)
-// that addresses the target by component identity + descendant scope. It is the
-// preferred form; Component + Where are the flat shorthand for a single component.
-// For collect, Query (or Component) selects the rows.
+// The target is addressed by a compquery (component identity + descendant scope),
+// e.g. `OptionGroup[name={{group}}] OptionButton[label={{option}}]`. Single-target
+// ops (fill/click/wait_for) use `query`; collect uses `rows` (a compquery whose
+// matches are the rows). There is no flat component/where shorthand.
 type StepBody struct {
 	Query     string              `yaml:"query"`
 	Rows      string              `yaml:"rows"` // collect: a compquery selecting the rows
-	Component string              `yaml:"component"`
 	Value     string              `yaml:"value"`
-	Where     map[string]string   `yaml:"where"`
 	TimeoutMs int                 `yaml:"timeout_ms"`
 	Fields    map[string]FieldDef `yaml:"fields"`
 	View      string              `yaml:"view"` // navigate target
 }
 
-// ExtractRef is a returns.extract reference.
+// ExtractRef is a returns.extract reference: a compquery addressing the element,
+// and the declared property to read off it.
 type ExtractRef struct {
-	Query     string            `yaml:"query"`
-	Component string            `yaml:"component"`
-	Where     map[string]string `yaml:"where"`
-	Property  string            `yaml:"property"`
+	Query    string `yaml:"query"`
+	Property string `yaml:"property"`
 }
 
 // ReturnDef declares a tool's result.
@@ -57,11 +54,9 @@ type ReturnDef struct {
 	Extract     *ExtractRef `yaml:"extract"`
 }
 
-// GuardRef is the component a guard checks, with an optional where-clause.
+// GuardRef is the compquery a guard checks for presence/absence.
 type GuardRef struct {
-	Query     string            `yaml:"query"`
-	Component string            `yaml:"component"`
-	Where     map[string]string `yaml:"where"`
+	Query string `yaml:"query"`
 }
 
 // GuardBody is a per-tool idempotency guard: the tool SKIPS its steps when the

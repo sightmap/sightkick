@@ -16,21 +16,17 @@ tools:
         description: The text of the todo to add.
     steps:
       - fill:
-          component: NewTodoField
+          query: NewTodoField
           value: "{{text}}"
       - click:
-          component: AddButton
+          query: AddButton
       # Verify the mutation landed by finding the new row (visible feedback).
       - wait_for:
-          component: TodoItem
-          where:
-            text: "{{text}}"
+          query: 'TodoItem[text="{{text}}"]'
     returns:
       description: The text of the newly created todo row.
       extract:
-        component: TodoItem
-        where:
-          text: "{{text}}"
+        query: 'TodoItem[text="{{text}}"]'
         property: text
 
   - name: list_todos
@@ -39,7 +35,7 @@ tools:
     ensure_view: TodoList
     steps:
       - collect:
-          component: TodoItem
+          rows: TodoItem
           fields:
             text:
               property: text
@@ -59,9 +55,7 @@ tools:
         description: Which filter to activate.
     steps:
       - click:
-          component: FilterButton
-          where:
-            label: "{{filter}}"
+          query: 'FilterButton[label="{{filter}}"]'
 
   - name: clear_completed
     description: Remove all completed todos.
@@ -69,7 +63,7 @@ tools:
     ensure_view: TodoList
     steps:
       - click:
-          component: ClearCompletedButton
+          query: ClearCompletedButton
 
 # Journeys are not executed; they compile into guidance breadcrumbs attached to
 # tool results ("after this, consider <tool> next").

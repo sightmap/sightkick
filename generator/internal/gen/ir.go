@@ -23,14 +23,6 @@ type Extractor struct {
 	Within string `json:"within,omitempty"`
 }
 
-// Where selects, among elements matching a step's locators, the one whose
-// declared property equals a (possibly templated) value.
-type Where struct {
-	Property  string    `json:"property"`
-	Extractor Extractor `json:"extractor"`
-	Equals    string    `json:"equals"`
-}
-
 // Pred is one property constraint on a path part: extract a declared property and
 // compare it to a (possibly templated) value. Op is "=", "^=", or "*="; CI makes
 // the comparison case-insensitive. Compiled from a compquery predicate.
@@ -49,11 +41,19 @@ type PathPart struct {
 	Preds    []Pred   `json:"preds,omitempty"`
 }
 
-// A Path is a compiled compquery: an ordered descendant chain whose LAST part is
-// the target. The runtime resolves it by DOM containment (each part scoped within
-// the previous part's matches), so it addresses "the OptionButton labelled X
-// within the OptionGroup named Y" without any sightmap constructs.
-type Path = []PathPart
+// A Query is a compiled compquery: an ordered descendant chain (Parts) whose LAST
+// part is the target, plus an optional 0-based occurrence Index (compquery `#N`)
+// selecting among the matches. The runtime resolves it by DOM containment (each
+// part scoped within the previous part's matches), so it addresses "the
+// OptionButton labelled X within the OptionGroup named Y" without any sightmap
+// constructs. It is the single DOM-addressing form: steps, returns, and guards
+// all carry a Query (there is deliberately no flat locators/where shorthand).
+type Query struct {
+	Parts []PathPart `json:"parts"`
+	// Index is the 0-based occurrence to select; nil selects the whole match set
+	// (single-target ops take the first, collect consumes all).
+	Index *int `json:"index,omitempty"`
+}
 
 // Field is one output column of a collect step.
 type Field struct {
@@ -62,15 +62,15 @@ type Field struct {
 }
 
 // Step is one imperative action in a tool. Op discriminates the shape; unused
-// fields are omitted. Ops: navigate, fill, click, waitFor, collect.
+// fields are omitted. Ops: navigate, fill, click, waitFor, collect. Every
+// DOM-addressing op (fill/click/waitFor/collect) carries a Query; navigate does
+// not.
 type Step struct {
 	Op        string           `json:"op"`
 	View      string           `json:"view,omitempty"`
 	Route     string           `json:"route,omitempty"`
-	Locators  []string         `json:"locators,omitempty"`
-	Path      Path             `json:"path,omitempty"`
+	Query     *Query           `json:"query,omitempty"`
 	Value     string           `json:"value,omitempty"`
-	Where     *Where           `json:"where,omitempty"`
 	TimeoutMs int              `json:"timeoutMs,omitempty"`
 	Fields    map[string]Field `json:"fields,omitempty"`
 }
@@ -79,8 +79,7 @@ type Step struct {
 type Return struct {
 	Description string     `json:"description,omitempty"`
 	Kind        string     `json:"kind"` // value | list
-	Locators    []string   `json:"locators,omitempty"`
-	Where       *Where     `json:"where,omitempty"`
+	Query       *Query     `json:"query,omitempty"`
 	Extractor   *Extractor `json:"extractor,omitempty"`
 }
 
@@ -119,9 +118,8 @@ type Suggestion struct {
 // the guard holds: kind "present" holds when an element matches (the effect is
 // already applied), kind "absent" when none do.
 type Guard struct {
-	Kind     string   `json:"kind"` // present | absent
-	Locators []string `json:"locators"`
-	Where    *Where   `json:"where,omitempty"`
+	Kind  string `json:"kind"` // present | absent
+	Query *Query `json:"query"`
 }
 
 // Tool is one compiled, callable action.

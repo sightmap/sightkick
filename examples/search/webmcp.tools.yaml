@@ -14,11 +14,11 @@ tools:
         description: What to search for.
     steps:
       - fill:
-          component: SearchField
+          query: SearchField
           value: "{{query}}"
       # Clicking the real button runs the search AND navigates to /results.
       - click:
-          component: SearchButton
+          query: SearchButton
 
   - name: list_results
     description: List the current search results (id, title, price).
@@ -26,7 +26,7 @@ tools:
     ensure_view: Results
     steps:
       - collect:
-          component: ResultItem
+          rows: ResultItem
           fields:
             id:
               property: id
@@ -41,11 +41,11 @@ tools:
     ensure_view: Results
     steps:
       - click:
-          component: SortControl
+          query: SortControl
       # Fold the read into the mutation: return the reordered list directly, so
       # the agent needn't make a second list_results call.
       - collect:
-          component: ResultItem
+          rows: ResultItem
           fields:
             id:
               property: id
@@ -66,24 +66,16 @@ tools:
     # Idempotency: if this flight is already the selection, skip.
     guard:
       present:
-        component: Selection
-        where:
-          flight: "{{flight_id}}"
+        query: 'Selection[flight="{{flight_id}}"]'
     steps:
       - click:
-          component: SelectButton
-          where:
-            flight: "{{flight_id}}"
+          query: 'SelectButton[flight="{{flight_id}}"]'
       - wait_for:
-          component: Selection
-          where:
-            flight: "{{flight_id}}"
+          query: 'Selection[flight="{{flight_id}}"]'
     returns:
       description: The selected flight summary.
       extract:
-        component: Selection
-        where:
-          flight: "{{flight_id}}"
+        query: 'Selection[flight="{{flight_id}}"]'
         property: summary
 
   - name: book
@@ -93,16 +85,16 @@ tools:
     # Idempotency: if a booking confirmation is already showing, skip.
     guard:
       present:
-        component: BookingConfirmation
+        query: BookingConfirmation
     steps:
       - click:
-          component: BookButton
+          query: BookButton
       - wait_for:
-          component: BookingConfirmation
+          query: BookingConfirmation
     returns:
       description: The booking reference.
       extract:
-        component: BookingConfirmation
+        query: BookingConfirmation
         property: ref
 
 # Journeys compile into guidance breadcrumbs (search -> list -> select -> book).

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { resolvePath } from "../src/dom.js";
+import { resolvePath, resolveQuery } from "../src/dom.js";
 import { runTool } from "../src/executor.js";
 import type { PathPart, Tool } from "../src/ir.js";
 
@@ -47,6 +47,25 @@ describe("resolvePath — compquery scoping", () => {
   });
 });
 
+describe("resolveQuery — occurrence index (#N)", () => {
+  it("with no index returns the whole match set", () => {
+    expect(resolveQuery({ parts: [button("none")] }, {})).toHaveLength(2);
+  });
+
+  it("selects a single occurrence by 0-based index", () => {
+    const first = resolveQuery({ parts: [button("none")], index: 0 }, {});
+    expect(first).toHaveLength(1);
+    expect(first[0]!.closest(".option-group")!.querySelector(".option-group-label")!.textContent).toBe("Rice");
+
+    const second = resolveQuery({ parts: [button("none")], index: 1 }, {});
+    expect(second[0]!.closest(".option-group")!.querySelector(".option-group-label")!.textContent).toBe("Beans");
+  });
+
+  it("returns empty when the index is out of range", () => {
+    expect(resolveQuery({ parts: [button("none")], index: 5 }, {})).toEqual([]);
+  });
+});
+
 describe("collect over a path (rows: <query>)", () => {
   it("resolves rows via the path and extracts each row's fields", async () => {
     document.body.innerHTML = `
@@ -59,7 +78,7 @@ describe("collect over a path (rows: <query>)", () => {
       steps: [
         {
           op: "collect",
-          path: [{ locators: [".row"] }],
+          query: { parts: [{ locators: [".row"] }] },
           fields: {
             name: { property: "name", extractor: { kind: "text", within: ".n" } },
             price: { property: "price", extractor: { kind: "text", within: ".p" } },

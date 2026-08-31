@@ -13,13 +13,6 @@ export interface Extractor {
   within?: string;
 }
 
-export interface Where {
-  property: string;
-  extractor: Extractor;
-  /** Value to match; may contain {{param}} placeholders. */
-  equals: string;
-}
-
 export interface Field {
   property?: string;
   extractor: Extractor;
@@ -40,15 +33,24 @@ export interface PathPart {
   preds?: Pred[];
 }
 
+/**
+ * A compiled compquery: a descendant chain (`parts`) whose LAST part is the
+ * target, plus an optional 0-based occurrence `index` selecting among matches
+ * (compquery `#N`). Every DOM-addressing site in the IR (steps, returns, guards)
+ * speaks this one shape — there is no flat locators/where form.
+ */
+export interface Query {
+  parts: PathPart[];
+  index?: number;
+}
+
 export interface Step {
   op: "navigate" | "fill" | "click" | "waitFor" | "collect";
   view?: string;
   route?: string;
-  locators?: string[];
-  /** A compquery path (descendant chain); when present it replaces locators+where. */
-  path?: PathPart[];
+  /** The target, addressed by a compquery. Absent only for navigate. */
+  query?: Query;
   value?: string;
-  where?: Where;
   timeoutMs?: number;
   fields?: Record<string, Field>;
 }
@@ -56,8 +58,7 @@ export interface Step {
 export interface Return {
   description?: string;
   kind: "value" | "list";
-  locators?: string[];
-  where?: Where;
+  query?: Query;
   extractor?: Extractor;
 }
 
@@ -98,8 +99,7 @@ export interface Suggestion {
  */
 export interface Guard {
   kind: "present" | "absent";
-  locators: string[];
-  where?: Where;
+  query: Query;
 }
 
 export interface Tool {

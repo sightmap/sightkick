@@ -1,4 +1,4 @@
-import type { Extractor, PathPart, Pred, Where } from "./ir.js";
+import type { Extractor, PathPart, Pred, Query } from "./ir.js";
 
 /**
  * Shadow-piercing querySelectorAll: matches within the document and recurses
@@ -35,13 +35,23 @@ export function deepQueryAll(selector: string, root: ParentNode = document): Ele
   return out;
 }
 
-/** Try each locator in order; return all elements matched by the first that hits. */
-export function queryLocators(locators: string[]): Element[] {
-  for (const loc of locators) {
-    const found = deepQueryAll(loc);
-    if (found.length > 0) return found;
-  }
-  return [];
+/**
+ * Approximate an element's accessible name — the value the sightmap lib's `text`
+ * extractor returns (match/component_props.go returns node.Name, the a11y name,
+ * NOT raw textContent). The accessible name reflects `aria-label`/`alt` and, via
+ * innerText, CSS `text-transform` + visibility. We approximate rather than run
+ * the full accname algorithm: aria-label/alt win, then rendered innerText, then
+ * textContent as a last resort. The textContent fallback is what keeps layout-less
+ * DOMs (happy-dom, where innerText is empty) matching authored snapshot values.
+ */
+function accessibleText(el: Element): string {
+  const aria = el.getAttribute?.("aria-label");
+  if (aria != null && aria.trim() !== "") return aria.trim();
+  const alt = el.getAttribute?.("alt");
+  if (alt != null && alt.trim() !== "") return alt.trim();
+  const inner = (el as HTMLElement).innerText;
+  if (typeof inner === "string" && inner.trim() !== "") return inner.trim();
+  return (el.textContent ?? "").trim();
 }
 
 /** Pull a value off an element per an IR extractor. Returns a string, or "" / boolean-as-string. */
@@ -60,7 +70,9 @@ export function extract(el: Element, ex: Extractor): string {
       return directText(target).trim();
     case "text":
     default:
-      return (target.textContent ?? "").trim();
+      // Mirror the lib's a11y-name semantics so predicates authored against
+      // snapshot/corpus values match at runtime.
+      return accessibleText(target);
   }
 }
 
@@ -71,11 +83,6 @@ function directText(el: Element): string {
     if (node.nodeType === 3 /* TEXT_NODE */) s += node.textContent ?? "";
   }
   return s;
-}
-
-/** Filter candidates by a where-clause (already-interpolated). */
-export function filterWhere(candidates: Element[], where: Where): Element[] {
-  return candidates.filter((el) => extract(el, where.extractor) === where.equals);
 }
 
 /** Does a single path-part predicate hold for an element? (op/ci per compquery.) */
@@ -124,6 +131,19 @@ export function resolvePath(path: PathPart[], args: Record<string, unknown>): El
     scopes = found;
   }
   return matched;
+}
+
+/**
+ * Resolve a full compquery: the descendant chain (parts) plus an optional 0-based
+ * occurrence index. With no index the whole candidate set is returned (the caller
+ * decides: single-target ops take [0], collect consumes all). With an index only
+ * that occurrence is returned (a single-element result), mirroring compquery `#N`.
+ */
+export function resolveQuery(query: Query, args: Record<string, unknown>): Element[] {
+  const all = resolvePath(query.parts, args);
+  if (query.index == null) return all;
+  const el = all[query.index];
+  return el ? [el] : [];
 }
 
 /**
