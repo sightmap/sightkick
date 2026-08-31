@@ -29,5 +29,8 @@ await cp("../runtime/dist/sightkick-runtime.js", `${OUT}/sightkick-runtime.js`);
 await cp("corpora/index.json", `${OUT}/corpora/index.json`);
 await cp("../../generator/internal/gen/testdata/search.ir.json", `${OUT}/corpora/search.ir.json`);
 await cp("../../generator/internal/gen/testdata/todo.ir.json", `${OUT}/corpora/todo.ir.json`);
+// burrito IR is a committed snapshot (built from examples/burrito against the
+// sibling potemkin repo; regenerate with: go run . build ../examples/burrito).
+await cp("corpora/burrito.ir.json", `${OUT}/corpora/burrito.ir.json`);
 
 console.log(`built unpacked extension -> packages/extension/${OUT}/`);

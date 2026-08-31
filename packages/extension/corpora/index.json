@@ -10,6 +10,16 @@
     "defaultEnabled": true
   },
   {
+    "id": "burrito-demo",
+    "name": "Burrito ordering (demo)",
+    "description": "Five-view ordering flow for the burrito Potemkin app. Generated from examples/burrito.",
+    "match": ["http://localhost:5173/*", "https://localhost:5173/*"],
+    "irFile": "burrito.ir.json",
+    "source": "generator:examples/burrito",
+    "version": "0.0.1",
+    "defaultEnabled": true
+  },
+  {
     "id": "todo-demo",
     "name": "Todo (demo)",
     "description": "Single-view todo list: add, list, filter, clear completed. Generated from examples/todo.",

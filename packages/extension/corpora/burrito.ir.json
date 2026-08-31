@@ -1,0 +1,293 @@
+{
+  "version": 1,
+  "name": "burrito",
+  "views": [
+    {
+      "name": "MenuView",
+      "route": "/"
+    },
+    {
+      "name": "ItemDetailView",
+      "route": "/items/**"
+    },
+    {
+      "name": "CartView",
+      "route": "/cart"
+    },
+    {
+      "name": "CheckoutView",
+      "route": "/checkout"
+    },
+    {
+      "name": "ConfirmationView",
+      "route": "/confirmation"
+    }
+  ],
+  "tools": [
+    {
+      "name": "list_menu",
+      "description": "List the menu items (name + price).",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "MenuView",
+        "route": "/"
+      },
+      "steps": [
+        {
+          "op": "collect",
+          "locators": [
+            ".menu-card"
+          ],
+          "fields": {
+            "item": {
+              "property": "itemName",
+              "extractor": {
+                "kind": "text",
+                "within": ".menu-card-name"
+              }
+            },
+            "price": {
+              "property": "price",
+              "extractor": {
+                "kind": "text",
+                "within": ".menu-card-price"
+              }
+            }
+          }
+        }
+      ],
+      "guidance": [
+        {
+          "tool": "open_item",
+          "reason": "open an item to customize it",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "open_item",
+      "description": "Open a menu item's detail page to customize it. Navigates to the item view.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "The exact menu item name (see list_menu)."
+          }
+        },
+        "required": [
+          "item"
+        ]
+      },
+      "ensureView": {
+        "view": "MenuView",
+        "route": "/"
+      },
+      "steps": [
+        {
+          "op": "click",
+          "locators": [
+            ".menu-card"
+          ],
+          "where": {
+            "property": "itemName",
+            "extractor": {
+              "kind": "text",
+              "within": ".menu-card-name"
+            },
+            "equals": "{{item}}"
+          }
+        }
+      ],
+      "guidance": [
+        {
+          "tool": "choose_option",
+          "reason": "customize the item",
+          "when": "after_navigation",
+          "view": "ItemDetailView"
+        }
+      ]
+    },
+    {
+      "name": "choose_option",
+      "description": "Pick a customization option on the item detail page (e.g. \"steak\", \"guacamole\"). Use the exact option label.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "option": {
+            "type": "string",
+            "description": "The option label to select (e.g. chicken, white, black, guacamole)."
+          }
+        },
+        "required": [
+          "option"
+        ]
+      },
+      "ensureView": {
+        "view": "ItemDetailView",
+        "route": "/items/**"
+      },
+      "steps": [
+        {
+          "op": "click",
+          "locators": [
+            ".option-group .option-button"
+          ],
+          "where": {
+            "property": "label",
+            "extractor": {
+              "kind": "text"
+            },
+            "equals": "{{option}}"
+          }
+        }
+      ],
+      "guidance": [
+        {
+          "tool": "add_to_cart",
+          "reason": "add the customized item to the cart",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "add_to_cart",
+      "description": "Add the customized item to the cart. Navigates to the cart.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "ItemDetailView",
+        "route": "/items/**"
+      },
+      "steps": [
+        {
+          "op": "click",
+          "locators": [
+            ".item-detail-view .item-detail-add"
+          ]
+        }
+      ],
+      "guidance": [
+        {
+          "tool": "view_cart",
+          "reason": "review the cart",
+          "when": "after_navigation",
+          "view": "CartView"
+        }
+      ]
+    },
+    {
+      "name": "view_cart",
+      "description": "List the items currently in the cart.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "CartView",
+        "route": "/cart"
+      },
+      "steps": [
+        {
+          "op": "collect",
+          "locators": [
+            ".cart-line"
+          ],
+          "fields": {
+            "name": {
+              "property": "name",
+              "extractor": {
+                "kind": "text",
+                "within": ".cart-line-name"
+              }
+            }
+          }
+        }
+      ],
+      "guidance": [
+        {
+          "tool": "go_to_checkout",
+          "reason": "proceed to checkout",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "go_to_checkout",
+      "description": "Proceed from the cart to checkout. Navigates to the checkout page.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "CartView",
+        "route": "/cart"
+      },
+      "steps": [
+        {
+          "op": "click",
+          "locators": [
+            ".order-summary .order-summary-cta"
+          ]
+        }
+      ],
+      "guidance": [
+        {
+          "tool": "place_order",
+          "reason": "place the order",
+          "when": "after_navigation",
+          "view": "CheckoutView"
+        }
+      ]
+    },
+    {
+      "name": "place_order",
+      "description": "Place the order from checkout (the form is pre-filled). Navigates to the confirmation page and returns the order id.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "CheckoutView",
+        "route": "/checkout"
+      },
+      "steps": [
+        {
+          "op": "click",
+          "locators": [
+            ".order-summary .order-summary-cta"
+          ]
+        },
+        {
+          "op": "waitFor",
+          "locators": [
+            ".confirmation-order-id"
+          ],
+          "timeoutMs": 5000
+        }
+      ],
+      "returns": {
+        "description": "The order confirmation id.",
+        "kind": "value",
+        "locators": [
+          ".confirmation-order-id"
+        ],
+        "extractor": {
+          "kind": "text"
+        }
+      }
+    }
+  ]
+}

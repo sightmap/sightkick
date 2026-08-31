@@ -9,7 +9,8 @@ dist/
 # local-only task herd
 .yaks/
 config.yaml
-# generator scratch output during dev (but keep test goldens)
+# generator scratch output during dev (but keep test goldens + bundled demo corpora)
 *.ir.json
 !**/testdata/*.ir.json
+!packages/extension/corpora/*.ir.json
 **/.sightmap/.session

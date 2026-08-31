@@ -7,6 +7,7 @@
   "host_permissions": ["http://*/*", "https://*/*"],
   "background": { "service_worker": "background.js", "type": "module" },
   "action": { "default_popup": "popup.html", "default_title": "sightkick" },
+  "options_ui": { "page": "popup.html", "open_in_tab": true },
   "web_accessible_resources": [
     {
       "resources": ["sightkick-runtime.js", "corpora/*"],
