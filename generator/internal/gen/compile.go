@@ -259,8 +259,8 @@ func (cc *compiler) compileReturn(ret *ReturnDef, comps map[string]sm.ComponentD
 	if ret == nil {
 		return nil
 	}
-	if ret.Extract != nil && ret.List != nil {
-		cc.errf("compile.return-shape", toolName, "tool %q returns has both extract and list; use exactly one", toolName)
+	if ret.Value != nil && ret.List != nil {
+		cc.errf("compile.return-shape", toolName, "tool %q returns has both value and list; use exactly one", toolName)
 		return nil
 	}
 
@@ -277,9 +277,9 @@ func (cc *compiler) compileReturn(ret *ReturnDef, comps map[string]sm.ComponentD
 		return out
 	}
 
-	// extract: read one declared property off the first match.
-	if ret.Extract != nil {
-		q, props, ok := cc.compileQuery(ret.Extract.Query, comps, names, known, toolName)
+	// value: read one declared property off the first match.
+	if ret.Value != nil {
+		q, props, ok := cc.compileQuery(ret.Value.Query, comps, names, known, toolName)
 		if !ok {
 			return nil
 		}
@@ -287,7 +287,7 @@ func (cc *compiler) compileReturn(ret *ReturnDef, comps map[string]sm.ComponentD
 		if ret.Description != "" {
 			out.Description = ret.Description
 		}
-		if ex, ok := cc.resolvePropertyDef(ret.Extract.Property, props, toolName); ok {
+		if ex, ok := cc.resolvePropertyDef(ret.Value.Property, props, toolName); ok {
 			out.Extractor = &ex
 		}
 		return out

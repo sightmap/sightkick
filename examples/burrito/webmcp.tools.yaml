@@ -118,7 +118,7 @@ tools:
           query: OrderId
     returns:
       description: The order confirmation id.
-      extract:
+      value:
         query: OrderId
         property: id
 

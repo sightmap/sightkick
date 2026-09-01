@@ -71,7 +71,7 @@ tools:
           query: 'Selection[flight="{{flight_id}}"]'
     returns:
       description: The selected flight summary.
-      extract:
+      value:
         query: 'Selection[flight="{{flight_id}}"]'
         property: summary
 
@@ -90,7 +90,7 @@ tools:
           query: BookingConfirmation
     returns:
       description: The booking reference.
-      extract:
+      value:
         query: BookingConfirmation
         property: ref
 

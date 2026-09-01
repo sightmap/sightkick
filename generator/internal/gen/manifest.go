@@ -56,9 +56,9 @@ type StepBody struct {
 	View      string `yaml:"view"` // navigate target
 }
 
-// ExtractRef is a returns.extract reference: a compquery addressing the element,
-// and the declared property to read off it. Yields a single scalar value.
-type ExtractRef struct {
+// ValueRef is a returns.value reference: a compquery addressing the element, and
+// the declared property to read off it. Yields a single scalar value.
+type ValueRef struct {
 	Query    string `yaml:"query"`
 	Property string `yaml:"property"`
 }
@@ -71,12 +71,12 @@ type ListRef struct {
 	Fields map[string]FieldDef `yaml:"fields"`
 }
 
-// ReturnDef declares a tool's result: exactly one of extract (scalar) or list
+// ReturnDef declares a tool's result: exactly one of value (scalar) or list
 // (array). A description-only returns yields no value.
 type ReturnDef struct {
-	Description string      `yaml:"description"`
-	Extract     *ExtractRef `yaml:"extract"`
-	List        *ListRef    `yaml:"list"`
+	Description string    `yaml:"description"`
+	Value       *ValueRef `yaml:"value"`
+	List        *ListRef  `yaml:"list"`
 }
 
 // GuardRef is the compquery a guard checks for presence/absence.

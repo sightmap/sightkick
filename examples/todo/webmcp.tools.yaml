@@ -25,7 +25,7 @@ tools:
           query: 'TodoItem[text="{{text}}"]'
     returns:
       description: The text of the newly created todo row.
-      extract:
+      value:
         query: 'TodoItem[text="{{text}}"]'
         property: text
 
