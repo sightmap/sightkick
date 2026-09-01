@@ -12,7 +12,8 @@
     "build": "node build.mjs",
     "demo": "node serve.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "eval": "node eval/run.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.21.5",

@@ -57,7 +57,10 @@ async function handler(req, res) {
 
 const CERTFILE = "certs/localhost.pem";
 const KEYFILE = "certs/localhost-key.pem";
-const useHttps = existsSync(CERTFILE) && existsSync(KEYFILE);
+// HTTPS when a local cert is present, EXCEPT when SIGHTKICK_HTTP is set (the eval
+// harness forces HTTP: the standalone runtime polyfills modelContext in JS, so
+// it needs no HTTPS, and this sidesteps Chrome's self-signed-cert interstitial).
+const useHttps = existsSync(CERTFILE) && existsSync(KEYFILE) && !process.env.SIGHTKICK_HTTP;
 const server = useHttps
   ? https.createServer({ cert: readFileSync(CERTFILE), key: readFileSync(KEYFILE) }, handler)
   : http.createServer(handler);
