@@ -1,5 +1,5 @@
 import type { Field, Guard, Return, Step, Suggestion, Tool } from "./ir.js";
-import { extract, interpolate, resolveQuery, setNativeValue } from "./dom.js";
+import { clickElement, extract, interpolate, resolveQuery, setNativeValue } from "./dom.js";
 
 export interface ToolResult {
   ok: boolean;
@@ -106,7 +106,7 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
     case "click": {
       const el = target();
       if (!el) throw new Error(`click: no element for ${describeTarget(step)}`);
-      (el as HTMLElement).click();
+      clickElement(el);
       return;
     }
     case "waitFor": {

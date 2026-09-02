@@ -183,6 +183,50 @@ export function setNativeValue(el: Element, value: string): void {
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+/**
+ * Simulate a user click faithfully enough for pointer-driven UI libraries.
+ *
+ * A bare el.click() dispatches only a `click` event; interaction libraries like
+ * React Aria's usePress bind to pointerdown/pointerup and ignore a lone click,
+ * so pickers/menus never open. We dispatch the full pointer+mouse sequence
+ * (which works from main-world JS even though isTrusted is false — usePress reads
+ * the events, not the trust flag) and finish with el.click() for plain onclick
+ * handlers. usePress de-dups the trailing click after a press it already handled,
+ * so this doesn't double-fire. (Behaviors gated on real user activation — native
+ * <select> popups, showPopover(), clipboard, file/opener dialogs — still require
+ * a host-driven trusted click; no main-world path can forge that.)
+ */
+export function clickElement(el: Element): void {
+  const t = el as HTMLElement;
+  const r = t.getBoundingClientRect?.();
+  const clientX = r ? Math.round(r.left + r.width / 2) : 0;
+  const clientY = r ? Math.round(r.top + r.height / 2) : 0;
+  const init = (buttons: number): MouseEventInit => ({
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    clientX,
+    clientY,
+    button: 0,
+    buttons,
+  });
+  const hasPE = typeof PointerEvent !== "undefined";
+  const emit = (type: string, buttons: number, pointer: boolean) => {
+    if (pointer && hasPE) {
+      t.dispatchEvent(
+        new PointerEvent(type, { ...init(buttons), pointerId: 1, pointerType: "mouse", isPrimary: true }),
+      );
+    } else {
+      t.dispatchEvent(new MouseEvent(type, init(buttons)));
+    }
+  };
+  emit("pointerdown", 1, true);
+  emit("mousedown", 1, false);
+  emit("pointerup", 0, true);
+  emit("mouseup", 0, false);
+  t.click();
+}
+
 /** Interpolate {{param}} placeholders in a string from an args object. */
 export function interpolate(template: string, args: Record<string, unknown>): string {
   return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key: string) => {
