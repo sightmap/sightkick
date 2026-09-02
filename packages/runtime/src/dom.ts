@@ -39,14 +39,38 @@ export function deepQueryAll(selector: string, root: ParentNode = document): Ele
  * Approximate an element's accessible name — the value the sightmap lib's `text`
  * extractor returns (match/component_props.go returns node.Name, the a11y name,
  * NOT raw textContent). The accessible name reflects `aria-label`/`alt` and, via
- * innerText, CSS `text-transform` + visibility. We approximate rather than run
- * the full accname algorithm: aria-label/alt win, then rendered innerText, then
- * textContent as a last resort. The textContent fallback is what keeps layout-less
- * DOMs (happy-dom, where innerText is empty) matching authored snapshot values.
+ * innerText, CSS `text-transform` + visibility. We approximate the accname
+ * algorithm's order: aria-labelledby, then aria-label, then a native associated
+ * <label> (or alt), then rendered innerText, then textContent as a last resort.
+ * The labelledby/label steps matter for form controls (an <input> has no
+ * innerText, so its name comes from its label) and match what the lib's offline
+ * node.Name resolves. The textContent fallback keeps layout-less DOMs (happy-dom,
+ * where innerText is empty) matching authored snapshot values.
  */
 function accessibleText(el: Element): string {
+  // aria-labelledby: join the referenced elements' text (accname step 2B).
+  const labelledby = el.getAttribute?.("aria-labelledby");
+  if (labelledby) {
+    const doc = el.ownerDocument;
+    const text = labelledby
+      .split(/\s+/)
+      .map((id) => doc?.getElementById(id)?.textContent?.trim() ?? "")
+      .filter(Boolean)
+      .join(" ");
+    if (text) return text;
+  }
   const aria = el.getAttribute?.("aria-label");
   if (aria != null && aria.trim() !== "") return aria.trim();
+  // Native associated <label>(s) for a labelable control (input/select/textarea…):
+  // an input has no innerText, so this is where its accessible name comes from.
+  const labels = (el as HTMLInputElement).labels;
+  if (labels && labels.length) {
+    const text = Array.from(labels)
+      .map((l) => l.textContent?.trim() ?? "")
+      .filter(Boolean)
+      .join(" ");
+    if (text) return text;
+  }
   const alt = el.getAttribute?.("alt");
   if (alt != null && alt.trim() !== "") return alt.trim();
   const inner = (el as HTMLElement).innerText;
