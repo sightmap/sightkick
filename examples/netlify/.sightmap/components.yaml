@@ -1,0 +1,211 @@
+# Globals for the Netlify app shell — matched on every view.
+version: 1
+
+memory:
+  - >-
+    Netlify's app exposes few data-testid hooks. Selectors key on hand-authored
+    class names (secondary-nav-container, app-main, app-footer, block-link,
+    table-body), data-component on nav items, and ARIA labels. The tw-* classes
+    are Tailwind utilities and churn with styling — do not select on them.
+  - >-
+    The app renders a mobile and a desktop copy of the chrome. header.app-header
+    is the MOBILE one and is hidden at desktop width, so it never appears in a
+    visible-only snapshot. The visible chrome lives in .secondary-nav-container
+    (left rail) and .app-main (page region).
+  - >-
+    Project rows lazy-load, so a live selector probe can report one fewer match
+    than the offline matcher. Trust the offline count — that is what the corpus
+    sees.
+
+components:
+  - name: AppShell
+    selector: '#root'
+    description: >-
+      React mount point — the outermost scope. Owns the signed-in app (rail, page
+      region, footer) plus the live-region announcer and the toast container,
+      which are siblings of the app div rather than inside it.
+
+  - name: LiveAnnouncer
+    selector: '#root > [role="status"]'
+    description: >-
+      Screen-reader live region. Route changes announce here, so its text is the
+      cheapest confirmation that a client-side navigation actually landed.
+    properties:
+      - name: text
+        extract: text
+
+  - name: ToastRegion
+    selector: '#root > section[aria-label^="Notifications"]'
+    description: >-
+      Toast container. Empty until an action reports success or failure — read it
+      after a write to see what the app said.
+    properties:
+      - name: text
+        extract: text
+
+  - name: SideRail
+    selector: '.secondary-nav-container'
+    description: >-
+      Left rail — breadcrumb + team switcher, the team-level nav, and the user
+      menu. Present on every signed-in page.
+    children:
+      - name: Breadcrumb
+        selector: 'ol[aria-label="Breadcrumb"]'
+        description: Current team / project trail. Each crumb opens a switcher.
+        children:
+          - name: Crumb
+            selector: 'li'
+            description: One breadcrumb level.
+            properties:
+              - name: label
+                extract: text
+
+      - name: RailButton
+        selector: 'button'
+        description: >-
+          One rail control — switch teams, collapse the rail, open the user menu.
+        properties:
+          - name: label
+            extract: 'attr=aria-label'
+
+      - name: SecondaryNav
+        selector: 'nav#app-secondary-navigation'
+        description: Team-level destinations — Projects, Builds, DNS, Members, Settings.
+        children:
+          - name: NavItem
+            selector: '[data-component^="secondary-nav-"]'
+            description: One team nav destination.
+            properties:
+              - name: label
+                extract: text
+
+  - name: ProjectNav
+    selector: 'nav:has([data-component^="local-nav-"])'
+    description: >-
+      Project-level nav — Overview, Deploys, Configuration, Logs, Domains, and
+      the expandable sub-sections beneath them. Present on every project page.
+    children:
+      - name: ProjectNavItem
+        selector: '[data-component^="local-nav-"]'
+        description: >-
+          One top-level project destination. `section` is the discriminator, e.g.
+          ProjectNavItem[section="deploys"].
+        properties:
+          - name: section
+            extract: 'attr=data-component'
+          - name: label
+            extract: text
+
+      - name: ProjectSubNavItem
+        selector: '[data-component^="local-subnav-"]'
+        description: One nested destination under an expanded project nav section.
+        properties:
+          - name: section
+            extract: 'attr=data-component'
+          - name: label
+            extract: text
+
+  - name: ProjectCrumbs
+    selector: '.app-main ul:not(.divider):has(> li > a[href$="/projects"])'
+    description: >-
+      Page-top breadcrumb inside the page region — "Projects › <project>" plus
+      the project switcher. Present on every project page; absent on team pages.
+    properties:
+      - name: project
+        extract: ProjectSwitcher.current
+    children:
+      - name: CrumbLink
+        selector: 'a.btn'
+        description: One crumb. The last one is the current project.
+        properties:
+          - name: label
+            extract: text
+          - name: href
+            extract: 'attr=href'
+
+      - name: ProjectSwitcher
+        selector: 'div.dropdown'
+        description: The "Switch projects" menu next to the current project crumb.
+        properties:
+          - name: current
+            extract: 'attr=title'
+          - name: label
+            extract: SwitchButton.label
+        children:
+          - name: SwitchButton
+            selector: 'button'
+            properties:
+              - name: label
+                extract: 'attr=aria-label'
+          - name: ProjectOption
+            selector: 'a[id^="projects-breadcrumbs-item"]'
+            description: One project in the switcher. Only in the tree while the menu is open.
+            properties:
+              - name: label
+                extract: text
+              - name: href
+                extract: 'attr=href'
+
+  - name: HelpMenu
+    selector: '.app-main [role="combobox"][aria-haspopup="listbox"]'
+    description: >-
+      The News and Support menus at the top right of the page region.
+      HelpMenu[label^="News"] / HelpMenu[label^="Support"].
+    properties:
+      - name: label
+        extract: MenuButton.label
+    children:
+      - name: MenuButton
+        selector: 'button'
+        properties:
+          - name: label
+            extract: 'attr=aria-label'
+
+  - name: ConfirmDialog
+    selector: '.ReactModalPortal [role="dialog"]'
+    description: >-
+      Modal confirmation (react-modal portal, outside #root). `title` is the
+      dialog's aria-label, e.g. ConfirmDialog[title="Delete environment variable"].
+      ConfirmButton is the primary (often destructive) action.
+    properties:
+      - name: title
+        extract: 'attr=aria-label'
+      - name: subject
+        extract: Subject.text
+    children:
+      - name: Heading
+        selector: 'h1'
+        properties:
+          - name: text
+            extract: text
+      - name: Subject
+        selector: 'code'
+        description: The thing being acted on, e.g. the variable key.
+        properties:
+          - name: text
+            extract: text
+      - name: ConfirmButton
+        selector: 'button[type="submit"]'
+        properties:
+          - name: label
+            extract: text
+      - name: CancelButton
+        selector: 'button[type="button"]'
+        properties:
+          - name: label
+            extract: text
+
+  - name: AppMain
+    selector: '.app-main'
+    description: The page region to the right of the rail — page heading, toolbar, content.
+
+  - name: AppFooter
+    selector: 'footer.app-footer'
+    description: Footer — docs, pricing, support, blog, changelog, terms.
+    children:
+      - name: FooterLink
+        selector: 'a'
+        description: One footer destination.
+        properties:
+          - name: label
+            extract: text

@@ -3,9 +3,23 @@
     "id": "jetblue",
     "name": "JetBlue (live site)",
     "description": "JetBlue flight search + fare selection. Generated from sites/jetblue.com against the live third-party site.",
-    "match": ["https://www.jetblue.com/*"],
+    "match": [
+      "https://www.jetblue.com/*"
+    ],
     "irFile": "jetblue.ir.json",
     "source": "sites/jetblue.com",
+    "version": "0.0.1",
+    "defaultEnabled": true
+  },
+  {
+    "id": "netlify",
+    "name": "Netlify (live site)",
+    "description": "Netlify app: deploy list/search and environment variable add/list/delete. Generated from examples/netlify against the live third-party site; writes are confined to the scratch project westernwoodlands.",
+    "match": [
+      "https://app.netlify.com/*"
+    ],
+    "irFile": "netlify.ir.json",
+    "source": "examples/netlify",
     "version": "0.0.1",
     "defaultEnabled": true
   },
@@ -13,7 +27,10 @@
     "id": "search-demo",
     "name": "Flight search (demo)",
     "description": "Two-view flight search: search, list/sort results, select and book. Generated from examples/search.",
-    "match": ["https://localhost:5174/*", "http://localhost:5174/*"],
+    "match": [
+      "https://localhost:5174/*",
+      "http://localhost:5174/*"
+    ],
     "irFile": "search.ir.json",
     "source": "generator:examples/search",
     "version": "0.0.1",
@@ -23,7 +40,10 @@
     "id": "burrito-demo",
     "name": "Burrito ordering (demo)",
     "description": "Five-view ordering flow for the burrito Potemkin app. Generated from examples/burrito.",
-    "match": ["http://localhost:5173/*", "https://localhost:5173/*"],
+    "match": [
+      "http://localhost:5173/*",
+      "https://localhost:5173/*"
+    ],
     "irFile": "burrito.ir.json",
     "source": "generator:examples/burrito",
     "version": "0.0.1",
@@ -33,7 +53,10 @@
     "id": "todo-demo",
     "name": "Todo (demo)",
     "description": "Single-view todo list: add, list, filter, clear completed. Generated from examples/todo.",
-    "match": ["http://localhost:*/*todo*", "https://localhost:*/*todo*"],
+    "match": [
+      "http://localhost:*/*todo*",
+      "https://localhost:*/*todo*"
+    ],
     "irFile": "todo.ir.json",
     "source": "generator:examples/todo",
     "version": "0.0.1",

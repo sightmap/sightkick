@@ -1,0 +1,881 @@
+{
+  "version": 1,
+  "name": "netlify",
+  "views": [
+    {
+      "name": "ProjectDeploys",
+      "route": "/projects/*/deploys"
+    },
+    {
+      "name": "ProjectEnvVars",
+      "route": "/projects/*/configuration/env"
+    },
+    {
+      "name": "ProjectOverview",
+      "route": "/projects/*/overview"
+    },
+    {
+      "name": "Projects",
+      "route": "/teams/*/projects"
+    }
+  ],
+  "tools": [
+    {
+      "name": "list_deploys",
+      "description": "List the deploys currently shown for this project (newest first). `summary` ends with the deploy status; `title` is the same text without it. Returns `items`: a list of objects with keys {branch, duration, href, message, sha, status_summary, time, title}. The visible deploy rows.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "ProjectDeploys",
+        "route": "/projects/*/deploys"
+      },
+      "steps": [],
+      "returns": {
+        "description": "The visible deploy rows.",
+        "kind": "list",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                "main#main .card.table ul.table-body \u003e li"
+              ]
+            }
+          ]
+        },
+        "fields": {
+          "branch": {
+            "property": "branch",
+            "extractor": {
+              "kind": "attr",
+              "attr": "title",
+              "within": "a[title=\"Go to deploy details\"] abbr"
+            }
+          },
+          "duration": {
+            "property": "duration",
+            "extractor": {
+              "kind": "text",
+              "within": "p.optional"
+            }
+          },
+          "href": {
+            "property": "href",
+            "extractor": {
+              "kind": "attr",
+              "attr": "href",
+              "within": "a[title=\"Go to deploy details\"]"
+            }
+          },
+          "message": {
+            "property": "message",
+            "extractor": {
+              "kind": "text",
+              "within": "div.meta.truncate"
+            }
+          },
+          "sha": {
+            "property": "sha",
+            "extractor": {
+              "kind": "text",
+              "within": "a[title=\"Go to deploy details\"] span.nowrap-wide \u003e span"
+            }
+          },
+          "status_summary": {
+            "property": "summary",
+            "extractor": {
+              "kind": "text",
+              "within": "span:has(\u003e span \u003e a[href*=\"/deploys/\"])"
+            }
+          },
+          "time": {
+            "property": "time",
+            "extractor": {
+              "kind": "attr",
+              "attr": "datetime",
+              "within": "time"
+            }
+          },
+          "title": {
+            "property": "title",
+            "extractor": {
+              "kind": "text",
+              "within": "a[title=\"Go to deploy details\"]"
+            }
+          }
+        }
+      },
+      "guidance": [
+        {
+          "tool": "get_production_commit",
+          "reason": "know which commit is live before searching",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "list_production_deploys",
+      "description": "List only the production deploys currently shown. Returns `items`: a list of objects with keys {href, message, sha, status_summary, time}. Production deploy rows.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "ProjectDeploys",
+        "route": "/projects/*/deploys"
+      },
+      "steps": [],
+      "returns": {
+        "description": "Production deploy rows.",
+        "kind": "list",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                "main#main .card.table ul.table-body \u003e li"
+              ],
+              "preds": [
+                {
+                  "property": "title",
+                  "extractor": {
+                    "kind": "text",
+                    "within": "a[title=\"Go to deploy details\"]"
+                  },
+                  "op": "^=",
+                  "value": "Production"
+                }
+              ]
+            }
+          ]
+        },
+        "fields": {
+          "href": {
+            "property": "href",
+            "extractor": {
+              "kind": "attr",
+              "attr": "href",
+              "within": "a[title=\"Go to deploy details\"]"
+            }
+          },
+          "message": {
+            "property": "message",
+            "extractor": {
+              "kind": "text",
+              "within": "div.meta.truncate"
+            }
+          },
+          "sha": {
+            "property": "sha",
+            "extractor": {
+              "kind": "text",
+              "within": "a[title=\"Go to deploy details\"] span.nowrap-wide \u003e span"
+            }
+          },
+          "status_summary": {
+            "property": "summary",
+            "extractor": {
+              "kind": "text",
+              "within": "span:has(\u003e span \u003e a[href*=\"/deploys/\"])"
+            }
+          },
+          "time": {
+            "property": "time",
+            "extractor": {
+              "kind": "attr",
+              "attr": "datetime",
+              "within": "time"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "search_deploys",
+      "description": "Filter the deploy list to one branch and return the matching rows. Returns `items`: a list of objects with keys {branch, href, sha, status_summary, time, title}. The deploys matching the query.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "A branch name, e.g. main."
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "ensureView": {
+        "view": "ProjectDeploys",
+        "route": "/projects/*/deploys"
+      },
+      "steps": [
+        {
+          "op": "fill",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "main#main .card.table header.table-header input[role=\"combobox\"]"
+                ]
+              }
+            ]
+          },
+          "value": "{{query}}"
+        },
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "main#main .card.table header.table-header"
+                ]
+              },
+              {
+                "locators": [
+                  "main#main .card.table header.table-header [id$=\"-listbox\"] [role=\"option\"]"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "waitFor",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "main#main .card.table header.table-header"
+                ]
+              },
+              {
+                "locators": [
+                  "main#main .card.table header.table-header [class*=\"singleValue\"]"
+                ],
+                "preds": [
+                  {
+                    "property": "text",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "=",
+                    "value": "{{query}}"
+                  }
+                ]
+              }
+            ]
+          },
+          "timeoutMs": 5000
+        },
+        {
+          "op": "waitFor",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "main#main .card.table ul.table-body \u003e li"
+                ],
+                "preds": [
+                  {
+                    "property": "branch",
+                    "extractor": {
+                      "kind": "attr",
+                      "attr": "title",
+                      "within": "a[title=\"Go to deploy details\"] abbr"
+                    },
+                    "op": "=",
+                    "value": "{{query}}"
+                  }
+                ]
+              }
+            ]
+          },
+          "timeoutMs": 5000
+        }
+      ],
+      "returns": {
+        "description": "The deploys matching the query.",
+        "kind": "list",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                "main#main .card.table ul.table-body \u003e li"
+              ]
+            }
+          ]
+        },
+        "fields": {
+          "branch": {
+            "property": "branch",
+            "extractor": {
+              "kind": "attr",
+              "attr": "title",
+              "within": "a[title=\"Go to deploy details\"] abbr"
+            }
+          },
+          "href": {
+            "property": "href",
+            "extractor": {
+              "kind": "attr",
+              "attr": "href",
+              "within": "a[title=\"Go to deploy details\"]"
+            }
+          },
+          "sha": {
+            "property": "sha",
+            "extractor": {
+              "kind": "text",
+              "within": "a[title=\"Go to deploy details\"] span.nowrap-wide \u003e span"
+            }
+          },
+          "status_summary": {
+            "property": "summary",
+            "extractor": {
+              "kind": "text",
+              "within": "span:has(\u003e span \u003e a[href*=\"/deploys/\"])"
+            }
+          },
+          "time": {
+            "property": "time",
+            "extractor": {
+              "kind": "attr",
+              "attr": "datetime",
+              "within": "time"
+            }
+          },
+          "title": {
+            "property": "title",
+            "extractor": {
+              "kind": "text",
+              "within": "a[title=\"Go to deploy details\"]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "get_production_commit",
+      "description": "The commit currently published to production. Returns `value` (string): Short sha of the published commit.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "ProjectDeploys",
+        "route": "/projects/*/deploys"
+      },
+      "steps": [],
+      "returns": {
+        "description": "Short sha of the published commit.",
+        "kind": "value",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                "main#main section.card-hero"
+              ]
+            }
+          ]
+        },
+        "extractor": {
+          "kind": "text",
+          "within": "a.link[title=\"Go to code\"]"
+        }
+      },
+      "guidance": [
+        {
+          "tool": "search_deploys",
+          "reason": "narrow the list to one branch or deploy id",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "list_env_vars",
+      "description": "List the project's environment variables. Values are never shown here; `secret` is \"true\" for variables marked secret. Returns `items`: a list of objects with keys {key, scope_summary, secret, updated}. One row per variable.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "ProjectEnvVars",
+        "route": "/projects/*/configuration/env"
+      },
+      "steps": [],
+      "returns": {
+        "description": "One row per variable.",
+        "kind": "list",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                "section#section-environment-variables section.card.table ul.table-body \u003e li"
+              ]
+            }
+          ]
+        },
+        "fields": {
+          "key": {
+            "property": "key",
+            "extractor": {
+              "kind": "text",
+              "within": "summary code"
+            }
+          },
+          "scope_summary": {
+            "property": "meta",
+            "extractor": {
+              "kind": "text",
+              "within": "summary p.meta"
+            }
+          },
+          "secret": {
+            "property": "secret",
+            "extractor": {
+              "kind": "exists",
+              "within": "summary span.tooltip-trigger"
+            }
+          },
+          "updated": {
+            "property": "updated",
+            "extractor": {
+              "kind": "attr",
+              "attr": "datetime",
+              "within": "time"
+            }
+          }
+        }
+      },
+      "guidance": [
+        {
+          "tool": "add_env_var",
+          "reason": "create the variable",
+          "when": "now"
+        },
+        {
+          "tool": "delete_env_var",
+          "reason": "remove it again",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "add_env_var",
+      "description": "Create an environment variable with one value for all scopes and deploy contexts. Idempotent — if the key already exists nothing is changed. Returns `value` (string): The new row's scope summary.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "The variable name, e.g. API_BASE_URL."
+          },
+          "value": {
+            "type": "string",
+            "description": "The value to store."
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ]
+      },
+      "ensureView": {
+        "view": "ProjectEnvVars",
+        "route": "/projects/*/configuration/env"
+      },
+      "guard": {
+        "kind": "present",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                "section#section-environment-variables section.card.table ul.table-body \u003e li"
+              ],
+              "preds": [
+                {
+                  "property": "key",
+                  "extractor": {
+                    "kind": "text",
+                    "within": "summary code"
+                  },
+                  "op": "=",
+                  "value": "{{key}}"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "section#section-environment-variables div.dropdown:has(button[title=\"Add a variable\"])"
+                ]
+              },
+              {
+                "locators": [
+                  "section#section-environment-variables div.dropdown:has(button[title=\"Add a variable\"]) button[aria-haspopup]"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "section#section-environment-variables div.dropdown:has(button[title=\"Add a variable\"])"
+                ]
+              },
+              {
+                "locators": [
+                  "section#section-environment-variables div.dropdown:has(button[title=\"Add a variable\"]) [role=\"option\"]"
+                ],
+                "preds": [
+                  {
+                    "property": "label",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "=",
+                    "value": "Add a single variable"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "waitFor",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "section#section-environment-variables form:has(#env-var-form)"
+                ]
+              }
+            ]
+          },
+          "timeoutMs": 5000
+        },
+        {
+          "op": "fill",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "section#section-environment-variables form:has(#env-var-form)"
+                ]
+              },
+              {
+                "locators": [
+                  "section#section-environment-variables form:has(#env-var-form) input[name=\"key\"]"
+                ]
+              }
+            ]
+          },
+          "value": "{{key}}"
+        },
+        {
+          "op": "fill",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "section#section-environment-variables form:has(#env-var-form)"
+                ]
+              },
+              {
+                "locators": [
+                  "section#section-environment-variables form:has(#env-var-form) input[name=\"value-all\"]"
+                ]
+              }
+            ]
+          },
+          "value": "{{value}}"
+        },
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "section#section-environment-variables form:has(#env-var-form)"
+                ]
+              },
+              {
+                "locators": [
+                  "section#section-environment-variables form:has(#env-var-form) button[type=\"submit\"]"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "waitFor",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "section#section-environment-variables section.card.table ul.table-body \u003e li"
+                ],
+                "preds": [
+                  {
+                    "property": "key",
+                    "extractor": {
+                      "kind": "text",
+                      "within": "summary code"
+                    },
+                    "op": "=",
+                    "value": "{{key}}"
+                  }
+                ]
+              }
+            ]
+          },
+          "timeoutMs": 5000
+        }
+      ],
+      "returns": {
+        "description": "The new row's scope summary.",
+        "kind": "value",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                "section#section-environment-variables section.card.table ul.table-body \u003e li"
+              ],
+              "preds": [
+                {
+                  "property": "key",
+                  "extractor": {
+                    "kind": "text",
+                    "within": "summary code"
+                  },
+                  "op": "=",
+                  "value": "{{key}}"
+                }
+              ]
+            }
+          ]
+        },
+        "extractor": {
+          "kind": "text",
+          "within": "summary p.meta"
+        }
+      },
+      "guidance": [
+        {
+          "tool": "list_env_vars",
+          "reason": "confirm the new key is present",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "delete_env_var",
+      "description": "Delete an environment variable by key. Idempotent — a key that is not present is a no-op. Expects the row to be collapsed (the first click expands it; a second click on an expanded row collapses it instead).",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "The variable name to delete."
+          }
+        },
+        "required": [
+          "key"
+        ]
+      },
+      "ensureView": {
+        "view": "ProjectEnvVars",
+        "route": "/projects/*/configuration/env"
+      },
+      "guard": {
+        "kind": "absent",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                "section#section-environment-variables section.card.table ul.table-body \u003e li"
+              ],
+              "preds": [
+                {
+                  "property": "key",
+                  "extractor": {
+                    "kind": "text",
+                    "within": "summary code"
+                  },
+                  "op": "=",
+                  "value": "{{key}}"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "steps": [
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "section#section-environment-variables section.card.table ul.table-body \u003e li"
+                ],
+                "preds": [
+                  {
+                    "property": "key",
+                    "extractor": {
+                      "kind": "text",
+                      "within": "summary code"
+                    },
+                    "op": "=",
+                    "value": "{{key}}"
+                  }
+                ]
+              },
+              {
+                "locators": [
+                  "section#section-environment-variables section.card.table ul.table-body \u003e li summary"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "section#section-environment-variables section.card.table ul.table-body \u003e li"
+                ],
+                "preds": [
+                  {
+                    "property": "key",
+                    "extractor": {
+                      "kind": "text",
+                      "within": "summary code"
+                    },
+                    "op": "=",
+                    "value": "{{key}}"
+                  }
+                ]
+              },
+              {
+                "locators": [
+                  "section#section-environment-variables section.card.table ul.table-body \u003e li div.dropdown"
+                ]
+              },
+              {
+                "locators": [
+                  "section#section-environment-variables section.card.table ul.table-body \u003e li div.dropdown button[aria-haspopup]"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "section#section-environment-variables section.card.table ul.table-body \u003e li"
+                ],
+                "preds": [
+                  {
+                    "property": "key",
+                    "extractor": {
+                      "kind": "text",
+                      "within": "summary code"
+                    },
+                    "op": "=",
+                    "value": "{{key}}"
+                  }
+                ]
+              },
+              {
+                "locators": [
+                  "section#section-environment-variables section.card.table ul.table-body \u003e li div.dropdown"
+                ]
+              },
+              {
+                "locators": [
+                  "section#section-environment-variables section.card.table ul.table-body \u003e li div.dropdown [role=\"option\"]"
+                ],
+                "preds": [
+                  {
+                    "property": "label",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "=",
+                    "value": "Delete"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "waitFor",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".ReactModalPortal [role=\"dialog\"]"
+                ],
+                "preds": [
+                  {
+                    "property": "title",
+                    "extractor": {
+                      "kind": "attr",
+                      "attr": "aria-label"
+                    },
+                    "op": "=",
+                    "value": "Delete environment variable"
+                  }
+                ]
+              }
+            ]
+          },
+          "timeoutMs": 5000
+        },
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  ".ReactModalPortal [role=\"dialog\"]"
+                ]
+              },
+              {
+                "locators": [
+                  ".ReactModalPortal [role=\"dialog\"] button[type=\"submit\"]"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -35,5 +35,6 @@ await cp("corpora/burrito.ir.json", `${OUT}/corpora/burrito.ir.json`);
 // jetblue IR is a committed snapshot generated against the live third-party site
 // (regenerate with: go run . build ../../../sites/jetblue.com).
 await cp("corpora/jetblue.ir.json", `${OUT}/corpora/jetblue.ir.json`);
+await cp("corpora/netlify.ir.json", `${OUT}/corpora/netlify.ir.json`);
 
 console.log(`built unpacked extension -> packages/extension/${OUT}/`);

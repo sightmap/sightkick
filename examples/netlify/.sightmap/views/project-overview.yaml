@@ -1,0 +1,115 @@
+version: 1
+views:
+  - name: ProjectOverview
+    route: /projects/*/overview
+    url: https://app.netlify.com/projects/westernwoodlands/overview
+    description: >-
+      A single project's landing page — the site hero (name, live URL, repo) and
+      the production deploy summary.
+    components:
+      - name: SiteHero
+        selector: 'section.card-hero'
+        description: >-
+          Project header card — name, visibility, live URL, source repo, and the
+          top-level actions.
+        properties:
+          # `heading` is the h1's accessible text, which folds in the visibility
+          # badge's label — read `visibility` separately rather than parsing it out.
+          - name: heading
+            extract: SiteTitle.text
+          - name: visibility
+            extract: VisibilityBadge.label
+          - name: url
+            extract: SiteUrlLink.href
+          - name: repo
+            extract: SiteRepoLink.href
+        children:
+          - name: SiteTitle
+            selector: 'h1'
+            description: Project name, with the visibility badge nested inside it.
+            properties:
+              - name: text
+                extract: text
+
+          - name: VisibilityBadge
+            selector: 'h1 button[aria-label*="production site"]'
+            description: >-
+              Tooltip trigger whose label says whether the site is public or
+              private, e.g. "Public production site. More information".
+            properties:
+              - name: label
+                extract: 'attr=aria-label'
+
+          - name: SiteUrlLink
+            selector: 'a[href*=".netlify.app"]'
+            description: The project's live URL. Opens in a new tab.
+            properties:
+              - name: href
+                extract: 'attr=href'
+
+          - name: SiteRepoLink
+            selector: 'a[href*="github.com"], a[href*="gitlab.com"], a[href*="bitbucket.org"]'
+            description: The Git repo this project deploys from.
+            properties:
+              - name: href
+                extract: 'attr=href'
+
+          - name: ConfigureButton
+            selector: '[data-component="site-hero-configure"]'
+            description: Jumps to project configuration.
+            properties:
+              - name: label
+                extract: text
+
+          - name: ShareButton
+            selector: '[data-component="site-hero-share"]'
+            description: Opens the share dialog for this project.
+            properties:
+              - name: label
+                extract: text
+
+          - name: FavoriteToggle
+            selector: '[data-component="favorite-button"]'
+            description: Toggles this project's favorite star.
+            properties:
+              - name: label
+                extract: 'attr=aria-label'
+
+      - name: DeploysOverview
+        selector: '[data-component="deploys-overview-main"]'
+        description: >-
+          Production deploy summary — the few most recent production deploys and
+          a link into the full deploy list.
+        children:
+          - name: AllDeploysLink
+            selector: 'a[href*="/deploys?"]'
+            description: Opens the project's full deploy list, filtered to production.
+            properties:
+              - name: label
+                extract: text
+              - name: href
+                extract: 'attr=href'
+
+          - name: RecentDeploy
+            selector: 'li'
+            description: >-
+              One recent production deploy. `title` is the discriminator, e.g.
+              RecentDeploy[title*="fa49817"].
+            properties:
+              - name: title
+                extract: DeployLink.label
+              - name: href
+                extract: DeployLink.href
+              - name: message
+                extract: text
+            children:
+              - name: DeployLink
+                selector: 'a[href*="/deploys/"]'
+                description: >-
+                  Opens this deploy's detail page. Its text names the context,
+                  branch, and commit, e.g. "Production: main@fa49817".
+                properties:
+                  - name: label
+                    extract: text
+                  - name: href
+                    extract: 'attr=href'

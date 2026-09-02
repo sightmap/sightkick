@@ -1,0 +1,359 @@
+version: 1
+views:
+  - name: ProjectEnvVars
+    route: /projects/*/configuration/env
+    url: https://app.netlify.com/projects/westernwoodlands/configuration/env
+    description: >-
+      A project's environment variables — the configuration hero and sidebar,
+      the "Add a variable" menu, the inline add / edit form, and one collapsible
+      VarRow per variable with its per-context values and Options menu.
+    memory:
+      - >-
+        The add form is inline, not a modal: AddVariableMenu › MenuItem "Add a
+        single variable" mounts VariableForm above the table. Submitting closes
+        it and the new VarRow appears without a navigation. There is no toast.
+      - >-
+        The Options and filter menus are Downshift dropdowns. They only open on
+        real pointer events — element.click() from eval does nothing — so drive
+        them with `browser click` by component query.
+      - >-
+        Every VarRow's expanded section (values table, Options menu) is in the
+        DOM even while the row is collapsed; only `expanded` changes. Values
+        render as "•••••••" until RevealButton is clicked.
+      - >-
+        Writes are confined to the scratch project westernwoodlands.
+    components:
+      - $ref: ProjectCrumbs
+      - $ref: HelpMenu
+
+      - name: ConfigHero
+        selector: 'main#main .card-hero.media'
+        description: Configuration header — project name, live URL, repo, last update.
+        properties:
+          - name: project
+            extract: Title.text
+          - name: url
+            extract: SiteUrlLink.href
+          - name: repo
+            extract: RepoLink.href
+          - name: updated
+            extract: Updated.datetime
+        children:
+          - name: ProjectLink
+            selector: 'a.media-figure'
+            description: Project avatar; links to the live site.
+            properties:
+              - name: label
+                extract: 'attr=title'
+              - name: href
+                extract: 'attr=href'
+          - name: Title
+            selector: 'h1'
+            properties:
+              - name: text
+                extract: text
+          - name: SiteUrlLink
+            selector: 'a[href*=".netlify.app"]:not(.media-figure)'
+            properties:
+              - name: href
+                extract: 'attr=href'
+              - name: label
+                extract: text
+          - name: RepoLink
+            selector: 'a[href*="github.com"]'
+            properties:
+              - name: href
+                extract: 'attr=href'
+              - name: label
+                extract: text
+          - name: Updated
+            selector: 'time'
+            properties:
+              - name: datetime
+                extract: 'attr=datetime'
+              - name: label
+                extract: 'attr=aria-label'
+
+      - name: SkipLink
+        selector: 'main#main a[href="#content"]'
+        properties:
+          - name: label
+            extract: text
+
+      - name: ConfigNav
+        selector: 'main#main nav.sidebar'
+        description: Configuration sidebar — General, Build & deploy, Environment variables, …
+        children:
+          - name: ConfigNavLink
+            selector: 'a'
+            description: One configuration destination; nested links are sub-sections.
+            properties:
+              - name: label
+                extract: text
+              - name: href
+                extract: 'attr=href'
+
+      - name: EnvVarsSection
+        selector: 'section#section-environment-variables'
+        description: Everything below the "Environment variables" heading.
+        children:
+          - name: DocsLink
+            selector: 'header a'
+            properties:
+              - name: label
+                extract: text
+              - name: href
+                extract: 'attr=href'
+
+          - name: AddVariableMenu
+            selector: 'div.dropdown:has(button[title="Add a variable"])'
+            description: >-
+              "Add a variable" — a menu with "Add a single variable" and
+              "Import from a .env file".
+            properties:
+              - name: label
+                extract: Trigger.label
+              - name: expanded
+                extract: Trigger.expanded
+            children:
+              - name: Trigger
+                selector: 'button[aria-haspopup]'
+                properties:
+                  - name: label
+                    extract: 'attr=title'
+                  - name: expanded
+                    extract: 'attr=aria-expanded'
+              - name: MenuItem
+                selector: '[role="option"]'
+                description: Only in the tree while the menu is open.
+                properties:
+                  - name: label
+                    extract: text
+
+          - name: VariableForm
+            selector: 'form:has(#env-var-form)'
+            description: >-
+              The inline add / edit form. `mode` is the submit button's label —
+              "Create variable" when adding. Only present after choosing "Add a
+              single variable" or Options › Edit.
+            properties:
+              - name: mode
+                extract: SubmitButton.label
+            children:
+              - name: KeyInput
+                selector: 'input[name="key"]'
+                properties:
+                  - name: label
+                    extract: 'attr=aria-label'
+                  - name: placeholder
+                    extract: 'attr=placeholder'
+              - name: SecretCheckbox
+                selector: 'input[name="is_secret"]'
+                description: The "Contains secret values" checkbox.
+                properties:
+                  - name: name
+                    extract: 'attr=name'
+              - name: ScopeOption
+                selector: 'label:has(input[name="scope-values"])'
+                description: Radio — "All scopes" or "Specific scopes".
+                properties:
+                  - name: label
+                    extract: text
+                children:
+                  - name: Radio
+                    selector: 'input'
+                    properties:
+                      - name: name
+                        extract: 'attr=name'
+              - name: ContextOption
+                selector: 'label:has(input[name="context-values"])'
+                description: Radio — same value for all contexts, or one per context.
+                properties:
+                  - name: label
+                    extract: text
+                children:
+                  - name: Radio
+                    selector: 'input'
+                    properties:
+                      - name: name
+                        extract: 'attr=name'
+              - name: ValueInput
+                selector: 'input[name="value-all"]'
+                description: The value used for every deploy context.
+                properties:
+                  - name: name
+                    extract: 'attr=name'
+              - name: SubmitButton
+                selector: 'button[type="submit"]'
+                properties:
+                  - name: label
+                    extract: text
+              - name: CancelButton
+                selector: 'button[type="button"]'
+                properties:
+                  - name: label
+                    extract: text
+
+          - name: VarTable
+            selector: 'section.card.table'
+            description: The variables table — filter toolbar and one VarRow per variable.
+            children:
+              - name: FilterInput
+                selector: 'input[type="search"]'
+                description: Filter by key name. Submit with SearchButton or Enter.
+                properties:
+                  - name: placeholder
+                    extract: 'attr=placeholder'
+              - name: SearchButton
+                selector: 'header button[aria-label="Search"]'
+                properties:
+                  - name: label
+                    extract: 'attr=aria-label'
+              - name: FilterDropdown
+                selector: 'header.table-header div.dropdown'
+                description: Scope filter, context filter, or Sort. `label` is the current selection.
+                properties:
+                  - name: label
+                    extract: Trigger.label
+                  - name: expanded
+                    extract: Trigger.expanded
+                children:
+                  - name: Trigger
+                    selector: 'button[aria-haspopup]'
+                    properties:
+                      - name: label
+                        extract: 'attr=title'
+                      - name: expanded
+                        extract: 'attr=aria-expanded'
+                  - name: MenuItem
+                    selector: '[role="listbox"] [role="option"]'
+                    properties:
+                      - name: label
+                        extract: text
+              - name: CopyTableButton
+                selector: 'button[aria-label="Copy table as .env"]'
+                properties:
+                  - name: label
+                    extract: 'attr=aria-label'
+
+              - name: VarRow
+                selector: 'ul.table-body > li'
+                description: >-
+                  One variable. `key` is the discriminator —
+                  VarRow[key="VITE_GOOGLE_MAPS_API_KEY"]. Click Summary to expand.
+                properties:
+                  - name: key
+                    extract: Summary.key
+                  - name: meta
+                    extract: Summary.meta
+                  - name: secret
+                    extract: exists:SecretBadge
+                  - name: expanded
+                    extract: Details.open
+                  - name: updated
+                    extract: Updated.datetime
+                children:
+                  - name: Details
+                    selector: 'details'
+                    properties:
+                      - name: open
+                        extract: 'attr=open'
+                  - name: Summary
+                    selector: 'summary'
+                    description: The clickable row header — key, secret badge, scope summary.
+                    properties:
+                      - name: key
+                        extract: Key.text
+                      - name: meta
+                        extract: Meta.text
+                    children:
+                      - name: Key
+                        selector: 'code'
+                        properties:
+                          - name: text
+                            extract: text
+                      - name: Meta
+                        selector: 'p.meta'
+                        description: e.g. "All scopes · Same value in all deploy contexts".
+                        properties:
+                          - name: text
+                            extract: text
+                  - name: SecretBadge
+                    selector: 'summary span.tooltip-trigger'
+                    properties:
+                      - name: label
+                        extract: text
+                  - name: Updated
+                    selector: 'time'
+                    properties:
+                      - name: datetime
+                        extract: 'attr=datetime'
+                      - name: label
+                        extract: text
+                  - name: OptionsMenu
+                    selector: 'div.dropdown'
+                    description: Per-variable menu — Edit, Delete.
+                    properties:
+                      - name: label
+                        extract: Trigger.label
+                      - name: expanded
+                        extract: Trigger.expanded
+                    children:
+                      - name: Trigger
+                        selector: 'button[aria-haspopup]'
+                        properties:
+                          - name: label
+                            extract: 'attr=title'
+                          - name: expanded
+                            extract: 'attr=aria-expanded'
+                      - name: MenuItem
+                        selector: '[role="option"]'
+                        description: Edit or Delete. Only in the tree while the menu is open.
+                        properties:
+                          - name: label
+                            extract: text
+                  - name: ValuesTable
+                    selector: 'table'
+                    description: One ValueRow per deploy context.
+                    children:
+                      - name: RevealAllButton
+                        selector: 'button[aria-label="Reveal all values"]'
+                        properties:
+                          - name: label
+                            extract: 'attr=aria-label'
+                      - name: CopyAllButton
+                        selector: 'button[aria-label^="Copy all"]'
+                        properties:
+                          - name: label
+                            extract: 'attr=aria-label'
+                      - name: ValueRow
+                        selector: 'tbody tr'
+                        description: >-
+                          One deploy context's value. ValueRow[context="Production"].
+                          `value` is "•••••••" until revealed.
+                        properties:
+                          - name: context
+                            extract: Context.text
+                          - name: value
+                            extract: Value.text
+                        children:
+                          - name: Context
+                            selector: 'td p'
+                            properties:
+                              - name: text
+                                extract: text
+                          - name: Value
+                            selector: 'code'
+                            properties:
+                              - name: text
+                                extract: text
+                          - name: RevealButton
+                            selector: 'button[aria-label="Reveal value"]'
+                            properties:
+                              - name: label
+                                extract: 'attr=aria-label'
+                          - name: CopyButton
+                            selector: 'button[aria-label="Copy value to clipboard"]'
+                            properties:
+                              - name: label
+                                extract: 'attr=aria-label'

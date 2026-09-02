@@ -1,0 +1,102 @@
+version: 1
+views:
+  - name: Projects
+    route: /teams/*/projects
+    url: https://app.netlify.com/teams/chiplay/projects
+    description: The team's project (site) list — search, sort, and open a project.
+    components:
+      - name: ProjectsCard
+        selector: '[data-testid="sites-card"]'
+        description: The project list card — its toolbar plus the project rows.
+        children:
+          - name: ProjectSearch
+            selector: 'input[name="search"]'
+            description: Filters the project list by name. Filtering is live — no submit.
+
+          - name: AddProjectLink
+            selector: 'header a[href="/start"]'
+            description: Starts the new-project flow.
+            properties:
+              - name: label
+                extract: text
+
+          - name: SortMenu
+            selector: 'header button[aria-label$=". Open menu"]'
+            description: >-
+              Opens the sort menu. Its aria-label names the sort currently
+              applied, e.g. "Last published. Open menu".
+            properties:
+              - name: label
+                extract: 'attr=aria-label'
+
+          - name: SortOption
+            selector: 'header [role="menu"] button, header [role="listbox"] button'
+            description: One sort choice inside the sort menu.
+            properties:
+              - name: label
+                extract: text
+
+          - name: ViewToggle
+            selector: 'header [data-testid^="button-icon-"]'
+            description: Switches the list between list and grid layout.
+            properties:
+              - name: mode
+                extract: 'attr=aria-label'
+              - name: active
+                extract: 'attr=aria-checked'
+
+          - name: ProjectRow
+            selector: 'li.clickable'
+            description: >-
+              One project in the list. `name` is the discriminator — address a
+              single project with ProjectRow[name="..."].
+            properties:
+              - name: name
+                extract: ProjectLink.name
+              - name: href
+                extract: ProjectLink.href
+              - name: published
+                extract: PublishedTime.text
+              - name: visibility
+                extract: VisibilityBadge.label
+              - name: repo
+                extract: RepoLink.repo
+            children:
+              - name: ProjectLink
+                selector: 'h3 a.block-link'
+                description: Opens the project's overview page.
+                properties:
+                  - name: name
+                    extract: text
+                  - name: href
+                    extract: 'attr=href'
+
+              - name: PublishedTime
+                selector: 'time'
+                description: When this project last published.
+                properties:
+                  - name: text
+                    extract: text
+
+              - name: RepoLink
+                selector: 'a[href*="github.com"], a[href*="gitlab.com"], a[href*="bitbucket.org"]'
+                description: The Git repo this project deploys from. Opens in a new tab.
+                properties:
+                  - name: repo
+                    extract: 'attr=href'
+
+              - name: FavoriteButton
+                selector: 'button[aria-label*="avorite"]'
+                description: Toggles this project's favorite star.
+                properties:
+                  - name: label
+                    extract: 'attr=aria-label'
+
+              - name: VisibilityBadge
+                selector: 'button[aria-label*="production site"]'
+                description: >-
+                  Tooltip trigger whose label says whether the site is public or
+                  private, e.g. "Public production site. More information".
+                properties:
+                  - name: label
+                    extract: 'attr=aria-label'

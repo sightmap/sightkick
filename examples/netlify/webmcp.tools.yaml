@@ -1,0 +1,197 @@
+version: 1
+name: netlify
+corpus: ./.sightmap
+
+# Tools register only while the page path matches their view's route, so
+# moving between the deploys page and the env-vars page is a journey step,
+# not a tool step. Writes touch only the scratch project westernwoodlands.
+
+tools:
+  # ---- Deploys ---------------------------------------------------------------
+
+  - name: list_deploys
+    description: >-
+      List the deploys currently shown for this project (newest first). `summary`
+      ends with the deploy status; `title` is the same text without it.
+    mode: live
+    ensure_view: ProjectDeploys
+    returns:
+      description: The visible deploy rows.
+      list:
+        rows: DeployRow
+        fields:
+          title: title
+          sha: sha
+          branch: branch
+          status_summary: summary
+          message: message
+          time: time
+          duration: duration
+          href: href
+
+  - name: list_production_deploys
+    description: List only the production deploys currently shown.
+    mode: live
+    ensure_view: ProjectDeploys
+    returns:
+      description: Production deploy rows.
+      list:
+        rows: 'DeployRow[title^="Production"]'
+        fields:
+          sha: sha
+          status_summary: summary
+          message: message
+          time: time
+          href: href
+
+  - name: search_deploys
+    description: >-
+      Filter the deploy list to one branch and return the matching rows.
+    mode: live
+    ensure_view: ProjectDeploys
+    params:
+      - name: query
+        type: string
+        required: true
+        description: A branch name, e.g. main.
+    steps:
+      - fill:
+          query: SearchInput
+          value: "{{query}}"
+      # react-select: the typed text is committed by choosing the suggestion,
+      # not by the Search button.
+      - click:
+          query: 'ListHeader SearchSuggestion'
+      - wait_for:
+          query: 'ListHeader SearchValue[text="{{query}}"]'
+      # Committing clears the list before the filtered rows arrive.
+      - wait_for:
+          query: 'DeployRow[branch="{{query}}"]'
+    returns:
+      description: The deploys matching the query.
+      list:
+        rows: DeployRow
+        fields:
+          title: title
+          sha: sha
+          branch: branch
+          status_summary: summary
+          time: time
+          href: href
+
+  - name: get_production_commit
+    description: The commit currently published to production.
+    mode: live
+    ensure_view: ProjectDeploys
+    returns:
+      description: Short sha of the published commit.
+      value:
+        query: DeploysHero
+        property: commit
+
+  # ---- Environment variables -------------------------------------------------
+
+  - name: list_env_vars
+    description: >-
+      List the project's environment variables. Values are never shown here;
+      `secret` is "true" for variables marked secret.
+    mode: live
+    ensure_view: ProjectEnvVars
+    returns:
+      description: One row per variable.
+      list:
+        rows: VarRow
+        fields:
+          key: key
+          scope_summary: meta
+          secret: secret
+          updated: updated
+
+  - name: add_env_var
+    description: >-
+      Create an environment variable with one value for all scopes and deploy
+      contexts. Idempotent — if the key already exists nothing is changed.
+    mode: live
+    ensure_view: ProjectEnvVars
+    params:
+      - name: key
+        type: string
+        required: true
+        description: The variable name, e.g. API_BASE_URL.
+      - name: value
+        type: string
+        required: true
+        description: The value to store.
+    guard:
+      present:
+        query: 'VarRow[key="{{key}}"]'
+    steps:
+      - click:
+          query: 'AddVariableMenu Trigger'
+      - click:
+          query: 'AddVariableMenu MenuItem[label="Add a single variable"]'
+      - wait_for:
+          query: VariableForm
+      - fill:
+          query: 'VariableForm KeyInput'
+          value: "{{key}}"
+      - fill:
+          query: 'VariableForm ValueInput'
+          value: "{{value}}"
+      - click:
+          query: 'VariableForm SubmitButton'
+      - wait_for:
+          query: 'VarRow[key="{{key}}"]'
+    returns:
+      description: The new row's scope summary.
+      value:
+        query: 'VarRow[key="{{key}}"]'
+        property: meta
+
+  - name: delete_env_var
+    description: >-
+      Delete an environment variable by key. Idempotent — a key that is not
+      present is a no-op. Expects the row to be collapsed (the first click
+      expands it; a second click on an expanded row collapses it instead).
+    mode: live
+    ensure_view: ProjectEnvVars
+    params:
+      - name: key
+        type: string
+        required: true
+        description: The variable name to delete.
+    guard:
+      absent:
+        query: 'VarRow[key="{{key}}"]'
+    steps:
+      - click:
+          query: 'VarRow[key="{{key}}"] Summary'
+      - click:
+          query: 'VarRow[key="{{key}}"] OptionsMenu Trigger'
+      - click:
+          query: 'VarRow[key="{{key}}"] OptionsMenu MenuItem[label="Delete"]'
+      - wait_for:
+          query: 'ConfirmDialog[title="Delete environment variable"]'
+      - click:
+          query: 'ConfirmDialog ConfirmButton'
+
+journeys:
+  - name: deploy_review
+    description: Read the deploy history and find a specific deploy.
+    steps:
+      - list_deploys
+      - tool: get_production_commit
+        reason: know which commit is live before searching
+      - tool: search_deploys
+        reason: narrow the list to one branch or deploy id
+
+  - name: env_var_lifecycle
+    description: Add a variable, confirm it is listed, then remove it.
+    steps:
+      - list_env_vars
+      - tool: add_env_var
+        reason: create the variable
+      - tool: list_env_vars
+        reason: confirm the new key is present
+      - tool: delete_env_var
+        reason: remove it again

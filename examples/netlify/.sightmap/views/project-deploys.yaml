@@ -1,0 +1,307 @@
+version: 1
+views:
+  - name: ProjectDeploys
+    route: /projects/*/deploys
+    url: https://app.netlify.com/projects/westernwoodlands/deploys
+    description: >-
+      A project's full deploy list — the hero (name, live URL, repo, current
+      production commit), the search / filter toolbar, and one row per deploy.
+    memory:
+      - >-
+        The search box is a react-select combobox. Typing into SearchInput
+        opens a "Search in branch “…”" SearchSuggestion; clicking it (or Enter)
+        commits the filter, shows it as SearchValue, and reloads the rows in
+        place with ?filter= in the URL. SearchButton alone does NOT commit the
+        typed text. Searches match branch names, not commit shas.
+      - >-
+        Each DeployRow's `summary` is "<context> <branch> <sha> <status>" with the
+        status as the trailing word (published, completed, failed, building…).
+        `title` is the same text without the status. The status span has no hook
+        of its own and the offline matcher has no :not(:has()) or :nth-child, so
+        it cannot be isolated — subtract `title` from `summary` to get it.
+      - >-
+        Filter dropdown triggers carry the current selection as their label
+        ("Any status", "Successful"), so FilterDropdown[label=…] changes meaning
+        once a filter is applied. "Trigger deploy" is stable.
+      - >-
+        Rows are the only place a deploy id appears: DeployRow.href ends in the
+        24-hex deploy id, and the permalink subdomain starts with the same id.
+    components:
+      - $ref: ProjectCrumbs
+      - $ref: HelpMenu
+
+      - name: DeploysHero
+        selector: 'main#main section.card-hero'
+        description: >-
+          Page header card — "Deploys for <project>", the live URL, the source
+          repo, the currently published commit, and the deploy-settings actions.
+        properties:
+          - name: heading
+            extract: Title.text
+          - name: url
+            extract: SiteUrlLink.href
+          - name: repo
+            extract: RepoLink.href
+          - name: branch
+            extract: BranchAbbr.name
+          - name: commit
+            extract: CommitLink.sha
+        children:
+          - name: Title
+            selector: 'h1'
+            properties:
+              - name: text
+                extract: text
+
+          - name: SiteUrlLink
+            selector: 'a[href*=".netlify.app"]'
+            description: The project's live URL. Opens in a new tab.
+            properties:
+              - name: href
+                extract: 'attr=href'
+
+          - name: RepoLink
+            selector: 'a[href*="github.com"]:not(.link)'
+            description: The Git repo this project deploys from.
+            properties:
+              - name: href
+                extract: 'attr=href'
+              - name: label
+                extract: text
+
+          - name: BranchAbbr
+            selector: 'abbr'
+            description: The production branch. `name` is the untruncated value.
+            properties:
+              - name: name
+                extract: 'attr=title'
+
+          - name: CommitLink
+            selector: 'a.link[title="Go to code"]'
+            description: The commit currently published to production, linked to the repo.
+            properties:
+              - name: sha
+                extract: text
+              - name: href
+                extract: 'attr=href'
+
+          - name: DeploySettingsLink
+            selector: 'a[href$="/configuration/deploys"]'
+            description: Opens the project's build & deploy settings.
+            properties:
+              - name: label
+                extract: text
+              - name: href
+                extract: 'attr=href'
+
+          - name: NotificationsLink
+            selector: 'a[href$="/configuration/notifications"]'
+            description: Opens the project's deploy notification settings.
+            properties:
+              - name: label
+                extract: text
+              - name: href
+                extract: 'attr=href'
+
+          - name: LockButton
+            selector: 'button'
+            description: >-
+              Toggles auto-publishing. Reads "Lock to stop auto publishing" while
+              publishing is on.
+            properties:
+              - name: label
+                extract: text
+
+      - name: LighthousePromo
+        selector: 'main#main [data-testid="clippy-card"]'
+        description: Upsell card for the Lighthouse plugin. Safe to ignore.
+        children:
+          - name: PromoLink
+            selector: 'a'
+            properties:
+              - name: label
+                extract: text
+              - name: href
+                extract: 'attr=href'
+
+      - name: DeployList
+        selector: 'main#main .card.table'
+        description: The deploy table — toolbar header plus one DeployRow per deploy.
+        children:
+          - name: ListHeader
+            selector: 'header.table-header'
+            description: Search box, status / time-frame filters, and the trigger-deploy menu.
+            children:
+              - name: SearchInput
+                selector: 'input[role="combobox"]'
+                description: Search by branch name or deploy id. Submit with SearchButton or Enter.
+                properties:
+                  - name: label
+                    extract: text
+
+              - name: SearchButton
+                selector: 'button[aria-label="Search"]'
+                properties:
+                  - name: label
+                    extract: 'attr=aria-label'
+
+              - name: SearchSuggestion
+                selector: '[id$="-listbox"] [role="option"]'
+                description: >-
+                  The react-select suggestion that commits a typed search, e.g.
+                  "Search in branch “main”". Only in the tree while typing.
+                properties:
+                  - name: label
+                    extract: text
+
+              - name: SearchValue
+                selector: '[class*="singleValue"]'
+                description: The committed search filter shown in the box.
+                properties:
+                  - name: text
+                    extract: text
+
+              - name: FilterDropdown
+                selector: 'div.dropdown'
+                description: >-
+                  One of three menus — status filter, time-frame filter, and
+                  "Trigger deploy". `label` is the trigger's title, e.g.
+                  FilterDropdown[label="Trigger deploy"].
+                properties:
+                  - name: label
+                    extract: Trigger.label
+                  - name: expanded
+                    extract: Trigger.expanded
+                children:
+                  - name: Trigger
+                    selector: 'button[aria-haspopup]'
+                    properties:
+                      - name: label
+                        extract: 'attr=title'
+                      - name: expanded
+                        extract: 'attr=aria-expanded'
+
+                  - name: MenuItem
+                    selector: '[role="listbox"] [role="option"]'
+                    description: One menu choice. Only present in the tree while the menu is open.
+                    properties:
+                      - name: label
+                        extract: text
+                      - name: selected
+                        extract: 'attr=aria-selected'
+
+          - name: DeployRow
+            selector: 'ul.table-body > li'
+            description: >-
+              One deploy. `sha` is the discriminator (DeployRow[sha="fa49817"]);
+              `title` starts with the context, so DeployRow[title^="Production"]
+              selects production deploys.
+            properties:
+              - name: title
+                extract: DeployLink.label
+              - name: summary
+                extract: Summary.text
+              - name: branch
+                extract: DeployLink.branch
+              - name: sha
+                extract: DeployLink.sha
+              - name: message
+                extract: Message.text
+              - name: time
+                extract: Timestamp.datetime
+              - name: duration
+                extract: Duration.text
+              - name: href
+                extract: DeployLink.href
+            children:
+              - name: Summary
+                selector: 'span:has(> span > a[href*="/deploys/"])'
+                description: Title plus the trailing status word — see the view memory.
+                properties:
+                  - name: text
+                    extract: text
+
+              - name: DeployLink
+                selector: 'a[title="Go to deploy details"]'
+                description: >-
+                  Opens the deploy detail page. Its text names the context, branch
+                  and commit, e.g. "Production: main@fa49817".
+                properties:
+                  - name: label
+                    extract: text
+                  - name: href
+                    extract: 'attr=href'
+                  - name: branch
+                    extract: BranchAbbr.name
+                  - name: sha
+                    extract: Sha.text
+                children:
+                  - name: BranchAbbr
+                    selector: 'abbr'
+                    properties:
+                      - name: name
+                        extract: 'attr=title'
+                  - name: Sha
+                    selector: 'span.nowrap-wide > span'
+                    properties:
+                      - name: text
+                        extract: text
+
+              - name: MoreInfoButton
+                selector: 'button.tooltip-trigger'
+                description: Tooltip trigger next to the status word.
+                properties:
+                  - name: label
+                    extract: 'attr=aria-label'
+
+              - name: Message
+                selector: 'div.meta.truncate'
+                description: The commit message, truncated.
+                properties:
+                  - name: text
+                    extract: text
+
+              - name: PermalinkLink
+                selector: 'a[title="Permalink"]'
+                description: The deploy's immutable preview URL; its text is the deploy time.
+                properties:
+                  - name: href
+                    extract: 'attr=href'
+                  - name: label
+                    extract: text
+
+              - name: Timestamp
+                selector: 'time'
+                properties:
+                  - name: datetime
+                    extract: 'attr=datetime'
+                  - name: label
+                    extract: text
+
+              - name: Duration
+                selector: 'p.optional'
+                description: e.g. "Deployed in 13s".
+                properties:
+                  - name: text
+                    extract: text
+
+              - name: DetailsLink
+                selector: 'a[href*="/deploys/"]:not([title])'
+                description: Row-level "Go to deploy details" arrow. Same target as DeployLink.
+                properties:
+                  - name: label
+                    extract: text
+                  - name: href
+                    extract: 'attr=href'
+
+      - name: EdgePromo
+        selector: 'main#main aside'
+        description: Enterprise upsell sidebar. Safe to ignore.
+        children:
+          - name: UpgradeLink
+            selector: 'a'
+            properties:
+              - name: label
+                extract: text
+              - name: href
+                extract: 'attr=href'
