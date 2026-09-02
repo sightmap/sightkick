@@ -16,7 +16,10 @@ Usage:
   sightkick build <manifest.yaml | app-dir> [-o out.json]
 
   <app-dir> is a directory containing webmcp.tools.yaml.
-  Without -o, the IR is written to stdout.`)
+  Without -o, the IR is written to stdout.
+
+  --verify  check each tool's returns extractors against the view's captured
+            snapshots and warn on fields that resolve empty on every row.`)
 	os.Exit(2)
 }
 
@@ -27,6 +30,7 @@ func main() {
 	}
 
 	var target, out string
+	var verify bool
 	rest := args[1:]
 	for i := 0; i < len(rest); i++ {
 		switch rest[i] {
@@ -35,6 +39,8 @@ func main() {
 				i++
 				out = rest[i]
 			}
+		case "--verify":
+			verify = true
 		default:
 			if target == "" {
 				target = rest[i]
@@ -45,7 +51,11 @@ func main() {
 		usage()
 	}
 
-	ir, diags, err := gen.Build(target)
+	buildFn := gen.Build
+	if verify {
+		buildFn = gen.BuildVerified
+	}
+	ir, diags, err := buildFn(target)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "✗ "+err.Error())
 		os.Exit(1)

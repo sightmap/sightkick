@@ -20,6 +20,17 @@ func ResolveManifestPath(target string) string {
 // into the IR, accumulating diagnostics from every stage. A non-nil error is
 // only for I/O failures that prevent producing any result.
 func Build(target string) (IR, []Diagnostic, error) {
+	return build(target, false)
+}
+
+// BuildVerified is Build plus the build-time extractor verification pass, which
+// checks each tool's returns extractors against the view's captured snapshots
+// (see Verify). Opt-in because it requires captures on disk.
+func BuildVerified(target string) (IR, []Diagnostic, error) {
+	return build(target, true)
+}
+
+func build(target string, verify bool) (IR, []Diagnostic, error) {
 	manifestPath := ResolveManifestPath(target)
 
 	m, diags, err := LoadManifest(manifestPath)
@@ -44,5 +55,8 @@ func Build(target string) (IR, []Diagnostic, error) {
 
 	ir, cdiags := Compile(m, corpus)
 	diags = append(diags, cdiags...)
+	if verify {
+		diags = append(diags, Verify(m, corpus, corpusDir)...)
+	}
 	return ir, diags, nil
 }
