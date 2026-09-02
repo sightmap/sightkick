@@ -9,23 +9,36 @@ import (
 	"sightkick/generator/internal/gen"
 )
 
+// Version is stamped by the release build (goreleaser ldflags); "dev" otherwise.
+var Version = "dev"
+
 func usage() {
 	fmt.Fprintln(os.Stderr, `sightkick — compile a webmcp.tools.yaml + sightmap corpus into IR
 
 Usage:
-  sightkick build <manifest.yaml | app-dir> [-o out.json]
+  sightkick build <manifest.yaml | app-dir> [-o out.json] [--verify]
+  sightkick skills install [--target DIR]
 
-  <app-dir> is a directory containing webmcp.tools.yaml.
-  Without -o, the IR is written to stdout.
-
-  --verify  check each tool's returns extractors against the view's captured
-            snapshots and warn on fields that resolve empty on every row.`)
+  build   compile a corpus + manifest into IR (stdout, or -o out.json).
+          --verify checks each tool's returns extractors against the view's
+          captured snapshots and warns on fields that resolve empty on every row.
+  skills  install the embedded agent skills (default ~/.agents/skills).`)
 	os.Exit(2)
 }
 
 func main() {
 	args := os.Args[1:]
-	if len(args) < 1 || args[0] != "build" {
+	if len(args) < 1 {
+		usage()
+	}
+	if args[0] == "skills" {
+		if err := runSkills(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, "✗ "+err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+	if args[0] != "build" {
 		usage()
 	}
 
