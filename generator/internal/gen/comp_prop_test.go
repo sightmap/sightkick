@@ -154,3 +154,46 @@ func TestCompPropPrefixFallbackWarns(t *testing.T) {
 		t.Fatalf("expected compile.extract-relsel warning; got:\n%s", Format(diags))
 	}
 }
+
+// TestQueryPartScopedToPrevious locks in that each compquery part after the
+// first resolves inside the previous part's subtree. Child names are unique
+// per-parent, not corpus-wide — several dropdowns each own a `Trigger` — and the
+// view-wide name map keeps only one def per name. Resolving flatly made
+// `AddMenu Trigger` compile to a different menu's trigger selector, so the tool
+// clicked the wrong control (or nothing) on a real page.
+func TestQueryPartScopedToPrevious(t *testing.T) {
+	c := oneViewCorpus(
+		sm.ComponentDef{Name: "AddMenu", Selectors: []string{".add"}},
+		sm.ComponentDef{Name: "Trigger", ParentChain: []string{"AddMenu"}, Selectors: []string{".add button"}},
+		sm.ComponentDef{Name: "RowMenu", Selectors: []string{".row"}},
+		// Declared last, so a flat last-wins name map resolves "Trigger" here.
+		sm.ComponentDef{Name: "Trigger", ParentChain: []string{"RowMenu"}, Selectors: []string{".row button"}},
+		// A grandchild: a compquery part is a descendant step, not a child step.
+		sm.ComponentDef{Name: "Wrap", ParentChain: []string{"AddMenu"}, Selectors: []string{".add .wrap"}},
+		sm.ComponentDef{Name: "Deep", ParentChain: []string{"AddMenu", "Wrap"}, Selectors: []string{".add .wrap .deep"}},
+	)
+	m := &Manifest{
+		Version: 1, Name: "t", Corpus: ".",
+		Tools: []ToolDef{{
+			Name: "click_add", Mode: "live", EnsureView: "V",
+			Steps: []map[string]StepBody{
+				{"click": {Query: "AddMenu Trigger"}},
+				{"click": {Query: "AddMenu Deep"}},
+			},
+		}},
+	}
+
+	ir, diags := Compile(m, c)
+	if HasErrors(diags) {
+		t.Fatalf("unexpected errors:\n%s", Format(diags))
+	}
+
+	want := [][]string{{".add", ".add button"}, {".add", ".add .wrap .deep"}}
+	for i, step := range ir.Tools[0].Steps {
+		for j, part := range step.Query.Parts {
+			if got := part.Locators[0]; got != want[i][j] {
+				t.Errorf("step %d part %d locator = %q, want %q", i, j, got, want[i][j])
+			}
+		}
+	}
+}

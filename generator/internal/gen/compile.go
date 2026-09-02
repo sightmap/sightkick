@@ -165,6 +165,33 @@ func childOf(name string, owner sm.ComponentDef, all []sm.ComponentDef) (sm.Comp
 	return sm.ComponentDef{}, false
 }
 
+// descendantOf finds the flattened component named `name` anywhere beneath
+// `owner`, preferring the shallowest match. A compquery part is a *descendant*
+// step, so `AddVariableMenu Trigger` may name a grandchild, not just a child.
+func descendantOf(name string, owner sm.ComponentDef, all []sm.ComponentDef) (sm.ComponentDef, bool) {
+	want := append(append([]string{}, owner.ParentChain...), owner.Name)
+	var best *sm.ComponentDef
+	for i := range all {
+		if all[i].Name != name || !chainHasPrefix(all[i].ParentChain, want) {
+			continue
+		}
+		if best == nil || len(all[i].ParentChain) < len(best.ParentChain) {
+			best = &all[i]
+		}
+	}
+	if best != nil {
+		return *best, true
+	}
+	return sm.ComponentDef{}, false
+}
+
+func chainHasPrefix(chain, prefix []string) bool {
+	if len(chain) < len(prefix) {
+		return false
+	}
+	return chainEq(chain[:len(prefix)], prefix)
+}
+
 func chainEq(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -342,8 +369,20 @@ func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentD
 	ok := true
 	var parts []PathPart
 	var targetDef sm.ComponentDef // last part's component = the target
+	havePrev := false
 	for _, part := range q.Parts {
-		def, found := comps[part.Name]
+		var def sm.ComponentDef
+		var found bool
+		// Resolve each part after the first inside the previous part's subtree.
+		// Child names are unique per-parent, not globally — every dropdown has a
+		// `Trigger` — and the view-wide map keeps only one def per name, so a
+		// flat lookup here silently targets a different component's child.
+		if havePrev {
+			def, found = descendantOf(part.Name, targetDef, all)
+		}
+		if !found {
+			def, found = comps[part.Name]
+		}
 		if !found {
 			cc.errf("compile.query-ref", toolName,
 				"tool %q query references unknown component %q. Available: %s", toolName, part.Name, candidateList(names))
@@ -351,6 +390,7 @@ func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentD
 			continue
 		}
 		targetDef = def
+		havePrev = true
 		pp := PathPart{Locators: def.Selectors}
 		for _, pr := range part.Preds {
 			ex, pok := cc.resolveProperty(pr.Prop, def, all, toolName)
