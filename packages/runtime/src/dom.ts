@@ -64,10 +64,6 @@ export function extract(el: Element, ex: Extractor): string {
   switch (ex.kind) {
     case "attr":
       return ex.attr ? (target.getAttribute(ex.attr) ?? "") : "";
-    case "innerText":
-      return ((target as HTMLElement).innerText ?? target.textContent ?? "").trim();
-    case "textOnly":
-      return directText(target).trim();
     case "text":
     default:
       // Mirror the lib's a11y-name semantics so predicates authored against
@@ -76,14 +72,6 @@ export function extract(el: Element, ex: Extractor): string {
   }
 }
 
-/** Text from an element's direct text-node children only (excludes descendants). */
-function directText(el: Element): string {
-  let s = "";
-  for (const node of Array.from(el.childNodes)) {
-    if (node.nodeType === 3 /* TEXT_NODE */) s += node.textContent ?? "";
-  }
-  return s;
-}
 
 /** Does a single path-part predicate hold for an element? (op/ci per compquery.) */
 function matchPred(el: Element, pred: Pred, args: Record<string, unknown>): boolean {

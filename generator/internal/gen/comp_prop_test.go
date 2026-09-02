@@ -85,6 +85,24 @@ func TestCompPropResolution(t *testing.T) {
 	}
 }
 
+// TestExtractModeAliasRejected: the legacy inner_text/text_only aliases are
+// rejected (as an error, matching `sightmap validate`) now that `text` yields
+// rendered node text on both sides.
+func TestExtractModeAliasRejected(t *testing.T) {
+	for _, mode := range []string{"inner_text", "text_only"} {
+		c := oneViewCorpus(
+			sm.ComponentDef{Name: "Row", Selectors: []string{".row"}, Properties: []sm.ComponentPropertyDef{prop("t", mode)}},
+		)
+		_, diags := Compile(listOverRow("Row", "t"), c)
+		if !hasDiag(diags, "compile.extract-mode") {
+			t.Errorf("extract %q: expected compile.extract-mode; got:\n%s", mode, Format(diags))
+		}
+		if !HasErrors(diags) {
+			t.Errorf("extract %q must be an error (parity with sightmap validate)", mode)
+		}
+	}
+}
+
 // TestCompPropResolvesInPredicates confirms the SAME resolution powers a
 // compquery predicate (selection), not just a returns field.
 func TestCompPropResolvesInPredicates(t *testing.T) {

@@ -14,7 +14,7 @@ package gen
 // Extractor describes how to pull a value off a matched element. It is the
 // compiled form of a sightmap property `extract:` string (SEP-0010 grammar).
 type Extractor struct {
-	// Kind is one of: text, innerText, textOnly, attr, exists.
+	// Kind is one of: text, attr, exists.
 	Kind string `json:"kind"`
 	// Attr is the attribute name when Kind == "attr".
 	Attr string `json:"attr,omitempty"`

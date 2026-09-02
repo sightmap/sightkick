@@ -22,7 +22,12 @@ func templateParams(s string) []string {
 
 // resolveExtractor maps a sightmap property `extract:` string (SEP-0010 grammar)
 // to an IR Extractor, resolved against the flattened component set.
-// Grammar: text | inner_text | text_only | attr=NAME | exists:PATH | PATH.prop.
+// Grammar: text | attr=NAME | exists:PATH | PATH.prop.
+//
+// `text` yields the node's rendered text (accessible name, falling back to
+// visible innerText/textContent) — the sightmap lib does the same offline, so
+// there is a single text mode. The older inner_text/text_only aliases are
+// rejected here to match `sightmap validate` (which never accepted them).
 //
 // The PATH forms are sightmap cross-references over the component tree (NOT raw
 // CSS): `exists:Child` and `Parent.Child.prop` name declared child COMPONENTS.
@@ -45,10 +50,12 @@ func (cc *compiler) resolveExtractorDepth(extract string, owner sm.ComponentDef,
 	switch s {
 	case "", "text":
 		return Extractor{Kind: "text"}
-	case "inner_text":
-		return Extractor{Kind: "innerText"}
-	case "text_only":
-		return Extractor{Kind: "textOnly"}
+	case "inner_text", "text_only":
+		// Rejected to match `sightmap validate`. `text` now yields rendered node
+		// text (incl. role-less nodes) on both sides, so it fully subsumes these.
+		cc.errf("compile.extract-mode", where,
+			"extract mode %q is not supported; use `text` (it captures rendered node text, including role-less nodes)", s)
+		return Extractor{Kind: "text"}
 	}
 	if name, ok := strings.CutPrefix(s, "attr="); ok {
 		return Extractor{Kind: "attr", Attr: name}
