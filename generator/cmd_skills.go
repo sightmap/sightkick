@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"sightkick/generator/skills"
@@ -85,5 +86,27 @@ func runSkillsInstall(args []string) error {
 		fmt.Printf("  %s\n", s)
 	}
 	fmt.Printf("  version: %s\n", Version)
+
+	// sightkick's skills build on the sightmap skills (sightmap-browser for driving
+	// a live session, sightmap-authoring for the corpus), so install those too —
+	// best-effort, so a hiccup here never fails sightkick's own install.
+	fmt.Fprintln(os.Stderr, "\ninstalling the supporting sightmap skills (npx @sightmap/sightmap)…")
+	if err := installSightmapSkills(baseTarget); err != nil {
+		fmt.Fprintf(os.Stderr,
+			"note: couldn't install the sightmap skills automatically (%v)\n"+
+				"      run it yourself: npx @sightmap/sightmap skills install --target %s\n",
+			err, baseTarget)
+	}
 	return nil
+}
+
+// installSightmapSkills runs the sightmap CLI's own installer via npx, dropping
+// the sightmap-browser + sightmap-authoring skills next to sightkick's. Using
+// npx (rather than a PATH lookup) means it works even when the sightmap CLI
+// isn't installed globally — npx fetches it on demand; --yes skips its prompt.
+func installSightmapSkills(target string) error {
+	cmd := exec.Command("npx", "--yes", "@sightmap/sightmap", "skills", "install", "--target", target)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
