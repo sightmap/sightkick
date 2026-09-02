@@ -1,5 +1,5 @@
 import type { Field, Guard, Return, Step, Suggestion, Tool } from "./ir.js";
-import { clickElement, extract, interpolate, resolveQuery, setNativeValue } from "./dom.js";
+import { clickElement, extract, interpolate, resolveQuery, typeInto } from "./dom.js";
 
 export interface ToolResult {
   ok: boolean;
@@ -122,7 +122,7 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
     case "fill": {
       const el = target();
       if (!el) throw new Error(`fill: no element for ${describeTarget(step)}`);
-      setNativeValue(el, interpolate(step.value ?? "", args));
+      typeInto(el, interpolate(step.value ?? "", args));
       return;
     }
     case "click": {

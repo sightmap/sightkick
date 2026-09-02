@@ -167,10 +167,10 @@ export function resolveQuery(query: Query, args: Record<string, unknown>): Eleme
 }
 
 /**
- * Set an input/textarea value in a way frameworks (React/Preact) notice: use the
- * native value setter, then dispatch a bubbling input + change event.
+ * Set an input/textarea value via the native setter so a framework's value
+ * tracker (React/Preact) sees the change. Dispatches no events on its own.
  */
-export function setNativeValue(el: Element, value: string): void {
+function setElementValue(el: Element, value: string): void {
   const proto =
     el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
   const desc = Object.getOwnPropertyDescriptor(proto, "value");
@@ -179,8 +179,67 @@ export function setNativeValue(el: Element, value: string): void {
   } else {
     (el as HTMLInputElement).value = value;
   }
+}
+
+/** Construct an InputEvent (with inputType/data) where supported, else a plain input Event. */
+function makeInputEvent(inputType: string, data: string | null): Event {
+  if (typeof InputEvent !== "undefined") {
+    return new InputEvent("input", { bubbles: true, inputType, data: data ?? undefined });
+  }
+  return new Event("input", { bubbles: true });
+}
+
+/**
+ * Set an input/textarea value in a way frameworks (React/Preact) notice: use the
+ * native value setter, then dispatch a bubbling input + change event. This is the
+ * one-shot form; for controlled combobox inputs that ignore/revert a one-shot set
+ * (e.g. React Aria), use typeInto, which types character by character.
+ */
+export function setNativeValue(el: Element, value: string): void {
+  setElementValue(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+/**
+ * Enter text the way a user would: focus the field, then type CHARACTER BY
+ * CHARACTER — keydown + native value set + InputEvent(insertText) + keyup, from
+ * an empty field.
+ *
+ * Why per-character rather than a one-shot setNativeValue: controlled combobox
+ * inputs (e.g. React Aria's useComboBox) silently REVERT a one-shot programmatic
+ * value set and only open/filter their suggestion listbox on genuine, focused,
+ * keystroke-shaped input. Typing per character (while focused) is what makes the
+ * value stick and the options render for the follow-up option click. For a
+ * role=combobox we finish with an ArrowDown — React Aria's canonical open-menu
+ * key — so the listbox is reliably present even when it didn't open on input.
+ *
+ * Everything here is main-world (isTrusted=false) and works because these
+ * libraries read the events, not the trust flag. It deliberately does NOT attempt
+ * user-activation-gated affordances (a date-picker calendar that opens only on a
+ * trusted press, native <select>, showPopover, clipboard) — no page-JS path can
+ * forge those; they need a host-driven trusted click.
+ */
+export function typeInto(el: Element, value: string): void {
+  const target = el as HTMLElement;
+  target.focus?.();
+  // Start from empty so a repeated fill doesn't accumulate and the framework sees
+  // a clean edit sequence.
+  setElementValue(el, "");
+  target.dispatchEvent(makeInputEvent("deleteContentBackward", null));
+  let acc = "";
+  for (const ch of value) {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: ch, bubbles: true, cancelable: true }));
+    acc += ch;
+    setElementValue(el, acc);
+    target.dispatchEvent(makeInputEvent("insertText", ch));
+    target.dispatchEvent(new KeyboardEvent("keyup", { key: ch, bubbles: true }));
+  }
+  target.dispatchEvent(new Event("change", { bubbles: true }));
+  if (el.getAttribute("role") === "combobox") {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    target.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowDown", bubbles: true }));
+  }
 }
 
 /**
