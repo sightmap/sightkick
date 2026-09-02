@@ -3,6 +3,10 @@
   "name": "jetblue",
   "views": [
     {
+      "name": "Cart",
+      "route": "/booking/cart"
+    },
+    {
       "name": "Home",
       "route": "/"
     },
@@ -337,7 +341,7 @@
       "guidance": [
         {
           "tool": "select_fare",
-          "reason": "pick a fare cabin on a flight",
+          "reason": "pick a fare cabin for the depart leg (and again for the return list)",
           "when": "now"
         }
       ]
@@ -449,6 +453,14 @@
             ]
           }
         }
+      ],
+      "guidance": [
+        {
+          "tool": "list_cart",
+          "reason": "review both selected legs before checkout",
+          "when": "after_navigation",
+          "view": "Cart"
+        }
       ]
     },
     {
@@ -471,6 +483,74 @@
               {
                 "locators": [
                   "cb-filters jb-select"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "list_cart",
+      "description": "List the itineraries currently in the cart (both selected legs), read from the cart review page. Returns `items`: a list of objects with keys {itinerary}.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "Cart",
+        "route": "/booking/cart"
+      },
+      "steps": [],
+      "returns": {
+        "kind": "list",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                "cb-flight-selections cb-itinerary-panel"
+              ]
+            }
+          ]
+        },
+        "fields": {
+          "itinerary": {
+            "property": "itinerary",
+            "extractor": {
+              "kind": "text"
+            }
+          }
+        }
+      },
+      "guidance": [
+        {
+          "tool": "continue_to_checkout",
+          "reason": "proceed to passenger details and payment",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "continue_to_checkout",
+      "description": "Proceed from the cart to checkout (passenger details + payment).",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "Cart",
+        "route": "/booking/cart"
+      },
+      "steps": [
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "cb-price-summary .cb-price-summary__btn-checkout"
                 ]
               }
             ]
