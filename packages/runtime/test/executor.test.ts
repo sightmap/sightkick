@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 // The runtime consumes the generator's real output: this JSON is the golden IR
 // the Go generator emits for examples/todo. Importing it here tests across the
 // IR firewall end-to-end.
@@ -94,5 +94,29 @@ describe("boot / console driver", () => {
     const res = await api.call("nope");
     expect(res.ok).toBe(false);
     expect(res.message).toMatch(/unknown tool/);
+  });
+});
+
+describe("goto step", () => {
+  it("navigates to the interpolated url, deferred until after the tool returns", async () => {
+    const assign = vi.spyOn(window.location, "assign").mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      const gotoTool = {
+        name: "deep_link",
+        steps: [{ op: "goto", url: "https://x.test/r?from={{origin}}&to={{destination}}" }],
+      } as unknown as Tool;
+
+      const res = await runTool(gotoTool, { origin: "JFK", destination: "LAX" }, fast);
+
+      expect(res.ok).toBe(true);
+      // Terminal navigation is deferred a tick so the result is delivered first.
+      expect(assign).not.toHaveBeenCalled();
+      vi.runAllTimers();
+      expect(assign).toHaveBeenCalledWith("https://x.test/r?from=JFK&to=LAX");
+    } finally {
+      vi.useRealTimers();
+      assign.mockRestore();
+    }
   });
 });

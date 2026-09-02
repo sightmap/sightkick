@@ -119,6 +119,18 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
       }
       return;
     }
+    case "goto": {
+      // A real cross-page navigation to an interpolated URL — the escape hatch for
+      // destinations that can't be reached by in-page actuation (e.g. a search
+      // whose form is user-activation-gated: deep-link straight to the results).
+      // goto is terminal: the navigation tears down this context, so we defer it a
+      // tick to let the tool's result + guidance reach the caller before unload.
+      const url = interpolate(step.url ?? "", args);
+      if (url && typeof window !== "undefined") {
+        setTimeout(() => window.location.assign(url), 0);
+      }
+      return;
+    }
     case "fill": {
       const el = target();
       if (!el) throw new Error(`fill: no element for ${describeTarget(step)}`);

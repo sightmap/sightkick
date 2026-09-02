@@ -54,6 +54,7 @@ type StepBody struct {
 	Value     string `yaml:"value"`
 	TimeoutMs int    `yaml:"timeout_ms"`
 	View      string `yaml:"view"` // navigate target
+	URL       string `yaml:"url"`  // goto target (URL template with {{param}} interpolation)
 }
 
 // ValueRef is a returns.value reference: a compquery addressing the element, and

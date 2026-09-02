@@ -45,10 +45,12 @@ export interface Query {
 }
 
 export interface Step {
-  op: "navigate" | "fill" | "click" | "waitFor";
+  op: "navigate" | "goto" | "fill" | "click" | "waitFor";
   view?: string;
   route?: string;
-  /** The target, addressed by a compquery. Absent only for navigate. */
+  /** Target URL for a goto step (a full-page navigation), with {{param}} interpolation. */
+  url?: string;
+  /** The target, addressed by a compquery. Absent for navigate and goto. */
   query?: Query;
   value?: string;
   timeoutMs?: number;

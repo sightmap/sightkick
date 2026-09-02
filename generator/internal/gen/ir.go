@@ -62,13 +62,15 @@ type Field struct {
 }
 
 // Step is one imperative action in a tool. Op discriminates the shape; unused
-// fields are omitted. Ops: navigate, fill, click, waitFor. Every DOM-addressing
-// op (fill/click/waitFor) carries a Query; navigate does not. Reads are not
-// steps — a tool's result is declared by Returns.
+// fields are omitted. Ops: navigate, goto, fill, click, waitFor. Every
+// DOM-addressing op (fill/click/waitFor) carries a Query; navigate and goto do
+// not (goto carries a URL template instead). Reads are not steps — a tool's
+// result is declared by Returns.
 type Step struct {
 	Op        string `json:"op"`
 	View      string `json:"view,omitempty"`
 	Route     string `json:"route,omitempty"`
+	URL       string `json:"url,omitempty"`
 	Query     *Query `json:"query,omitempty"`
 	Value     string `json:"value,omitempty"`
 	TimeoutMs int    `json:"timeoutMs,omitempty"`

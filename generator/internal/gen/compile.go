@@ -421,6 +421,14 @@ func (cc *compiler) compileStep(
 		}
 		return Step{Op: "navigate", View: v.Name, Route: v.Route}, true
 
+	case "goto":
+		if body.URL == "" {
+			cc.errf("compile.goto", toolName, "tool %q has a goto step with no url", toolName)
+			return Step{}, false
+		}
+		cc.validateTemplate(body.URL, known, toolName)
+		return Step{Op: "goto", URL: body.URL}, true
+
 	case "fill":
 		q, _, ok := cc.compileQuery(body.Query, comps, all, names, known, toolName)
 		if !ok {
