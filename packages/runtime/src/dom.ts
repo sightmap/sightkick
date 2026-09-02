@@ -56,6 +56,14 @@ function accessibleText(el: Element): string {
 
 /** Pull a value off an element per an IR extractor. Returns a string, or "" / boolean-as-string. */
 export function extract(el: Element, ex: Extractor): string {
+  // `within` is resolved with a plain querySelector rather than full sightmap
+  // component matching. This is a deliberate approximation (the runtime is
+  // IR-only — no sightmap matcher in TS): the browser's CSS engine already
+  // makes descendant scoping + first-in-document-order faithful. The one
+  // bounded gap is cross-component OWNERSHIP / first-match-wins — a generic
+  // `within` could hit a descendant the lib would attribute to a different
+  // component. It's author-avoidable with a specific child selector, and a
+  // faithful mode would mean porting the Go matcher into the runtime (rejected).
   const target = ex.within ? el.querySelector(ex.within) : el;
   if (ex.kind === "exists") {
     return el.querySelector(ex.within ?? "*") ? "true" : "false";
