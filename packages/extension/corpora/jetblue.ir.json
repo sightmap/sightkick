@@ -82,6 +82,45 @@
           "value": "{{origin}}"
         },
         {
+          "op": "waitFor",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"]"
+                ],
+                "preds": [
+                  {
+                    "property": "field",
+                    "extractor": {
+                      "kind": "attr",
+                      "attr": "aria-label"
+                    },
+                    "op": "=",
+                    "value": "From"
+                  }
+                ]
+              },
+              {
+                "locators": [
+                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"] [role=\"option\"]"
+                ],
+                "preds": [
+                  {
+                    "property": "label",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "*=",
+                    "value": "{{origin}}"
+                  }
+                ]
+              }
+            ]
+          },
+          "timeoutMs": 8000
+        },
+        {
           "op": "click",
           "query": {
             "parts": [
@@ -143,6 +182,45 @@
             ]
           },
           "value": "{{destination}}"
+        },
+        {
+          "op": "waitFor",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"]"
+                ],
+                "preds": [
+                  {
+                    "property": "field",
+                    "extractor": {
+                      "kind": "attr",
+                      "attr": "aria-label"
+                    },
+                    "op": "=",
+                    "value": "To"
+                  }
+                ]
+              },
+              {
+                "locators": [
+                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"] [role=\"option\"]"
+                ],
+                "preds": [
+                  {
+                    "property": "label",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "*=",
+                    "value": "{{destination}}"
+                  }
+                ]
+              }
+            ]
+          },
+          "timeoutMs": 8000
         },
         {
           "op": "click",
