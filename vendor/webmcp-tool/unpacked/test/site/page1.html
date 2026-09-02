@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2026 Google LLC
+ SPDX-License-Identifier: Apache-2.0
+-->
+
+<html>
+<head><title>WebMCP demo shop</title></head>
+<body>
+<h1>demo shop</h1>
+
+<form toolname="submit_order" tooldescription="Submits the order and navigates to checkout" action="/page2.html" method="get" toolautosubmit>
+  <input name="qty" type="number">
+</form>
+
+<form toolname="open_report" tooldescription="Opens the order report in a new tab" action="/page2.html" method="get" target="_blank" toolautosubmit>
+  <input name="kind" type="text">
+</form>
+
+<form toolname="frame_order" tooldescription="Loads the order result into the inline result frame" action="/page2.html" method="get" target="resultframe" toolautosubmit>
+  <input name="qty" type="number">
+</form>
+
+<iframe name="resultframe" src="about:blank"></iframe>
+<iframe src="/frame.html"></iframe>
+
+<script>
+  document.modelContext.registerTool({
+    name: 'add_numbers',
+    description: 'Adds two numbers and returns the sum',
+    inputSchema: { type: 'object', properties: { a: { type: 'number' }, b: { type: 'number' } } },
+    async execute({ a, b }) {
+      return `sum is ${a + b}`;
+    },
+  });
+  document.modelContext.registerTool({
+    name: 'go_checkout',
+    description: 'Navigates to the checkout page',
+    inputSchema: { type: 'object', properties: {} },
+    execute() {
+      location.href = '/page2.html';
+      // Never resolves: the document unloads mid-execution.
+      return new Promise(() => {});
+    },
+  });
+</script>
+</body>
+</html>

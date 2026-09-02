@@ -1,0 +1,24 @@
+{
+   "action": {
+   },
+   "background": {
+      "service_worker": "background.js",
+      "type": "module"
+   },
+   "content_scripts": [ {
+      "all_frames": true,
+      "js": [ "content.js" ],
+      "match_about_blank": true,
+      "matches": [ "\u003Call_urls>" ],
+      "runAt": "document_start"
+   } ],
+   "description": "Inspect, monitor, and execute WebMCP tools manually or with Gemini",
+   "host_permissions": [ "\u003Call_urls>" ],
+   "manifest_version": 3,
+   "name": "WebMCP - Model Context Tool Inspector",
+   "permissions": [ "sidePanel", "activeTab", "scripting", "webNavigation" ],
+   "side_panel": {
+      "default_path": "sidebar.html"
+   },
+   "version": "1.9.13"
+}
