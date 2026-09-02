@@ -7,6 +7,10 @@
       "route": "/booking/cart"
     },
     {
+      "name": "Checkout",
+      "route": "/booking/checkout"
+    },
+    {
       "name": "Home",
       "route": "/"
     },
@@ -551,6 +555,106 @@
               {
                 "locators": [
                   "cb-price-summary .cb-price-summary__btn-checkout"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "guidance": [
+        {
+          "tool": "set_passenger",
+          "reason": "fill the traveler-details fields (First Name, Last Name, Email, ...)",
+          "when": "after_navigation",
+          "view": "Checkout"
+        }
+      ]
+    },
+    {
+      "name": "set_passenger",
+      "description": "Fill a traveler-details field by its label (e.g. \"First Name\", \"Last Name\", \"Email address\").",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "The field label, e.g. \"First Name\"."
+          },
+          "value": {
+            "type": "string",
+            "description": "The value to enter."
+          }
+        },
+        "required": [
+          "field",
+          "value"
+        ]
+      },
+      "ensureView": {
+        "view": "Checkout",
+        "route": "/booking/checkout"
+      },
+      "steps": [
+        {
+          "op": "fill",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "jb-form-field-container"
+                ],
+                "preds": [
+                  {
+                    "property": "label",
+                    "extractor": {
+                      "kind": "text",
+                      "within": "label"
+                    },
+                    "op": "*=",
+                    "value": "{{field}}"
+                  }
+                ]
+              },
+              {
+                "locators": [
+                  "jb-form-field-container input",
+                  "jb-form-field-container select"
+                ]
+              }
+            ]
+          },
+          "value": "{{value}}"
+        }
+      ],
+      "guidance": [
+        {
+          "tool": "continue_checkout_step",
+          "reason": "advance to Seats \u0026 Extras, then payment",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "continue_checkout_step",
+      "description": "Advance to the next checkout step (Seats \u0026 Extras, then payment).",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "Checkout",
+        "route": "/booking/checkout"
+      },
+      "steps": [
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "jb-checkout button.jb-button-primary"
                 ]
               }
             ]
