@@ -197,6 +197,29 @@
           }
         },
         {
+          "op": "waitFor",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "button.aspect-square"
+                ],
+                "preds": [
+                  {
+                    "property": "date",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "*=",
+                    "value": "{{depart_date}}"
+                  }
+                ]
+              }
+            ]
+          },
+          "timeoutMs": 8000
+        },
+        {
           "op": "click",
           "query": {
             "parts": [
