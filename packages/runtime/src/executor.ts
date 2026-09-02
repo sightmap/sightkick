@@ -84,10 +84,32 @@ function describeTarget(step: Step): string {
   return `query ${JSON.stringify(parts.map((p) => p.locators.join("|")))}`;
 }
 
+// isActionable skips responsive-hidden duplicates when picking an ACTION target:
+// layouts keep both a mobile and desktop copy in the DOM (Tailwind md:hidden /
+// max-md:hidden), and clicking/filling the hidden one is a silent no-op. Uses
+// layout signals only, so in a layout-less test DOM it reports false for
+// everything and the caller falls back to the first match (behavior unchanged).
+function isActionable(el: Element): boolean {
+  const h = el as HTMLElement;
+  if (typeof h.getBoundingClientRect !== "function") return false;
+  // offsetParent is null for display:none subtrees (and position:fixed, which we
+  // exempt since fixed elements are still actionable).
+  const style = typeof getComputedStyle === "function" ? getComputedStyle(h) : null;
+  if (h.offsetParent === null && style?.position !== "fixed") return false;
+  const r = h.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+
 async function runStep(step: Step, args: Record<string, unknown>, opts: ResolvedOptions): Promise<void> {
   // Every DOM-addressing step resolves the same way: a compquery to the target
-  // element. Reads are not steps — the result is declared by returns.
-  const target = (): Element | undefined => (step.query ? resolveQuery(step.query, args)[0] : undefined);
+  // element. Reads are not steps — the result is declared by returns. For an
+  // ACTION target we prefer the first VISIBLE match so a responsive hidden
+  // duplicate never gets a no-op click/fill (falls back to the first match).
+  const target = (): Element | undefined => {
+    if (!step.query) return undefined;
+    const matches = resolveQuery(step.query, args);
+    return matches.find(isActionable) ?? matches[0];
+  };
 
   switch (step.op) {
     case "navigate": {
