@@ -379,8 +379,18 @@ func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentD
 		// flat lookup here silently targets a different component's child.
 		if havePrev {
 			def, found = descendantOf(part.Name, targetDef, all)
-		}
-		if !found {
+			if !found {
+				// Not modelled as a descendant. Fall back to a corpus-wide match so
+				// incompletely-modelled hierarchies still compile (the runtime scopes
+				// by DOM containment regardless), but warn: this is exactly the shape
+				// of an authoring typo that would otherwise fail only at runtime.
+				if fb, fok := comps[part.Name]; fok {
+					cc.warnf("compile.query-descendant", toolName,
+						"tool %q query: %q is not a descendant of %q in the corpus; using a corpus-wide match (confirm the DOM nests it there at runtime)", toolName, part.Name, targetDef.Name)
+					def, found = fb, true
+				}
+			}
+		} else {
 			def, found = comps[part.Name]
 		}
 		if !found {
