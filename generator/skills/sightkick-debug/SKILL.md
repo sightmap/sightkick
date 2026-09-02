@@ -15,9 +15,21 @@ a page: `sightmap browser eval` injects the runtime bundle, then
 `window.__sightkick.load(ir)` registers the tools. The page's own agent surface
 (native `document.modelContext`, or our polyfill) then exposes them.
 
-Prereqs: the `sightmap` CLI on PATH (see the `sightmap-browser` skill), and a
-built Chrome-for-Testing (`sightmap browser install` — needs **≥152** for native
-`document.modelContext`). Paths below are relative to the **sightkick repo root**.
+## Prerequisites
+
+This skill is a thin layer over the sightmap toolchain — it drives `sightmap
+browser` and reads a `.sightmap/` corpus — so it does **not** vendor the sightmap
+skills; it depends on them. Make sure they're installed:
+
+```sh
+npx @sightmap/sightmap skills install    # or: sightmap skills install (if already on PATH)
+sightmap browser install                 # Chrome-for-Testing; needs >=152 for native document.modelContext
+```
+
+That installs the **`sightmap-browser`** skill (driving a live session) and
+**`sightmap-authoring`** skill (building the `.sightmap/` corpus) alongside this
+one — everything needed to build and test a `webmcp.tools.yaml`. Paths below are
+relative to the **sightkick repo root**.
 
 ## 1. Build the two artifacts
 
