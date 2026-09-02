@@ -1,0 +1,89 @@
+name: release
+
+# Tag-triggered release. Push a tag `vX.Y.Z` and this:
+#   1. verifies the build + that the embedded skills are in sync,
+#   2. goreleaser builds the cross-platform `sightkick` binaries (config:
+#      generator/.goreleaser.yml) and cuts a GitHub release with the archives,
+#   3. repackages those archives into npm packages and publishes them:
+#        - one @sightmap/sightkick-<os>-<arch> per platform (binary, os/cpu-gated),
+#        - the @sightmap/sightkick meta package (optionalDependencies -> the above).
+#
+# The tag name is the version (goreleaser ldflags + the npm --version both key off
+# it), so `git tag v0.1.0 && git push origin v0.1.0` releases 0.1.0.
+#
+# Auth: an NPM_TOKEN repo secret (automation/granular token with write to the
+# @sightmap/sightkick* packages). OIDC trusted publishing + provenance (what
+# sightmap uses) needs a PUBLIC source repo; switch the publish steps to it (drop
+# NODE_AUTH_TOKEN, add `permissions: id-token: write` + NPM_CONFIG_PROVENANCE) once
+# this repo is public.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # goreleaser creates the GitHub release + uploads assets
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: generator/go.sum
+
+      - name: Version from tag
+        id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # Fail fast on a broken build or drifted embedded skills before we tag/publish.
+      - name: Verify
+        working-directory: generator
+        run: |
+          go build ./...
+          go generate ./skills/...
+          # go generate rewrites the embedded copy (generator/skills = ./skills here);
+          # any diff means it drifted from the canonical <repo>/skills source.
+          git diff --exit-code -- skills || {
+            echo "::error::embedded skills are out of sync — run 'go generate ./skills/...' and commit"; exit 1;
+          }
+          go test ./...
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean
+          workdir: generator
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Assemble npm packages
+        run: node generator/npm/scripts/build-npm-packages.mjs --version "${{ steps.v.outputs.version }}" --dist generator/dist --out npm-staging
+
+      # Platform packages first, then the meta (whose optionalDependencies point at
+      # them). Each generated package.json carries publishConfig.access=public.
+      - name: Publish platform packages
+        run: |
+          for dir in npm-staging/@sightmap/sightkick-*/; do
+            echo "publishing $dir"
+            ( cd "$dir" && npm publish )
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish meta package
+        run: cd npm-staging/meta && npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
