@@ -14,3 +14,7 @@ config.yaml
 !**/testdata/*.ir.json
 !packages/extension/corpora/*.ir.json
 **/.sightmap/.session
+
+# release build outputs (goreleaser + npm packaging)
+generator/dist/
+npm-staging/

@@ -1,0 +1,44 @@
+{
+  "name": "@sightmap/sightkick",
+  "version": "0.0.0",
+  "description": "sightkick — compile a webmcp.tools.yaml + sightmap corpus into WebMCP tool IR, and install the sightkick agent skills (native binary, no Go toolchain required)",
+  "license": "MIT",
+  "homepage": "https://sightmap.org",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sightmap/sightkick.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sightmap/sightkick/issues"
+  },
+  "keywords": [
+    "sightkick",
+    "sightmap",
+    "webmcp",
+    "agent",
+    "cli",
+    "yaml"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "sightkick": "bin/sightkick.js"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "skills/"
+  ],
+  "optionalDependencies": {
+    "@sightmap/sightkick-darwin-arm64": "0.0.0",
+    "@sightmap/sightkick-darwin-x64": "0.0.0",
+    "@sightmap/sightkick-linux-arm64": "0.0.0",
+    "@sightmap/sightkick-linux-x64": "0.0.0",
+    "@sightmap/sightkick-win32-arm64": "0.0.0",
+    "@sightmap/sightkick-win32-x64": "0.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,32 @@
+version: 2
+project_name: sightkick
+builds:
+  - id: sightkick
+    # main.go lives at the generator/ module root (not a cmd/ subdir); goreleaser
+    # runs from this directory, so "." is the package to build.
+    main: .
+    binary: sightkick
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: "sightkick_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files: [none*]
+checksum:
+  name_template: checksums.txt
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+release:
+  github:
+    owner: sightmap
+    name: sightkick
+  name_template: "v{{ .Version }}"
+  ids: [default]
