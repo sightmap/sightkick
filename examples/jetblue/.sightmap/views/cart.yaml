@@ -1,0 +1,61 @@
+version: 1
+views:
+  - name: Cart
+    route: /booking/cart
+    url: "https://www.jetblue.com/booking/cart"
+    memory:
+      - "Angular booking-SPA cart/review view, reached after both legs' fares are
+        committed. cb-cart holds the selected itineraries, a price summary, a promo
+        field, and upgrade/bundle offers, plus a continue-to-checkout action."
+    components:
+      # Both selected legs, each an itinerary panel with view/seat actions.
+      - name: FlightSelections
+        selector: 'cb-flight-selections'
+        children:
+          - name: ItineraryPanel
+            selector: 'cb-itinerary-panel'
+            properties:
+              - name: itinerary
+                extract: text
+            children:
+              - name: ViewDetailsButton
+                selector: 'button[aria-label="View flight details"]'
+                properties:
+                  - name: label
+                    extract: attr=aria-label
+              - name: ViewSeatsButton
+                selector: 'button[aria-label="View seat selection"]'
+                properties:
+                  - name: label
+                    extract: attr=aria-label
+
+      # Price/fare breakdown + the checkout CTA.
+      - name: PriceSummary
+        selector: 'cb-price-summary'
+        properties:
+          - name: total
+            extract: text
+        children:
+          - name: ContinueButton
+            selector: '.cb-price-summary__btn-checkout'
+            properties:
+              - name: label
+                extract: text
+
+      # Promo-code entry.
+      - name: CartPromo
+        selector: 'cb-cart-promo'
+
+      # Fare-bundle upgrade offer.
+      - name: UpgradeCard
+        selector: 'cb-upgrade-card'
+
+      # Barclays credit-card cross-sell.
+      - name: BarclaysOffer
+        selector: 'cb-cart-barclays'
+        children:
+          - name: OfferButton
+            selector: 'button'
+            properties:
+              - name: label
+                extract: attr=aria-label
