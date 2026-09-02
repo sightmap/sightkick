@@ -22,26 +22,26 @@
   "tools": [
     {
       "name": "search_flights",
-      "description": "Search round-trip JetBlue flights. Fills origin and destination (selecting the first matching airport suggestion), picks the depart and return dates in the fare calendar, and submits, navigating to the results page.",
+      "description": "Search round-trip JetBlue flights by deep-linking to the results page for the given airports and dates. Use IATA airport codes and ISO (YYYY-MM-DD) dates.",
       "mode": "live",
       "inputSchema": {
         "type": "object",
         "properties": {
           "depart_date": {
             "type": "string",
-            "description": "Departure date as it appears in the calendar, e.g. \"September 15, 2026\"."
+            "description": "Departure date, ISO format YYYY-MM-DD, e.g. \"2026-09-15\"."
           },
           "destination": {
             "type": "string",
-            "description": "Destination airport code or city, e.g. \"LAX\"."
+            "description": "Destination IATA airport code, e.g. \"LAX\"."
           },
           "origin": {
             "type": "string",
-            "description": "Origin airport code or city, e.g. \"JFK\"."
+            "description": "Origin IATA airport code, e.g. \"JFK\"."
           },
           "return_date": {
             "type": "string",
-            "description": "Return date, e.g. \"September 22, 2026\"."
+            "description": "Return date, ISO format YYYY-MM-DD, e.g. \"2026-09-22\"."
           }
         },
         "required": [
@@ -57,309 +57,8 @@
       },
       "steps": [
         {
-          "op": "click",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  "[data-fs-element=\"booker\"] [data-fs-element=\"route\"] div:has(\u003e input[name=\"from\"]) input[role=\"combobox\"]"
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "op": "fill",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  "[data-fs-element=\"booker\"] [data-fs-element=\"route\"] div:has(\u003e input[name=\"from\"]) input[role=\"combobox\"]"
-                ]
-              }
-            ]
-          },
-          "value": "{{origin}}"
-        },
-        {
-          "op": "waitFor",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"]"
-                ],
-                "preds": [
-                  {
-                    "property": "field",
-                    "extractor": {
-                      "kind": "attr",
-                      "attr": "aria-label"
-                    },
-                    "op": "=",
-                    "value": "From"
-                  }
-                ]
-              },
-              {
-                "locators": [
-                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"] [role=\"option\"]"
-                ],
-                "preds": [
-                  {
-                    "property": "label",
-                    "extractor": {
-                      "kind": "text"
-                    },
-                    "op": "*=",
-                    "value": "{{origin}}"
-                  }
-                ]
-              }
-            ]
-          },
-          "timeoutMs": 8000
-        },
-        {
-          "op": "click",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"]"
-                ],
-                "preds": [
-                  {
-                    "property": "field",
-                    "extractor": {
-                      "kind": "attr",
-                      "attr": "aria-label"
-                    },
-                    "op": "=",
-                    "value": "From"
-                  }
-                ]
-              },
-              {
-                "locators": [
-                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"] [role=\"option\"]"
-                ],
-                "preds": [
-                  {
-                    "property": "label",
-                    "extractor": {
-                      "kind": "text"
-                    },
-                    "op": "*=",
-                    "value": "{{origin}}"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "op": "click",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  "[data-fs-element=\"booker\"] [data-fs-element=\"route\"] div:has(\u003e input[name=\"to\"]) input[role=\"combobox\"]"
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "op": "fill",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  "[data-fs-element=\"booker\"] [data-fs-element=\"route\"] div:has(\u003e input[name=\"to\"]) input[role=\"combobox\"]"
-                ]
-              }
-            ]
-          },
-          "value": "{{destination}}"
-        },
-        {
-          "op": "waitFor",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"]"
-                ],
-                "preds": [
-                  {
-                    "property": "field",
-                    "extractor": {
-                      "kind": "attr",
-                      "attr": "aria-label"
-                    },
-                    "op": "=",
-                    "value": "To"
-                  }
-                ]
-              },
-              {
-                "locators": [
-                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"] [role=\"option\"]"
-                ],
-                "preds": [
-                  {
-                    "property": "label",
-                    "extractor": {
-                      "kind": "text"
-                    },
-                    "op": "*=",
-                    "value": "{{destination}}"
-                  }
-                ]
-              }
-            ]
-          },
-          "timeoutMs": 8000
-        },
-        {
-          "op": "click",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"]"
-                ],
-                "preds": [
-                  {
-                    "property": "field",
-                    "extractor": {
-                      "kind": "attr",
-                      "attr": "aria-label"
-                    },
-                    "op": "=",
-                    "value": "To"
-                  }
-                ]
-              },
-              {
-                "locators": [
-                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"] [role=\"option\"]"
-                ],
-                "preds": [
-                  {
-                    "property": "label",
-                    "extractor": {
-                      "kind": "text"
-                    },
-                    "op": "*=",
-                    "value": "{{destination}}"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "op": "click",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  "[data-fs-element=\"booker\"] [data-fs-element=\"date\"] .group\\/text-field input"
-                ],
-                "preds": [
-                  {
-                    "property": "text",
-                    "extractor": {
-                      "kind": "text"
-                    },
-                    "op": "=",
-                    "value": "Depart"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "op": "waitFor",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  "button.aspect-square"
-                ],
-                "preds": [
-                  {
-                    "property": "date",
-                    "extractor": {
-                      "kind": "text"
-                    },
-                    "op": "*=",
-                    "value": "{{depart_date}}"
-                  }
-                ]
-              }
-            ]
-          },
-          "timeoutMs": 8000
-        },
-        {
-          "op": "click",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  "button.aspect-square"
-                ],
-                "preds": [
-                  {
-                    "property": "date",
-                    "extractor": {
-                      "kind": "text"
-                    },
-                    "op": "*=",
-                    "value": "{{depart_date}}"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "op": "click",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  "button.aspect-square"
-                ],
-                "preds": [
-                  {
-                    "property": "date",
-                    "extractor": {
-                      "kind": "text"
-                    },
-                    "op": "*=",
-                    "value": "{{return_date}}"
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "op": "click",
-          "query": {
-            "parts": [
-              {
-                "locators": [
-                  "[data-fs-element=\"booker\"] [data-fs-element=\"submit\"]"
-                ]
-              }
-            ]
-          }
+          "op": "goto",
+          "url": "https://www.jetblue.com/booking/flights?from={{origin}}\u0026to={{destination}}\u0026depart={{depart_date}}\u0026return={{return_date}}\u0026adults=1\u0026children=0\u0026infants=0\u0026isMultiCity=false\u0026usePoints=false"
         }
       ],
       "guidance": [
