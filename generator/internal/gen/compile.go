@@ -20,10 +20,27 @@ func templateParams(s string) []string {
 	return out
 }
 
-// parseExtractor maps a sightmap property `extract:` string (SEP-0010 grammar)
-// to an IR Extractor. Grammar: text | inner_text | text_only | attr=NAME |
-// exists:SEL | <css-selector> (text of the matching descendant).
-func parseExtractor(extract string) Extractor {
+// resolveExtractor maps a sightmap property `extract:` string (SEP-0010 grammar)
+// to an IR Extractor, resolved against the flattened component set.
+// Grammar: text | inner_text | text_only | attr=NAME | exists:PATH | PATH.prop.
+//
+// The PATH forms are sightmap cross-references over the component tree (NOT raw
+// CSS): `exists:Child` and `Parent.Child.prop` name declared child COMPONENTS.
+// We resolve them to a CSS `within` selector expressed RELATIVE to the owner
+// element (the runtime does owner.querySelector(within)), by looking each child
+// up in the flattened set and stripping the owner's selector prefix. The leaf
+// property's own kind (text/attr/...) is carried through. A path that can't be
+// resolved falls back to treating the string as a raw descendant selector
+// (legacy behavior) with a warning.
+func (cc *compiler) resolveExtractor(extract string, owner sm.ComponentDef, all []sm.ComponentDef, where string) Extractor {
+	return cc.resolveExtractorDepth(extract, owner, all, where, 0)
+}
+
+// maxExtractDepth backstops a cyclic Comp.prop chain (A.b -> B.c -> A.b ...).
+// Real paths are shallow (a handful of segments); anything deeper is a cycle.
+const maxExtractDepth = 16
+
+func (cc *compiler) resolveExtractorDepth(extract string, owner sm.ComponentDef, all []sm.ComponentDef, where string, depth int) Extractor {
 	s := strings.TrimSpace(extract)
 	switch s {
 	case "", "text":
@@ -36,10 +53,190 @@ func parseExtractor(extract string) Extractor {
 	if name, ok := strings.CutPrefix(s, "attr="); ok {
 		return Extractor{Kind: "attr", Attr: name}
 	}
-	if sel, ok := strings.CutPrefix(s, "exists:"); ok {
-		return Extractor{Kind: "exists", Within: sel}
+	if depth > maxExtractDepth {
+		cc.errf("compile.extract-cycle", where,
+			"extract %q exceeds max resolution depth %d (a cyclic Comp.prop reference?)", s, maxExtractDepth)
+		return Extractor{Kind: "text"}
 	}
-	return Extractor{Kind: "text", Within: s}
+	if path, ok := strings.CutPrefix(s, "exists:"); ok {
+		segs := strings.Split(path, ".")
+		if _, isChild := childOf(segs[0], owner, all); isChild {
+			if prefixes, _, ok := cc.resolveCompPath(segs, owner, all, where); ok {
+				return Extractor{Kind: "exists", Within: strings.Join(prefixes, ", ")}
+			}
+		}
+		return Extractor{Kind: "exists", Within: path} // raw selector (legacy)
+	}
+	// PATH.prop cross-reference: last segment is the property, the rest is a
+	// component path descending from `owner`. Only treated as a cross-reference
+	// when the first segment names a real child component; otherwise it's a raw
+	// CSS descendant selector (the legacy grammar) and used verbatim, silently.
+	if segs := strings.Split(s, "."); len(segs) >= 2 {
+		compPath := segs[:len(segs)-1]
+		if _, isChild := childOf(compPath[0], owner, all); isChild {
+			propName := segs[len(segs)-1]
+			if prefixes, leaf, ok := cc.resolveCompPath(compPath, owner, all, where); ok {
+				for _, p := range leaf.Properties {
+					if p.Name == propName {
+						ex := cc.resolveExtractorDepth(p.Extract, leaf, all, where, depth+1)
+						ex.Within = cc.composeWithin(prefixes, ex.Within, where, s)
+						return ex
+					}
+				}
+				cc.warnf("compile.extract-prop", where,
+					"extract %q: property %q is not declared on component %q", s, propName, leaf.Name)
+			} else {
+				cc.warnf("compile.extract-ref", where,
+					"extract %q: component path did not resolve past %q", s, compPath[0])
+			}
+		}
+	}
+	return Extractor{Kind: "text", Within: s} // legacy raw-CSS-descendant fallback
+}
+
+// composeWithin distributes the resolved component-path prefixes over the leaf
+// extractor's own within. The common case (leaf within == "") is just the
+// comma-joined prefixes. A leaf that itself carries a within (a nested
+// Comp.prop) only fully generalizes for a single prefix; the rare multi-selector
+// + nested-within combination is warned and best-effort joined.
+func (cc *compiler) composeWithin(prefixes []string, leafWithin, where, extract string) string {
+	if leafWithin == "" {
+		return strings.Join(prefixes, ", ")
+	}
+	if len(prefixes) == 1 {
+		return joinSel(prefixes[0], leafWithin)
+	}
+	cc.warnf("compile.extract-compose", where,
+		"extract %q composes a multi-selector component path with a nested selector; the result may be imprecise", extract)
+	return joinSel(strings.Join(prefixes, ", "), leafWithin)
+}
+
+// resolveCompPath walks a component path (e.g. ["Price"] or ["Row","Price"])
+// descending from owner through the flattened child set, returning the combined
+// selectors RELATIVE to owner (a cross-product alternative list when components
+// carry multiple selectors) and the final component. ok is false if any segment
+// can't be found.
+func (cc *compiler) resolveCompPath(segs []string, owner sm.ComponentDef, all []sm.ComponentDef, where string) ([]string, sm.ComponentDef, bool) {
+	cur := owner
+	prefixes := []string{""}
+	for _, seg := range segs {
+		child, ok := childOf(seg, cur, all)
+		if !ok {
+			return nil, sm.ComponentDef{}, false
+		}
+		rels, clean := relSelectors(cur, child)
+		if !clean {
+			cc.warnf("compile.extract-relsel", where,
+				"component %q's selector is not a clean descendant of %q; the extractor selector may be wrong at runtime", child.Name, cur.Name)
+		}
+		prefixes = crossJoin(prefixes, rels)
+		cur = child
+	}
+	return prefixes, cur, true
+}
+
+// childOf finds the flattened component named `name` whose parent is `owner`
+// (ParentChain == owner.ParentChain + owner.Name). Falls back to a name-only
+// match when no parent-scoped one exists (children names are usually unique).
+func childOf(name string, owner sm.ComponentDef, all []sm.ComponentDef) (sm.ComponentDef, bool) {
+	want := append(append([]string{}, owner.ParentChain...), owner.Name)
+	var byName *sm.ComponentDef
+	for i := range all {
+		if all[i].Name != name {
+			continue
+		}
+		if chainEq(all[i].ParentChain, want) {
+			return all[i], true
+		}
+		if byName == nil {
+			byName = &all[i]
+		}
+	}
+	if byName != nil {
+		return *byName, true
+	}
+	return sm.ComponentDef{}, false
+}
+
+func chainEq(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// relSelectors expresses each of child's selectors relative to owner (stripping
+// the matching owner-selector prefix so owner.querySelector(rel) resolves it),
+// deduped. Flattened child selectors are owner selector + " " + child selector.
+// clean is false if any child selector isn't a descendant of an owner selector
+// (flattening didn't prepend it) — the raw selector is kept as a fallback.
+func relSelectors(owner, child sm.ComponentDef) (rels []string, clean bool) {
+	clean = true
+	seen := map[string]bool{}
+	for _, cs := range child.Selectors {
+		rel, ok := stripOwnerPrefix(cs, owner.Selectors)
+		if !ok {
+			clean = false
+		}
+		if !seen[rel] {
+			seen[rel] = true
+			rels = append(rels, rel)
+		}
+	}
+	if len(rels) == 0 {
+		return []string{""}, clean
+	}
+	return rels, clean
+}
+
+// stripOwnerPrefix returns childSel with a matching "<ownerSel> " prefix removed
+// (ok=true), trying each owner selector; ok=false (raw childSel) if none match.
+func stripOwnerPrefix(childSel string, ownerSels []string) (string, bool) {
+	for _, os := range ownerSels {
+		if os == "" {
+			continue
+		}
+		if prefix := os + " "; strings.HasPrefix(childSel, prefix) {
+			return strings.TrimSpace(childSel[len(prefix):]), true
+		}
+	}
+	return childSel, false
+}
+
+// crossJoin distributes each prefix over each suffix with a descendant
+// combinator (cross product), so multi-selector components compose into a
+// comma-separated alternative list. Empty operands pass through.
+func crossJoin(prefixes, suffixes []string) []string {
+	if len(suffixes) == 0 {
+		return prefixes
+	}
+	if len(prefixes) == 0 {
+		return suffixes
+	}
+	var out []string
+	for _, p := range prefixes {
+		for _, s := range suffixes {
+			out = append(out, joinSel(p, s))
+		}
+	}
+	return out
+}
+
+func joinSel(a, b string) string {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	switch {
+	case a == "":
+		return b
+	case b == "":
+		return a
+	default:
+		return a + " " + b
+	}
 }
 
 type compiler struct {
@@ -78,6 +275,18 @@ func (cc *compiler) effectiveComponents(view *sm.ViewDef) (map[string]sm.Compone
 	return byName, names
 }
 
+// allComponents returns the flattened component defs in scope for a view (its
+// own components + globals), NOT deduped by name — so a Comp.prop lookup can
+// disambiguate same-named children by ParentChain.
+func (cc *compiler) allComponents(view *sm.ViewDef) []sm.ComponentDef {
+	var all []sm.ComponentDef
+	if view != nil {
+		all = append(all, view.Components...)
+	}
+	all = append(all, cc.c.GlobalComponents...)
+	return all
+}
+
 func candidateList(names []string) string {
 	if len(names) > 12 {
 		names = names[:12]
@@ -88,20 +297,20 @@ func candidateList(names []string) string {
 	return strings.Join(names, ", ")
 }
 
-// resolvePropertyDef resolves a declared property name to its extractor against a
-// component's property set.
-func (cc *compiler) resolvePropertyDef(propName string, props []sm.ComponentPropertyDef, toolName string) (Extractor, bool) {
-	for _, p := range props {
+// resolveProperty resolves a declared property name on `owner` to its IR
+// extractor, following any Comp.prop cross-references against the flattened set.
+func (cc *compiler) resolveProperty(propName string, owner sm.ComponentDef, all []sm.ComponentDef, toolName string) (Extractor, bool) {
+	for _, p := range owner.Properties {
 		if p.Name == propName {
-			return parseExtractor(p.Extract), true
+			return cc.resolveExtractor(p.Extract, owner, all, toolName), true
 		}
 	}
 	var have []string
-	for _, p := range props {
+	for _, p := range owner.Properties {
 		have = append(have, p.Name)
 	}
 	cc.errf("compile.prop-unresolved", toolName,
-		"property %q is not declared on the referenced component (have: %s)", propName, candidateList(have))
+		"property %q is not declared on component %q (have: %s)", propName, owner.Name, candidateList(have))
 	return Extractor{}, false
 }
 
@@ -111,21 +320,21 @@ func (cc *compiler) resolvePropertyDef(propName string, props []sm.ComponentProp
 // by DOM containment. Reuses the sightmap library's parser (grammar parity with
 // `sightmap browser` queries); the library's live resolver stays out of the
 // runtime (the firewall).
-// The returned props are the LAST part's declared properties (the target
-// component), so a collect can resolve its fields against the row.
-func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentDef, names []string, known map[string]bool, toolName string) (*Query, []sm.ComponentPropertyDef, bool) {
+// The returned def is the LAST part's component (the target), so a collect can
+// resolve its fields against the row.
+func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentDef, all []sm.ComponentDef, names []string, known map[string]bool, toolName string) (*Query, sm.ComponentDef, bool) {
 	if strings.TrimSpace(queryStr) == "" {
 		cc.errf("compile.query-missing", toolName, "a step/ref in %q has no query", toolName)
-		return nil, nil, false
+		return nil, sm.ComponentDef{}, false
 	}
 	q, err := compquery.ParseQuery(queryStr)
 	if err != nil {
 		cc.errf("compile.query-parse", toolName, "tool %q has an invalid query %q: %v", toolName, queryStr, err)
-		return nil, nil, false
+		return nil, sm.ComponentDef{}, false
 	}
 	ok := true
 	var parts []PathPart
-	var targetProps []sm.ComponentPropertyDef // last part's properties = the target
+	var targetDef sm.ComponentDef // last part's component = the target
 	for _, part := range q.Parts {
 		def, found := comps[part.Name]
 		if !found {
@@ -134,10 +343,10 @@ func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentD
 			ok = false
 			continue
 		}
-		targetProps = def.Properties
+		targetDef = def
 		pp := PathPart{Locators: def.Selectors}
 		for _, pr := range part.Preds {
-			ex, pok := cc.resolvePropertyDef(pr.Prop, def.Properties, toolName)
+			ex, pok := cc.resolveProperty(pr.Prop, def, all, toolName)
 			if !pok {
 				ok = false
 				continue
@@ -148,14 +357,14 @@ func (cc *compiler) compileQuery(queryStr string, comps map[string]sm.ComponentD
 		parts = append(parts, pp)
 	}
 	if !ok {
-		return nil, nil, false
+		return nil, sm.ComponentDef{}, false
 	}
 	query := &Query{Parts: parts}
 	if q.Index >= 0 {
 		idx := q.Index
 		query.Index = &idx
 	}
-	return query, targetProps, true
+	return query, targetDef, true
 }
 
 func (cc *compiler) validateTemplate(s string, known map[string]bool, toolName string) {
@@ -193,7 +402,7 @@ func inputSchema(params []ParamDef) InputSchema {
 
 func (cc *compiler) compileStep(
 	op string, body StepBody,
-	comps map[string]sm.ComponentDef, names []string,
+	comps map[string]sm.ComponentDef, all []sm.ComponentDef, names []string,
 	known map[string]bool, toolName string,
 ) (Step, bool) {
 	switch op {
@@ -206,7 +415,7 @@ func (cc *compiler) compileStep(
 		return Step{Op: "navigate", View: v.Name, Route: v.Route}, true
 
 	case "fill":
-		q, _, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
+		q, _, ok := cc.compileQuery(body.Query, comps, all, names, known, toolName)
 		if !ok {
 			return Step{}, false
 		}
@@ -214,7 +423,7 @@ func (cc *compiler) compileStep(
 		return Step{Op: "fill", Query: q, Value: body.Value}, true
 
 	case "click":
-		q, _, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
+		q, _, ok := cc.compileQuery(body.Query, comps, all, names, known, toolName)
 		if !ok {
 			return Step{}, false
 		}
@@ -225,7 +434,7 @@ func (cc *compiler) compileStep(
 		if timeout == 0 {
 			timeout = 5000
 		}
-		q, _, ok := cc.compileQuery(body.Query, comps, names, known, toolName)
+		q, _, ok := cc.compileQuery(body.Query, comps, all, names, known, toolName)
 		if !ok {
 			return Step{}, false
 		}
@@ -239,7 +448,7 @@ func (cc *compiler) compileStep(
 
 // compileFields resolves a set of output fields against a row component's
 // declared properties (deterministic order). Shared by list returns.
-func (cc *compiler) compileFields(fields map[string]FieldDef, props []sm.ComponentPropertyDef, toolName string) map[string]Field {
+func (cc *compiler) compileFields(fields map[string]FieldDef, row sm.ComponentDef, all []sm.ComponentDef, toolName string) map[string]Field {
 	out := map[string]Field{}
 	names := make([]string, 0, len(fields))
 	for f := range fields {
@@ -248,14 +457,14 @@ func (cc *compiler) compileFields(fields map[string]FieldDef, props []sm.Compone
 	sort.Strings(names)
 	for _, f := range names {
 		spec := fields[f]
-		if ex, ok := cc.resolvePropertyDef(spec.Property, props, toolName); ok {
+		if ex, ok := cc.resolveProperty(spec.Property, row, all, toolName); ok {
 			out[f] = Field{Property: spec.Property, Extractor: ex}
 		}
 	}
 	return out
 }
 
-func (cc *compiler) compileReturn(ret *ReturnDef, comps map[string]sm.ComponentDef, names []string, known map[string]bool, toolName string) *Return {
+func (cc *compiler) compileReturn(ret *ReturnDef, comps map[string]sm.ComponentDef, all []sm.ComponentDef, names []string, known map[string]bool, toolName string) *Return {
 	if ret == nil {
 		return nil
 	}
@@ -266,11 +475,11 @@ func (cc *compiler) compileReturn(ret *ReturnDef, comps map[string]sm.ComponentD
 
 	// list: map a compquery over every match -> one Fields-shaped object per row.
 	if ret.List != nil {
-		q, props, ok := cc.compileQuery(ret.List.Rows, comps, names, known, toolName)
+		q, row, ok := cc.compileQuery(ret.List.Rows, comps, all, names, known, toolName)
 		if !ok {
 			return nil
 		}
-		out := &Return{Kind: "list", Query: q, Fields: cc.compileFields(ret.List.Fields, props, toolName)}
+		out := &Return{Kind: "list", Query: q, Fields: cc.compileFields(ret.List.Fields, row, all, toolName)}
 		if ret.Description != "" {
 			out.Description = ret.Description
 		}
@@ -279,7 +488,7 @@ func (cc *compiler) compileReturn(ret *ReturnDef, comps map[string]sm.ComponentD
 
 	// value: read one declared property off the first match.
 	if ret.Value != nil {
-		q, props, ok := cc.compileQuery(ret.Value.Query, comps, names, known, toolName)
+		q, target, ok := cc.compileQuery(ret.Value.Query, comps, all, names, known, toolName)
 		if !ok {
 			return nil
 		}
@@ -287,7 +496,7 @@ func (cc *compiler) compileReturn(ret *ReturnDef, comps map[string]sm.ComponentD
 		if ret.Description != "" {
 			out.Description = ret.Description
 		}
-		if ex, ok := cc.resolvePropertyDef(ret.Value.Property, props, toolName); ok {
+		if ex, ok := cc.resolveProperty(ret.Value.Property, target, all, toolName); ok {
 			out.Extractor = &ex
 		}
 		return out
@@ -301,7 +510,7 @@ func (cc *compiler) compileReturn(ret *ReturnDef, comps map[string]sm.ComponentD
 	return out
 }
 
-func (cc *compiler) compileToolGuard(g *GuardBody, comps map[string]sm.ComponentDef, names []string, known map[string]bool, toolName string) *Guard {
+func (cc *compiler) compileToolGuard(g *GuardBody, comps map[string]sm.ComponentDef, all []sm.ComponentDef, names []string, known map[string]bool, toolName string) *Guard {
 	var kind string
 	var ref *GuardRef
 	switch {
@@ -313,7 +522,7 @@ func (cc *compiler) compileToolGuard(g *GuardBody, comps map[string]sm.Component
 		cc.errf("compile.guard", toolName, "tool %q guard must have a present: or absent: reference", toolName)
 		return nil
 	}
-	q, _, ok := cc.compileQuery(ref.Query, comps, names, known, toolName)
+	q, _, ok := cc.compileQuery(ref.Query, comps, all, names, known, toolName)
 	if !ok {
 		return nil
 	}
@@ -338,6 +547,7 @@ func (cc *compiler) compileTool(t ToolDef) Tool {
 		}
 	}
 	comps, names := cc.effectiveComponents(view)
+	all := cc.allComponents(view)
 
 	tool := Tool{Name: t.Name, Mode: mode, InputSchema: inputSchema(t.Params)}
 	if t.Description != "" {
@@ -347,7 +557,7 @@ func (cc *compiler) compileTool(t ToolDef) Tool {
 		tool.EnsureView = &EnsureView{View: view.Name, Route: view.Route}
 	}
 	if t.Guard != nil {
-		tool.Guard = cc.compileToolGuard(t.Guard, comps, names, known, t.Name)
+		tool.Guard = cc.compileToolGuard(t.Guard, comps, all, names, known, t.Name)
 	}
 	for _, step := range t.Steps {
 		op, body, ok := stepOp(step)
@@ -355,14 +565,14 @@ func (cc *compiler) compileTool(t ToolDef) Tool {
 			cc.errf("compile.step", t.Name, "tool %q has a step that is not a single-key mapping", t.Name)
 			continue
 		}
-		if s, ok := cc.compileStep(op, body, comps, names, known, t.Name); ok {
+		if s, ok := cc.compileStep(op, body, comps, all, names, known, t.Name); ok {
 			tool.Steps = append(tool.Steps, s)
 		}
 	}
 	if tool.Steps == nil {
 		tool.Steps = []Step{}
 	}
-	tool.Returns = cc.compileReturn(t.Returns, comps, names, known, t.Name)
+	tool.Returns = cc.compileReturn(t.Returns, comps, all, names, known, t.Name)
 	// Make the result self-describing: agents read the tool description in
 	// getTools(), so baking the result shape (envelope key + list field names)
 	// there lets them parse first-try instead of guessing 'items'/field names.
