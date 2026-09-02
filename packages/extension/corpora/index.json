@@ -1,5 +1,15 @@
 [
   {
+    "id": "jetblue",
+    "name": "JetBlue (live site)",
+    "description": "JetBlue flight search + fare selection. Generated from sites/jetblue.com against the live third-party site.",
+    "match": ["https://www.jetblue.com/*"],
+    "irFile": "jetblue.ir.json",
+    "source": "sites/jetblue.com",
+    "version": "0.0.1",
+    "defaultEnabled": true
+  },
+  {
     "id": "search-demo",
     "name": "Flight search (demo)",
     "description": "Two-view flight search: search, list/sort results, select and book. Generated from examples/search.",

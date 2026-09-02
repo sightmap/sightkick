@@ -32,5 +32,8 @@ await cp("../../generator/internal/gen/testdata/todo.ir.json", `${OUT}/corpora/t
 // burrito IR is a committed snapshot (built from examples/burrito against the
 // sibling potemkin repo; regenerate with: go run . build ../examples/burrito).
 await cp("corpora/burrito.ir.json", `${OUT}/corpora/burrito.ir.json`);
+// jetblue IR is a committed snapshot generated against the live third-party site
+// (regenerate with: go run . build ../../../sites/jetblue.com).
+await cp("corpora/jetblue.ir.json", `${OUT}/corpora/jetblue.ir.json`);
 
 console.log(`built unpacked extension -> packages/extension/${OUT}/`);

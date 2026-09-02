@@ -1,0 +1,459 @@
+{
+  "version": 1,
+  "name": "jetblue",
+  "views": [
+    {
+      "name": "Home",
+      "route": "/"
+    },
+    {
+      "name": "SelectFlights",
+      "route": "/booking/flights"
+    }
+  ],
+  "tools": [
+    {
+      "name": "search_flights",
+      "description": "Search round-trip JetBlue flights. Fills origin and destination (selecting the first matching airport suggestion), picks the depart and return dates in the fare calendar, and submits, navigating to the results page.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "depart_date": {
+            "type": "string",
+            "description": "Departure date as it appears in the calendar, e.g. \"September 15, 2026\"."
+          },
+          "destination": {
+            "type": "string",
+            "description": "Destination airport code or city, e.g. \"LAX\"."
+          },
+          "origin": {
+            "type": "string",
+            "description": "Origin airport code or city, e.g. \"JFK\"."
+          },
+          "return_date": {
+            "type": "string",
+            "description": "Return date, e.g. \"September 22, 2026\"."
+          }
+        },
+        "required": [
+          "origin",
+          "destination",
+          "depart_date",
+          "return_date"
+        ]
+      },
+      "ensureView": {
+        "view": "Home",
+        "route": "/"
+      },
+      "steps": [
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "[data-fs-element=\"booker\"] [data-fs-element=\"route\"] div:has(\u003e input[name=\"from\"]) input[role=\"combobox\"]"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "fill",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "[data-fs-element=\"booker\"] [data-fs-element=\"route\"] div:has(\u003e input[name=\"from\"]) input[role=\"combobox\"]"
+                ]
+              }
+            ]
+          },
+          "value": "{{origin}}"
+        },
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"]"
+                ],
+                "preds": [
+                  {
+                    "property": "field",
+                    "extractor": {
+                      "kind": "attr",
+                      "attr": "aria-label"
+                    },
+                    "op": "=",
+                    "value": "From"
+                  }
+                ]
+              },
+              {
+                "locators": [
+                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"] [role=\"option\"]"
+                ],
+                "preds": [
+                  {
+                    "property": "label",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "*=",
+                    "value": "{{origin}}"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "[data-fs-element=\"booker\"] [data-fs-element=\"route\"] div:has(\u003e input[name=\"to\"]) input[role=\"combobox\"]"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "fill",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "[data-fs-element=\"booker\"] [data-fs-element=\"route\"] div:has(\u003e input[name=\"to\"]) input[role=\"combobox\"]"
+                ]
+              }
+            ]
+          },
+          "value": "{{destination}}"
+        },
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"]"
+                ],
+                "preds": [
+                  {
+                    "property": "field",
+                    "extractor": {
+                      "kind": "attr",
+                      "attr": "aria-label"
+                    },
+                    "op": "=",
+                    "value": "To"
+                  }
+                ]
+              },
+              {
+                "locators": [
+                  "div.w-96:has([role=\"listbox\"]:is([aria-label=\"From\"], [aria-label=\"To\"])) [role=\"listbox\"] [role=\"option\"]"
+                ],
+                "preds": [
+                  {
+                    "property": "label",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "*=",
+                    "value": "{{destination}}"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "[data-fs-element=\"booker\"] [data-fs-element=\"date\"] .group\\/text-field input"
+                ],
+                "preds": [
+                  {
+                    "property": "text",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "=",
+                    "value": "Depart"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "button.aspect-square"
+                ],
+                "preds": [
+                  {
+                    "property": "date",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "*=",
+                    "value": "{{depart_date}}"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "button.aspect-square"
+                ],
+                "preds": [
+                  {
+                    "property": "date",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "*=",
+                    "value": "{{return_date}}"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "[data-fs-element=\"booker\"] [data-fs-element=\"submit\"]"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "guidance": [
+        {
+          "tool": "list_flights",
+          "reason": "read the itineraries the search produced",
+          "when": "after_navigation",
+          "view": "SelectFlights"
+        }
+      ]
+    },
+    {
+      "name": "list_flights",
+      "description": "List the flight itineraries in the current results — flight number, stops, and duration. Returns `items`: a list of objects with keys {duration, flight_no, stops}. The current flight itineraries.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "SelectFlights",
+        "route": "/booking/flights"
+      },
+      "steps": [],
+      "returns": {
+        "description": "The current flight itineraries.",
+        "kind": "list",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                "cb-flight-result-item"
+              ]
+            }
+          ]
+        },
+        "fields": {
+          "duration": {
+            "property": "duration",
+            "extractor": {
+              "kind": "text",
+              "within": ".flight-panel__duration"
+            }
+          },
+          "flight_no": {
+            "property": "flight_no",
+            "extractor": {
+              "kind": "text",
+              "within": ".flight-codes"
+            }
+          },
+          "stops": {
+            "property": "stops",
+            "extractor": {
+              "kind": "text",
+              "within": ".flight-panel__stops"
+            }
+          }
+        }
+      },
+      "guidance": [
+        {
+          "tool": "select_fare",
+          "reason": "pick a fare cabin on a flight",
+          "when": "now"
+        }
+      ]
+    },
+    {
+      "name": "list_fares",
+      "description": "List every fare option across the current results — cabin and price. Returns `items`: a list of objects with keys {cabin, price}. The fare options offered on the current results.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "SelectFlights",
+        "route": "/booking/flights"
+      },
+      "steps": [],
+      "returns": {
+        "description": "The fare options offered on the current results.",
+        "kind": "list",
+        "query": {
+          "parts": [
+            {
+              "locators": [
+                "cb-flight-result-item jb-card.cb-fare-card"
+              ]
+            }
+          ]
+        },
+        "fields": {
+          "cabin": {
+            "property": "cabin",
+            "extractor": {
+              "kind": "text",
+              "within": ".body"
+            }
+          },
+          "price": {
+            "property": "price",
+            "extractor": {
+              "kind": "text",
+              "within": ".cb-bundle-price__price"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "select_fare",
+      "description": "Select a fare cabin (Main, EvenMore, or Mint) on a specific flight, identified by its flight number (e.g. \"B6 123\"). Scopes to the matching flight card, then clicks the requested fare.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cabin": {
+            "type": "string",
+            "description": "Fare cabin — one of \"Main\", \"EvenMore\", \"Mint\"."
+          },
+          "flight": {
+            "type": "string",
+            "description": "Flight number to select on, e.g. \"B6 123\"."
+          }
+        },
+        "required": [
+          "flight",
+          "cabin"
+        ]
+      },
+      "ensureView": {
+        "view": "SelectFlights",
+        "route": "/booking/flights"
+      },
+      "steps": [
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "cb-flight-result-item"
+                ],
+                "preds": [
+                  {
+                    "property": "flight_no",
+                    "extractor": {
+                      "kind": "text",
+                      "within": ".flight-codes"
+                    },
+                    "op": "*=",
+                    "value": "{{flight}}"
+                  }
+                ]
+              },
+              {
+                "locators": [
+                  "cb-flight-result-item jb-card.cb-fare-card"
+                ],
+                "preds": [
+                  {
+                    "property": "label",
+                    "extractor": {
+                      "kind": "text"
+                    },
+                    "op": "*=",
+                    "value": "{{cabin}}"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "sort_results",
+      "description": "Open the results sort control to choose an ordering.",
+      "mode": "live",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "ensureView": {
+        "view": "SelectFlights",
+        "route": "/booking/flights"
+      },
+      "steps": [
+        {
+          "op": "click",
+          "query": {
+            "parts": [
+              {
+                "locators": [
+                  "cb-filters jb-select"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
