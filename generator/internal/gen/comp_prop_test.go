@@ -197,3 +197,31 @@ func TestQueryPartScopedToPrevious(t *testing.T) {
 		}
 	}
 }
+
+// TestQueryNonDescendantFallbackWarns: when a query names a part that isn't a
+// modelled descendant of the previous part, compileQuery still falls back to a
+// corpus-wide match (incomplete hierarchies keep compiling, and the runtime
+// scopes by DOM containment), but it warns — that shape is usually an authoring
+// typo that would otherwise surface only as a runtime "no element".
+func TestQueryNonDescendantFallbackWarns(t *testing.T) {
+	c := oneViewCorpus(
+		sm.ComponentDef{Name: "AddMenu", Selectors: []string{".add"}},
+		sm.ComponentDef{Name: "RowMenu", Selectors: []string{".row"}},
+		// Trigger exists only under RowMenu — NOT under AddMenu.
+		sm.ComponentDef{Name: "Trigger", ParentChain: []string{"RowMenu"}, Selectors: []string{".row button"}},
+	)
+	m := &Manifest{
+		Version: 1, Name: "t", Corpus: ".",
+		Tools: []ToolDef{{
+			Name: "x", Mode: "live", EnsureView: "V",
+			Steps: []map[string]StepBody{{"click": {Query: "AddMenu Trigger"}}},
+		}},
+	}
+	_, diags := Compile(m, c)
+	if HasErrors(diags) {
+		t.Fatalf("non-descendant fallback should warn, not error:\n%s", Format(diags))
+	}
+	if findDiag(diags, "compile.query-descendant") == nil {
+		t.Fatalf("expected compile.query-descendant warning; got:\n%s", Format(diags))
+	}
+}
