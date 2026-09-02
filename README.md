@@ -38,10 +38,12 @@ generator/     # Go CLI: webmcp.tools.yaml + .sightmap corpus -> IR (JSON)
                #   (consumes github.com/sightmap/sightmap/go)
 packages/
   runtime/     # browser: boot + atomic-tool execution + WebMCP registration
-  extension/   # MV3 extension: inject the generated artifact into 3rd-party sites (next)
+  extension/   # MV3 extension: inject the generated artifact into 3rd-party sites
 examples/
   todo/        # single-view example (tools + same-view guidance)
   search/      # two-view example (transition + cross-view guidance + rich returns)
+  burrito/     # external-corpus example (references a sibling repo's .sightmap)
+  jetblue/     # real third-party site (two apps under one domain)
 ```
 
 The generator is Go and the runtime/extension are TypeScript — a deliberate
@@ -88,6 +90,37 @@ await document.modelContext.executeTool(s, { query: 'ATL to LHR' })  // fills, c
 Either way it happens through real clicks/fills — the same affordances a user has.
 This flow is verified agent-driven against a real browser with the `sightmap
 browser` CLI (using `examples/search/.sightmap`).
+
+## Test end-to-end in a real browser (extension)
+
+The runtime flow above is served locally. To exercise the **extension injector**
+against a real third-party site, load three unpacked extensions into one
+`sightmap browser` session:
+
+1. the built-in **sightmap overlay** — `~/.sightmap/extension` (what `sightmap
+   browser` normally auto-loads on its own);
+2. the **sightkick** injector — `packages/extension/dist`, a gitignored build
+   output, so build it first;
+3. the vendored **WebMCP inspector** — `vendor/webmcp-tool/unpacked` (see its
+   [`NOTES.md`](vendor/webmcp-tool/NOTES.md) for the Chrome-for-Testing flags and
+   the gotchas behind them).
+
+```sh
+pnpm install && pnpm build          # builds packages/extension/dist
+
+# from the repo root:
+sightmap browser start --detach \
+  --extensions ~/.sightmap/extension,"$PWD/packages/extension/dist","$PWD/vendor/webmcp-tool/unpacked" \
+  --chrome-flag=--enable-blink-features=ModelContext,ModelContextTesting \
+  --chrome-flag=--enable-features=DevToolsWebMCPSupport
+```
+
+Passing `--extensions` **replaces** the overlay that `sightmap browser`
+auto-loads, so all three paths must be listed explicitly, and each must be
+**absolute** (the CLI abs-resolves the whole comma-separated string; `~`/`$PWD`
+expand to absolute in the shell). With all three loaded on a site that has a
+sightkick corpus, `document.modelContext.getTools()` returns the injected
+sightkick tools and the inspector panel can drive them.
 
 To test with a real client, note that **Chrome's Ask Gemini gates WebMCP on
 `https:`**; `pnpm demo` auto-switches to HTTPS once a local cert is present —

@@ -50,12 +50,27 @@ so the inspector reads them instead of throwing.
 
 ## Load command (canonical)
 
+Run from the **sightkick repo root**, after building the sightkick extension
+(`pnpm install && pnpm build` — `packages/extension/dist` is a gitignored build
+output, so it won't exist on a fresh clone until you build it):
+
 ```sh
 sightmap browser start --detach \
-  --extensions /Users/joel/.sightmap/extension,/Users/joel/src/fs/subtext/sightkick/packages/extension/dist,/Users/joel/src/fs/subtext/sightkick/vendor/webmcp-tool/unpacked \
+  --extensions ~/.sightmap/extension,"$PWD/packages/extension/dist","$PWD/vendor/webmcp-tool/unpacked" \
   --chrome-flag=--enable-blink-features=ModelContext,ModelContextTesting \
   --chrome-flag=--enable-features=DevToolsWebMCPSupport
 ```
-(All three extension paths absolute + comma-separated. The built-in overlay path
-must be listed explicitly — `--extensions` currently *replaces* the auto-loaded
-overlay rather than appending; see sightmap yak `sightmap-d0cb`.)
+
+Three extensions load together: the built-in **sightmap overlay**
+(`~/.sightmap/extension`), the **sightkick** injector
+(`packages/extension/dist`), and this **WebMCP inspector**
+(`vendor/webmcp-tool/unpacked`).
+
+Two constraints, both verified against the `sightmap browser` source:
+- **All entries must be absolute** and comma-separated — the CLI runs
+  `filepath.Abs` over the *whole* `--extensions` string, so relative paths break.
+  `~` and `$PWD` are shell-expanded to absolute before the CLI sees them.
+- **The overlay must be listed explicitly.** Passing `--extensions` at all
+  *replaces* the overlay that `sightmap browser` otherwise auto-extracts to
+  `~/.sightmap/extension/` (it only auto-loads when `--extensions` is omitted) —
+  so leaving it out of the list drops the overlay entirely.
