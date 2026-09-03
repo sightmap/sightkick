@@ -33,6 +33,10 @@ one — everything needed to build and test a `webmcp.tools.yaml`. No repo check
 is required; `<CORPUS_DIR>` below is any directory holding a `webmcp.tools.yaml`
 + `.sightmap/` corpus.
 
+To **write** the `webmcp.tools.yaml` (its tool/step/`returns`/`journeys` grammar),
+see the **`sightkick-authoring`** skill — this skill assumes it already exists and
+compiles.
+
 ## 1. Build the two artifacts
 
 Both come straight from the installed `sightkick` CLI:
@@ -109,18 +113,27 @@ sleep 1; sightmap browser eval "window.__t"                    # -> ["tool_a","t
 
 ## 4. Drive the tools
 
-### Mode A (polyfill): drive over eval
-The polyfill's `executeTool(tool, args)` accepts a bare `{name}`:
+### Mode A (agent/scripted): drive via `window.__sightkick.call`
+The **reliable** scripted entry point is `window.__sightkick.call(name, args)` — it
+invokes a tool by name and resolves to the raw `ToolResult` directly, regardless
+of whether the page's `document.modelContext` is our polyfill or a native surface:
 
 ```sh
-sightmap browser eval "window.__r='RUN';document.modelContext.executeTool({name:'search'},{query:'ATL to LHR'}).then(function(r){window.__r=r.content[0].text}).catch(function(e){window.__r='ERR '+e});'go'"
-sleep 2; sightmap browser eval "window.__r"                    # the ToolResult JSON (ok/value/items/guidance)
+sightmap browser eval "window.__r='RUN';window.__sightkick.call('add_task',{title:'Water the plants'}).then(function(r){window.__r=JSON.stringify(r)}).catch(function(e){window.__r='ERR '+e});'go'"
+sleep 2; sightmap browser eval "window.__r"                    # the ToolResult JSON (ok/value/items/skipped/guidance)
 ```
 
-The result envelope is `{content:[{type:'text',text:<ToolResult JSON>}]}`; the
-`ToolResult` carries `ok`, `value`/`items`, `skipped` (idempotency guard hit),
-and `guidance` (next-step breadcrumbs). The sightkick repo's
+The `ToolResult` carries `ok`, `value`/`items`, `skipped` (idempotency guard
+hit), and `guidance` (next-step breadcrumbs). The sightkick repo's
 `packages/runtime/eval/run.mjs` is a full scripted example of this loop.
+
+> **Don't script `document.modelContext.executeTool` directly.** Its call shape
+> differs by surface: the polyfill takes a bare `{name}`, but a **native**
+> `document.modelContext` (present on Chrome ≥150 even with no blink flags) is
+> stricter and rejects it with `Failed to parse input arguments`, and wraps the
+> result in an envelope (`{content:[{type:'text',text:<ToolResult JSON>}]}`).
+> `window.__sightkick.call` sidesteps both differences — prefer it for Mode A, and
+> leave `executeTool` to the inspector in Mode B.
 
 ### Mode B (native): drive via the inspector
 Open the inspector's sidebar and prompt Gemini — it enumerates

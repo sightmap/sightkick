@@ -17,5 +17,6 @@ import "embed"
 // When a skill is added under <repo>/skills/, regenerate the copies and add its
 // name here.
 //
+//go:embed sightkick-authoring
 //go:embed sightkick-debug
 var FS embed.FS

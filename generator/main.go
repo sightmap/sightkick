@@ -33,6 +33,9 @@ func main() {
 	if len(args) < 1 {
 		usage()
 	}
+	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+		usage()
+	}
 	if args[0] == "skills" {
 		if err := runSkills(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, "✗ "+err.Error())
@@ -56,6 +59,8 @@ func main() {
 	rest := args[1:]
 	for i := 0; i < len(rest); i++ {
 		switch rest[i] {
+		case "-h", "--help":
+			usage()
 		case "-o", "--out":
 			if i+1 < len(rest) {
 				i++
