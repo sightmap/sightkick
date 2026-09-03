@@ -167,17 +167,34 @@ jobs:
 
       # Platform packages first, then the meta (whose optionalDependencies point at
       # them). No NODE_AUTH_TOKEN: npm exchanges the OIDC token via each package's
-      # configured trusted publisher; provenance is attached.
+      # configured trusted publisher; provenance is attached. Each publish is
+      # idempotent — a version already on npm is skipped, so a partial-failure
+      # re-run (e.g. the meta's trusted publisher was added after the platform
+      # packages already shipped) doesn't 403 on the ones that succeeded.
       - name: Publish platform packages
         run: |
           for dir in npm-staging/@sightmap/sightkick-*/; do
-            echo "publishing $dir"
-            ( cd "$dir" && npm publish )
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "skip $name@$version (already published)"
+            else
+              echo "publishing $name@$version"
+              ( cd "$dir" && npm publish )
+            fi
           done
         env:
           NPM_CONFIG_PROVENANCE: true
 
       - name: Publish meta package
-        run: cd npm-staging/meta && npm publish
+        run: |
+          name=$(node -p "require('./npm-staging/meta/package.json').name")
+          version=$(node -p "require('./npm-staging/meta/package.json').version")
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "skip $name@$version (already published)"
+          else
+            echo "publishing $name@$version"
+            ( cd npm-staging/meta && npm publish )
+          fi
         env:
           NPM_CONFIG_PROVENANCE: true
