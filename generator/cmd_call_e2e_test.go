@@ -30,8 +30,9 @@ import (
 )
 
 const (
-	e2eDemoURL = "http://localhost:5174/"
-	e2eAppDir  = "../examples/search"
+	e2eDemoURL    = "http://localhost:5174/"
+	e2eResultsURL = "http://localhost:5174/results"
+	e2eAppDir     = "../examples/search"
 )
 
 // callResult is the JSON `sightkick call` prints. Pointer and slice fields
@@ -55,11 +56,25 @@ func (r callResult) itemIDs() []string {
 	return ids
 }
 
-// TestCallE2E walks the search example's whole booking journey. The steps
-// share page state and must run in order: each one's precondition is the
-// previous one's effect.
+// TestCallE2E walks the search example's booking journey through both
+// execution paths, asserting the same results from each. The steps share page
+// state and must run in order: each one's precondition is the previous one's
+// effect.
+//
+// It starts on the results view rather than searching its way there, because
+// the tool that navigates cannot report a result through the WebMCP path — see
+// TestCallE2ENavigation.
+//
+// The demo page boots the sightkick runtime itself, so --via webmcp has
+// registered tools to call without anything being injected here.
 func TestCallE2E(t *testing.T) {
-	env := newE2E(t)
+	for _, via := range []string{"webmcp", "cli"} {
+		t.Run("via "+via, func(t *testing.T) { testCallJourney(t, via) })
+	}
+}
+
+func testCallJourney(t *testing.T, via string) {
+	env := newE2E(t, e2eResultsURL, ".result")
 
 	tests := []struct {
 		name   string
@@ -70,19 +85,6 @@ func TestCallE2E(t *testing.T) {
 		waitFor string
 		check   func(t *testing.T, got callResult)
 	}{
-		{
-			name: "search fills the field, clicks through, and points at what to call next",
-			tool: "search", params: []string{"query=ATL to LHR"},
-			waitFor: ".result",
-			check: func(t *testing.T, got callResult) {
-				wantGuidance(t, got, gen.Suggestion{
-					Tool:   "list_results",
-					Reason: "read the results the search produced",
-					When:   "after_navigation",
-					View:   "Results",
-				})
-			},
-		},
 		{
 			name: "list_results returns one row per result, price-ascending",
 			tool: "list_results",
@@ -148,7 +150,7 @@ func TestCallE2E(t *testing.T) {
 
 	for _, tc := range tests {
 		if !t.Run(tc.name, func(t *testing.T) {
-			got := env.call(t, tc.tool, tc.params...)
+			got := env.call(t, via, tc.tool, tc.params...)
 			if !got.OK {
 				t.Fatalf("tool %q failed: %s", tc.tool, got.Message)
 			}
@@ -164,16 +166,60 @@ func TestCallE2E(t *testing.T) {
 	}
 }
 
+// TestCallE2ENavigation covers a tool whose last act navigates, where the two
+// execution paths genuinely differ.
+//
+// Through the CLI the tool reports its result normally. Through WebMCP it acts
+// on the page but reports a failure: the click changes the route, the runtime
+// re-registers the tool set for the new view, and that aborts the registration
+// of the tool still running — which Chrome's built-in modelContext surfaces as
+// a failed call. The runtime's polyfill does not tie a result to the
+// registration this way, so this only shows up against the built-in surface.
+//
+// That is a runtime limitation, not a reporting quirk: an agent driving over
+// WebMCP cannot tell this apart from a tool that really failed. This test pins
+// the current behaviour so that fixing it is visible here.
+func TestCallE2ENavigation(t *testing.T) {
+	t.Run("via cli the navigating tool reports its result", func(t *testing.T) {
+		env := newE2E(t, e2eDemoURL, "#go")
+		got := env.call(t, "cli", "search", "query=ATL to LHR")
+		if !got.OK {
+			t.Fatalf("search failed: %s", got.Message)
+		}
+		wantGuidance(t, got, gen.Suggestion{
+			Tool:   "list_results",
+			Reason: "read the results the search produced",
+			When:   "after_navigation",
+			View:   "Results",
+		})
+		env.sightmap(t, "browser", "wait-for", "--selector", ".result", "--timeout-ms", "10000")
+	})
+
+	t.Run("via webmcp the navigating tool acts but cannot report", func(t *testing.T) {
+		env := newE2E(t, e2eDemoURL, "#go")
+		got, err := env.callRaw(t, "webmcp", "search", "query=ATL to LHR")
+		if err == nil || got.OK {
+			t.Fatal("search reported success; if the runtime no longer aborts a navigating " +
+				"tool's registration, fold this tool back into TestCallE2E and delete this case")
+		}
+		// The click still landed: the page really did move to the results view.
+		env.sightmap(t, "browser", "wait-for", "--selector", ".result", "--timeout-ms", "10000")
+		if path := env.evalString(t, "location.pathname"); path != "/results" {
+			t.Errorf("path = %q, want /results — the click should have navigated even though the call reported failure", path)
+		}
+	})
+}
+
 // TestCallE2EErrors covers what `call` reports when a tool cannot do its job:
 // the failure has to name the step and carry sightmap's own explanation, and
 // the process has to exit non-zero so a script notices.
 func TestCallE2EErrors(t *testing.T) {
-	env := newE2E(t)
+	env := newE2E(t, e2eDemoURL, "#go")
 
 	t.Run("a tool whose target is not on the page fails with the step and the reason", func(t *testing.T) {
 		// The demo opens on the search view, where no result rows exist, so
 		// select_flight's click has nothing to resolve against.
-		got, err := env.callRaw(t, "select_flight", "flight_id=f1")
+		got, err := env.callRaw(t, "cli", "select_flight", "flight_id=f1")
 		if err == nil {
 			t.Error("call exited 0; a failed tool must exit non-zero")
 		}
@@ -211,7 +257,7 @@ type e2eEnv struct {
 // stopping it when the test ends. It fails rather than skips when a
 // prerequisite is missing: this test only runs when explicitly asked for, so a
 // silent skip would just look like a pass.
-func newE2E(t *testing.T) *e2eEnv {
+func newE2E(t *testing.T, startURL, settleSelector string) *e2eEnv {
 	t.Helper()
 
 	if _, err := exec.LookPath("sightmap"); err != nil {
@@ -238,44 +284,44 @@ func newE2E(t *testing.T) *e2eEnv {
 	// change what this one sees.
 	profile := filepath.Join(t.TempDir(), "profile")
 	env.trySightmap("browser", "stop") // clear any session left on this corpus
-	env.sightmap(t, "browser", "start", "--detach", "--url", e2eDemoURL, "--profile", profile)
+	env.sightmap(t, "browser", "start", "--detach", "--url", startURL, "--profile", profile)
 	t.Cleanup(func() { env.trySightmap("browser", "stop") })
 
 	// --detach returns once the daemon is serving, but the content tab opens a
 	// beat later. Until it does, every page command fails with "no content tab
 	// open", so wait for `status` to list the tab before issuing any.
-	env.waitForTab(t)
-	env.sightmap(t, "browser", "wait-for", "--selector", "#go", "--timeout-ms", "15000")
+	env.waitForTab(t, startURL)
+	env.sightmap(t, "browser", "wait-for", "--selector", settleSelector, "--timeout-ms", "15000")
 	return env
 }
 
 // waitForTab polls until the session reports a tab on the demo server.
-func (e *e2eEnv) waitForTab(t *testing.T) {
+func (e *e2eEnv) waitForTab(t *testing.T, startURL string) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		out, err := e.sightmapCmd("browser", "status").CombinedOutput()
-		if err == nil && strings.Contains(string(out), e2eDemoURL) {
+		if err == nil && strings.Contains(string(out), startURL) {
 			return
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	t.Fatalf("no content tab opened at %s within 30s", e2eDemoURL)
+	t.Fatalf("no content tab opened at %s within 30s", startURL)
 }
 
 // call runs one tool and requires the command itself to be well-formed. A tool
 // that reports ok:false is still returned, for the caller to assert on.
-func (e *e2eEnv) call(t *testing.T, tool string, params ...string) callResult {
+func (e *e2eEnv) call(t *testing.T, via, tool string, params ...string) callResult {
 	t.Helper()
-	got, _ := e.callRaw(t, tool, params...)
+	got, _ := e.callRaw(t, via, tool, params...)
 	return got
 }
 
 // callRaw runs one tool and also returns whether the process exited non-zero,
 // which is how `call` signals a failed tool to a script.
-func (e *e2eEnv) callRaw(t *testing.T, tool string, params ...string) (callResult, error) {
+func (e *e2eEnv) callRaw(t *testing.T, via, tool string, params ...string) (callResult, error) {
 	t.Helper()
-	args := []string{"call", e2eAppDir, tool}
+	args := []string{"call", e2eAppDir, tool, "--via", via}
 	for _, p := range params {
 		args = append(args, "--param", p)
 	}
@@ -304,6 +350,25 @@ func (e *e2eEnv) sightmap(t *testing.T, args ...string) {
 // like stopping a session that isn't running.
 func (e *e2eEnv) trySightmap(args ...string) {
 	_ = e.sightmapCmd(args...).Run()
+}
+
+// evalString reads a JS expression's string value out of the page, undoing the
+// one layer of JSON encoding `browser eval` prints it with.
+func (e *e2eEnv) evalString(t *testing.T, expr string) string {
+	t.Helper()
+	out, err := e.sightmapCmd("browser", "eval", expr).Output()
+	if err != nil {
+		t.Fatalf("eval %q: %v", expr, err)
+	}
+	lines := strings.FieldsFunc(string(out), func(r rune) bool { return r == '\n' })
+	if len(lines) == 0 {
+		t.Fatalf("eval %q returned nothing", expr)
+	}
+	var value string
+	if err := json.Unmarshal([]byte(strings.TrimSpace(lines[len(lines)-1])), &value); err != nil {
+		t.Fatalf("eval %q: unexpected output %q: %v", expr, out, err)
+	}
+	return value
 }
 
 func (e *e2eEnv) sightmapCmd(args ...string) *exec.Cmd {

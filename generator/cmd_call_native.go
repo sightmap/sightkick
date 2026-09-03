@@ -22,16 +22,11 @@ import (
 // waiting longer for an answer that won't change what happens next.
 const ensureViewTimeoutMs = 500
 
-// nativeExec runs one tool from a webmcp.tools.yaml manifest against a live
-// Chrome session by shelling out to the `sightmap` CLI: every step becomes a
-// `sightmap browser <verb>` command, which acts on the page through real
-// browser input events.
-//
-// The alternative — injecting a JS runtime into the page and having it
-// dispatch synthetic events — cannot click elements rendered into a portal
-// (dropdown menus, modal dialogs), where a synthetic click silently does
-// nothing. Driving the CLI avoids that class of failure entirely.
-type nativeExec struct {
+// session is a live Chrome session reachable through the `sightmap` CLI, and
+// the two ways of running a tool against it: runNative translates the tool's
+// steps into CLI commands, runWebMCP asks the page's registered tool to run
+// itself.
+type session struct {
 	sm               string // path to the sightmap binary
 	appDir           string // directory to run sightmap from
 	corpusDir        string // absolute path to the .sightmap/ corpus
@@ -40,11 +35,12 @@ type nativeExec struct {
 
 // toolOutcome is one tool's result, before serialization.
 type toolOutcome struct {
-	ok      bool
-	message string
-	skipped bool
-	value   *string             // nil when the tool declares no value to read
-	items   []map[string]string // nil when the tool declares no list to read
+	ok       bool
+	message  string
+	skipped  bool
+	value    *string             // nil when the tool declares no value to read
+	items    []map[string]string // nil when the tool declares no list to read
+	guidance []gen.Suggestion
 }
 
 func failf(format string, a ...any) toolOutcome {
@@ -58,7 +54,7 @@ func failf(format string, a ...any) toolOutcome {
 // list), an empty list (it reads a list and found no rows), and a populated
 // list. `omitempty` collapses the first two, and omitting the tag renders the
 // first as `null`; both would misreport an empty result as something else.
-func (o toolOutcome) toJSON(guidance []gen.Suggestion) ([]byte, error) {
+func (o toolOutcome) toJSON() ([]byte, error) {
 	out := map[string]any{"ok": o.ok}
 	if o.value != nil {
 		out["value"] = *o.value
@@ -72,17 +68,26 @@ func (o toolOutcome) toJSON(guidance []gen.Suggestion) ([]byte, error) {
 	if o.skipped {
 		out["skipped"] = true
 	}
-	if len(guidance) > 0 {
-		out["guidance"] = guidance
+	if len(o.guidance) > 0 {
+		out["guidance"] = o.guidance
 	}
 	return json.MarshalIndent(out, "", "  ")
 }
 
-// run executes a tool: check that the page is where the tool expects, skip the
-// steps if the tool's effect is already applied, otherwise run them, then read
-// back whatever the tool declares as its result. ret is nil for a tool that
-// declares no result to read.
-func (e *nativeExec) run(tool *gen.ToolDef, ret *returnSpec, args map[string]any) toolOutcome {
+// runNative executes a tool by translating each of its steps into a `sightmap
+// browser <verb>` command, which acts on the page through real browser input
+// events. It checks that the page is where the tool expects, skips the steps
+// if the tool's effect is already applied, otherwise runs them, then reads
+// back whatever the tool declares as its result.
+//
+// Unlike the WebMCP path this does not need the runtime on the page, and its
+// clicks reach elements rendered into a portal — dropdown menus, modal
+// dialogs — which a dispatched synthetic click does not. What it gives up is
+// fidelity: it interprets the manifest itself rather than exercising the
+// compiled tool a real client would run.
+//
+// ret is nil for a tool that declares no result to read.
+func (e *session) runNative(tool *gen.ToolDef, ret *returnSpec, args map[string]any) toolOutcome {
 	// A page mismatch is reported but not fatal. Tools are often callable from
 	// more than one place, and the steps themselves fail loudly enough if the
 	// page really is wrong.
@@ -192,7 +197,7 @@ func stepArgs(op string, body gen.StepBody, args map[string]any, defaultTimeoutM
 	}
 }
 
-func (e *nativeExec) runStep(op string, body gen.StepBody, args map[string]any) error {
+func (e *session) runStep(op string, body gen.StepBody, args map[string]any) error {
 	cmdArgs, err := stepArgs(op, body, args, e.defaultTimeoutMs)
 	if err != nil {
 		return err
@@ -220,7 +225,7 @@ func guardQuery(g *gen.GuardBody) (query string, wantMatch bool, err error) {
 
 // guardHolds reports whether the tool's effect is already applied, meaning its
 // steps should be skipped.
-func (e *nativeExec) guardHolds(g *gen.GuardBody, args map[string]any) (bool, error) {
+func (e *session) guardHolds(g *gen.GuardBody, args map[string]any) (bool, error) {
 	query, wantMatch, err := guardQuery(g)
 	if err != nil {
 		return false, err
@@ -257,7 +262,7 @@ type returnSpec struct {
 // an error, the first one wins. Finding nothing yields no value at all, which
 // is different from finding an element whose property is empty. A `list`
 // return yields one row per element, and an empty list when there are none.
-func (e *nativeExec) computeReturn(spec *returnSpec, args map[string]any) (*string, []map[string]string, error) {
+func (e *session) computeReturn(spec *returnSpec, args map[string]any) (*string, []map[string]string, error) {
 	found, err := e.findElements(spec.query, args)
 	if err != nil {
 		return nil, nil, err
@@ -368,7 +373,7 @@ func snapshotToTree(n *snapshotNode) (*sm.ComponentNode, map[*sm.ComponentNode]*
 // findElements snapshots the live page and resolves query against it. The
 // snapshot also tags every element on the page with its node id, which is how
 // readProps finds them again afterwards.
-func (e *nativeExec) findElements(query string, args map[string]any) ([]*sm.ComponentNode, error) {
+func (e *session) findElements(query string, args map[string]any) ([]*sm.ComponentNode, error) {
 	// `sightmap snapshot` writes to a path rather than stdout, so hand it a
 	// scratch file and read it straight back.
 	f, err := os.CreateTemp("", "sightkick-snapshot-*.json")
@@ -441,7 +446,7 @@ const extractJS = `(function(ids, specs){
 
 // readProps reads every field in fields off every element in ids, in one round
 // trip, and returns them keyed by node id then field name.
-func (e *nativeExec) readProps(ids []string, fields map[string]gen.Extractor) (map[string]map[string]string, error) {
+func (e *session) readProps(ids []string, fields map[string]gen.Extractor) (map[string]map[string]string, error) {
 	if len(ids) == 0 || len(fields) == 0 {
 		return map[string]map[string]string{}, nil
 	}
@@ -454,40 +459,55 @@ func (e *nativeExec) readProps(ids []string, fields map[string]gen.Extractor) (m
 		return nil, err
 	}
 
-	out, err := e.sightmapOutput("browser", "eval", fmt.Sprintf(extractJS, idsJSON, specsJSON))
+	out, err := e.evalValue(fmt.Sprintf(extractJS, idsJSON, specsJSON))
 	if err != nil {
 		return nil, fmt.Errorf("read properties: %w", err)
 	}
-
-	// eval prints the expression's value JSON-encoded on the last line. The
-	// expression is itself a JSON string, so peel that one layer off first.
-	lines := strings.FieldsFunc(out, func(r rune) bool { return r == '\n' })
-	if len(lines) == 0 {
-		return nil, errors.New("read properties: eval returned nothing")
-	}
-	var inner string
-	if err := json.Unmarshal([]byte(strings.TrimSpace(lines[len(lines)-1])), &inner); err != nil {
-		return nil, fmt.Errorf("read properties: unexpected eval output %q: %w", out, err)
-	}
 	props := map[string]map[string]string{}
-	if err := json.Unmarshal([]byte(inner), &props); err != nil {
+	if err := json.Unmarshal([]byte(out), &props); err != nil {
 		return nil, fmt.Errorf("read properties: %w", err)
 	}
 	return props, nil
+}
+
+// evalValue runs a JS expression in the page and returns its value as a
+// string. The expression must produce a string, or null for "nothing yet" —
+// which comes back as "". Every other type is a programming error here.
+//
+// `browser eval` prints the value JSON-encoded on its last line, so this
+// undoes that one layer of encoding.
+func (e *session) evalValue(script string) (string, error) {
+	out, err := e.sightmapOutput("browser", "eval", script)
+	if err != nil {
+		return "", err
+	}
+	lines := strings.FieldsFunc(out, func(r rune) bool { return r == '\n' })
+	if len(lines) == 0 {
+		return "", errors.New("eval returned nothing")
+	}
+	last := strings.TrimSpace(lines[len(lines)-1])
+	if last == "null" || last == "undefined" {
+		return "", nil
+	}
+	var value string
+	if err := json.Unmarshal([]byte(last), &value); err != nil {
+		return "", fmt.Errorf("unexpected eval output %q: %w", out, err)
+	}
+	return value, nil
 }
 
 // sightmap runs one sightmap subcommand. Every call names the corpus dir,
 // which selects both the component definitions to resolve queries against and
 // the browser session to act on. A failure surfaces sightmap's own stderr,
 // where it explains things like a query that matched nothing.
-func (e *nativeExec) sightmap(args ...string) error {
+func (e *session) sightmap(args ...string) error {
 	_, err := e.sightmapOutput(args...)
 	return err
 }
 
 // sightmapOutput is sightmap plus the subcommand's stdout, for the few that
 // report their result there rather than acting on the page.
-func (e *nativeExec) sightmapOutput(args ...string) (string, error) {
+func (e *session) sightmapOutput(args ...string) (string, error) {
 	cmd := exec.Command(e.sm, slices.Concat(args, []string{"--sightmap-dir", e.corpusDir})...)
 	cmd.Dir = e.appDir
 	stdout, err := cmd.Output()

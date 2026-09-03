@@ -139,36 +139,44 @@ sleep 1; sightmap browser eval "window.__t"                    # -> ["tool_a","t
 ## 4. Drive the tools
 
 ### Mode A (agent/scripted): drive via `sightkick call`
-The **reliable** scripted entry point is `sightkick call <app-dir> <tool> --param k=v ...` — it
-runs natively: each step shells out straight to the matching `sightmap browser <verb>`
-subcommand (a real, CDP-trusted DOM action) and prints the resolved `ToolResult` as JSON,
-exiting non-zero on `ok:false`. No injection and no `sightkick browser` session are needed —
-a plain `sightmap browser start` is enough:
+The scripted entry point is `sightkick call <app-dir> <tool> --param k=v ...`. It
+prints the resolved `ToolResult` as JSON and exits non-zero on `ok:false`.
+`--via` picks how the tool runs:
 
 ```sh
-sightkick call . add_task --param title="Water the plants"    # prints the ToolResult JSON (ok/value/items/skipped/guidance)
+sightkick call . add_task --param title="Water the plants"              # --via webmcp (default)
+sightkick call . add_task --param title="Water the plants" --via cli    # translate steps to CLI commands
 ```
 
-The `ToolResult` carries `ok`, `value`/`items`, `skipped` (idempotency guard
-hit), and `guidance` (next-step breadcrumbs).
+**`--via webmcp`** asks the page's own registered tool to run itself, so it
+exercises the contract a real WebMCP client uses. It requires the runtime on the
+page — that's what step 3 above sets up — and a tool is only registered on its
+own view, so an out-of-view tool simply isn't there to call.
 
-> **Prefer `sightkick call` over `window.__sightkick.call` for scripted driving.**
-> The in-page runtime's click is a synthetic, JS-dispatched event sequence, which
-> does not reliably fire on portal-rendered elements (dropdown menu items, modal
-> buttons rendered outside the app's own DOM subtree) — confirmed live against
-> two Fullstory components where the identical element takes a real click fine
-> and silently no-ops on the injected runtime's dispatched one. `sightkick call`
-> sidesteps this by never touching the in-page runtime. Fall back to
-> `window.__sightkick.call(name, args)` (via `sightmap browser eval`) only when
-> debugging the runtime's own registration/execution path itself, not as a
-> driving mechanism.
->
-> **Don't script `document.modelContext.executeTool` directly.** Its call shape
+**`--via cli`** translates the tool's steps into `sightmap browser <verb>`
+commands and needs no runtime at all: a plain `sightmap browser start` is
+enough. Two reasons to reach for it:
+
+- **Portal-rendered targets.** The runtime clicks by dispatching synthetic
+  events, which do not reach elements rendered outside the app's own DOM
+  subtree — dropdown menu items and modal buttons. The same element takes a
+  real click fine, so a tool that silently no-ops under `--via webmcp` often
+  works under `--via cli`.
+- **Any page you don't control.** A third-party app has no sightkick runtime on
+  it, so `--via webmcp` has nothing to call.
+
+The `ToolResult` carries `ok`, `value`/`items`, `skipped` (idempotency guard
+hit), and `guidance` (next-step breadcrumbs). The sightkick repo's
+`packages/runtime/eval/run.mjs` is a full scripted example driving the WebMCP
+surface directly.
+
+> **Don't script `document.modelContext.executeTool` yourself.** Its call shape
 > differs by surface: the polyfill takes a bare `{name}`, but a **native**
 > `document.modelContext` (present on Chrome ≥150 even with no blink flags) is
 > stricter and rejects it with `Failed to parse input arguments`, and wraps the
 > result in an envelope (`{content:[{type:'text',text:<ToolResult JSON>}]}`).
-> Leave `executeTool` to the inspector in Mode B.
+> `sightkick call` handles both — use it for Mode A, and leave `executeTool` to
+> the inspector in Mode B.
 
 ### Mode B (native): drive via the inspector
 Open the inspector's sidebar and prompt Gemini — it enumerates

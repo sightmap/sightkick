@@ -14,20 +14,31 @@ import (
 	"sightkick/generator/internal/gen"
 )
 
+// The two ways `call` can run a tool. webmcp is the default because it is the
+// path a real WebMCP client takes: the page runs its own compiled tool, so a
+// result proves the shipped contract works. cli is the fallback for a page
+// that has no runtime on it, and for clicks the runtime's synthetic events
+// cannot deliver.
+const (
+	viaWebMCP = "webmcp"
+	viaCLI    = "cli"
+)
+
 // runCall invokes one tool from a webmcp.tools.yaml manifest against a live
 // browser session and prints its result as JSON, exiting non-zero if the tool
 // failed. The session has to already be running (`sightmap browser start`);
-// nothing is injected into the page. See nativeExec for how a tool's steps
-// reach the browser.
+// nothing is injected into the page. --via selects which of the two execution
+// paths runs the tool; see session's runWebMCP and runNative.
 func runCall(args []string) error {
 	fset := flag.NewFlagSet("call", flag.ContinueOnError)
 	fset.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: sightkick call <app-dir> <tool> [--param k=v ...] [--timeout-ms N]")
+		fmt.Fprintln(os.Stderr, "usage: sightkick call <app-dir> <tool> [--param k=v ...] [--via webmcp|cli] [--timeout-ms N]")
 		fset.PrintDefaults()
 	}
 	var params stringList
 	fset.Var(&params, "param", "Tool param as key=value (repeatable). Value parses as JSON when possible, else a raw string.")
-	timeoutMs := fset.Int("timeout-ms", 5000, "Default wait_for timeout (ms) for steps that don't declare their own timeout_ms")
+	via := fset.String("via", viaWebMCP, "How to run the tool: 'webmcp' asks the page's registered WebMCP tool to run itself (the path a real client takes; the page must have the runtime); 'cli' translates the tool's steps into 'sightmap browser' commands (real input events, no runtime needed).")
+	timeoutMs := fset.Int("timeout-ms", 5000, "For --via webmcp, how long to wait for the tool to finish. For --via cli, the default wait_for timeout for steps that don't declare their own timeout_ms.")
 	if len(args) >= 1 && (args[0] == "-h" || args[0] == "--help") {
 		fset.Usage()
 		return nil
@@ -87,25 +98,37 @@ func runCall(args []string) error {
 	}
 
 	toolDef := &manifest.Tools[i]
+	sess := &session{sm: sightmapPath, appDir: appDir, corpusDir: corpusDir, defaultTimeoutMs: *timeoutMs}
 
-	// Two things come from compiling the manifest rather than reading it: the
-	// "call this next" hints, which are derived from its journeys, and the
-	// extractors behind a tool's returns, which are declared in the corpus and
-	// only named by the manifest.
-	compiled := compiledTool(target, toolName)
-	ret, err := returnSpecFor(toolDef.Returns, compiled)
-	if err != nil {
-		return err
+	var outcome toolOutcome
+	switch *via {
+	case viaWebMCP:
+		// The page holds the compiled tool and reports its own result,
+		// guidance included, so there is nothing to prepare here.
+		if outcome, err = sess.runWebMCP(toolName, toolArgs, *timeoutMs); err != nil {
+			return err
+		}
+
+	case viaCLI:
+		// Two things come from compiling the manifest rather than reading it:
+		// the "call this next" hints, which are derived from its journeys, and
+		// the extractors behind a tool's returns, which are declared in the
+		// corpus and only named by the manifest.
+		compiled := compiledTool(target, toolName)
+		ret, specErr := returnSpecFor(toolDef.Returns, compiled)
+		if specErr != nil {
+			return specErr
+		}
+		outcome = sess.runNative(toolDef, ret, toolArgs)
+		if compiled != nil {
+			outcome.guidance = compiled.Guidance
+		}
+
+	default:
+		return fmt.Errorf("unknown --via %q; expected %q or %q", *via, viaWebMCP, viaCLI)
 	}
-	var guidance []gen.Suggestion
-	if compiled != nil {
-		guidance = compiled.Guidance
-	}
 
-	exe := &nativeExec{sm: sightmapPath, appDir: appDir, corpusDir: corpusDir, defaultTimeoutMs: *timeoutMs}
-	outcome := exe.run(toolDef, ret, toolArgs)
-
-	out, err := outcome.toJSON(guidance)
+	out, err := outcome.toJSON()
 	if err != nil {
 		return err
 	}

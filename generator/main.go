@@ -18,7 +18,7 @@ func usage() {
 Usage:
   sightkick build <manifest.yaml | app-dir> [-o out.json] [--verify]
   sightkick browser <app-dir> [--url URL] [--webmcp] [--extensions PATHS] [--profile DIR] [--cdp-port N] [--no-start]
-  sightkick call <app-dir> <tool> [--param k=v ...] [--timeout-ms N]
+  sightkick call <app-dir> <tool> [--param k=v ...] [--via webmcp|cli] [--timeout-ms N]
   sightkick runtime [-o out.js]
   sightkick skills install [--target DIR]
 
@@ -29,16 +29,19 @@ Usage:
            corpus home view unless --url; --webmcp adds the native-modelContext
            blink flags), and persist-inject the runtime + IR so the tools
            register on the page. Requires the sightmap CLI on PATH.
-  call     invoke one tool from a webmcp.tools.yaml manifest against a live
-           'sightmap browser start' session by name, and print its ToolResult
-           (with guidance) as JSON; exits non-zero on ok:false. Runs
-           natively: each step shells out straight to the matching 'sightmap
-           browser <verb>' subcommand (a real, CDP-trusted DOM action)
-           instead of injecting sightkick's runtime and driving it through a
-           synthetic, JS-dispatched click — the synthetic path is unreliable
-           against portal-rendered elements (dropdown menu items, modal
-           buttons rendered outside the app's own DOM subtree). No
-           'sightkick browser' session or injection is needed.
+  call     invoke one tool from a webmcp.tools.yaml manifest by name against a
+           live browser session, and print its ToolResult (with guidance) as
+           JSON; exits non-zero on ok:false. --via picks how it runs:
+             webmcp (default)  ask the page's own registered WebMCP tool to
+                               run itself — the path a real client takes.
+                               Needs the runtime on the page: run 'sightkick
+                               browser' first, or serve a page that boots it.
+             cli               translate the tool's steps into 'sightmap
+                               browser <verb>' commands, which act through
+                               real browser input events. Needs no runtime,
+                               and reaches portal-rendered elements (dropdown
+                               items, modal buttons) that the runtime's
+                               synthetic clicks do not.
   runtime  emit the runtime bundle to inject into a live page (stdout, or -o out.js).
   skills   install the embedded agent skills (default ~/.agents/skills).`)
 	os.Exit(2)
