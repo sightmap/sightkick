@@ -42,7 +42,6 @@ skills/        # canonical agent skills (sightkick-debug); embedded into the gen
 examples/
   todo/        # single-view example (tools + same-view guidance)
   search/      # two-view example (transition + cross-view guidance + rich returns)
-  burrito/     # external-corpus example (references a sibling repo's .sightmap)
 vendor/
   webmcp-tool/ # vendored WebMCP inspector, to drive injected tools with a real client
 ```

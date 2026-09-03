@@ -3,7 +3,8 @@ import { resolvePath, resolveQuery } from "../src/dom.js";
 import { runTool } from "../src/executor.js";
 import type { PathPart, Tool } from "../src/ir.js";
 
-// Mirrors burrito's OptionGroup > OptionButton, where "none" repeats across groups.
+// A grouped OptionGroup > OptionButton layout where a label like "none" repeats
+// across groups, so the button must be scoped by its enclosing group.
 const group = (name: string): PathPart => ({
   locators: [".option-group"],
   preds: [{ property: "name", extractor: { kind: "text", within: ".option-group-label" }, op: "=", value: name }],

@@ -14,7 +14,7 @@ working notes.
 | `generator/` | Go CLI: `webmcp.tools.yaml` + `.sightmap` corpus → IR JSON. Consumes `github.com/sightmap/sightmap/go` (pinned). Also embeds + installs the agent skills (`sightkick skills install`). |
 | `packages/runtime/` | TS: boots the IR, executes atomic tools against the live DOM, registers `document.modelContext`. |
 | `skills/` | Canonical agent skills (`sightkick-debug`). Embedded into the generator (`generator/skills/`, generated) and installable via the CLI. |
-| `examples/` | `todo`, `search`, `burrito` (external corpus). |
+| `examples/` | `todo` (single view), `search` (two-view SPA). |
 | `vendor/webmcp-tool/` | Vendored, unpacked WebMCP inspector extension used to drive injected tools with a real client. See its [`NOTES.md`](vendor/webmcp-tool/NOTES.md). |
 
 ## Build / test
