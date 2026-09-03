@@ -1,5 +1,41 @@
 # @sightmap/sightkick
 
+## 0.4.0
+
+### Minor Changes
+
+- 9ebad83: Add `sightkick browser <corpus-dir>` — a one-command wrapper for the debug/drive
+  loop. It builds the IR, starts a sightmap browser session (auto-opening the
+  corpus's home-view URL unless `--url`; `--webmcp` adds the native-modelContext
+  blink flags; `--profile`/`--cdp-port`/`--extensions`/`--chrome-flag` pass through
+  to sightmap), and persist-injects the runtime + IR so the tools register on the
+  page and survive navigations. Runs sightmap from the corpus dir so the session
+  lands in its `.sightmap/` (discoverable + avoids the sessionless-fallback
+  footgun); `--no-start` injects into an already-running session. The
+  `sightkick-debug` skill documents it as the quick-start path. Requires the
+  `sightmap` CLI on PATH.
+- 6c9a46d: `sightkick call --via webmcp` now drives the tool through the sightmap CLI's own
+  WebMCP driver (`sightmap browser mcp call`) instead of a baked-in `executeTool`
+  implementation. That CLI command speaks the standard `document.modelContext`
+  surface and owns the native-vs-polyfill argument and result differences, so
+  sightkick no longer duplicates that handling (and no longer reaches for the
+  runtime's private `window.__sightkick.call` global) — `--via webmcp` now genuinely
+  exercises the standard-surface contract a real WebMCP client depends on.
+  sightkick still unwraps the returned `CallToolResult` envelope into the runtime's
+  typed `ToolResult`.
+
+  Requires the sightmap CLI to provide `browser mcp call` with native-argument
+  serialization (sightmap >= 0.31.x including that fix).
+
+- bca9553: The tool layer moves from a single `webmcp.tools.yaml` file to a `.sightkick/`
+  directory (a sibling of the corpus's `.sightmap/`). Every `*.yaml` file inside is
+  merged into one manifest — tools and journeys concatenated, no dependencies
+  between files — so a large tool layer can be split however helps (e.g. one file
+  per view). `corpus:` now defaults to the sibling `../.sightmap` and `name:` to the
+  app dir's name, so both are usually omitted. `sightkick build/browser/call` accept
+  an app dir (or a `.sightkick` dir) as before. No migration path: rename your
+  `webmcp.tools.yaml` to `.sightkick/tools.yaml` and drop the `corpus:` line.
+
 ## 0.3.0
 
 ### Minor Changes
