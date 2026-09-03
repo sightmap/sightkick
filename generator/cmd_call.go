@@ -5,22 +5,30 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
+	osexec "os/exec"
 	"path/filepath"
 	"strings"
-	"time"
+
+	"sightkick/generator/internal/gen"
 )
 
-// runCall invokes one already-registered tool in a running `sightkick browser`
-// session by name, and prints its structured ToolResult (including any
-// compiled guidance) as JSON. It exists so driving a tool from the CLI/agent
-// side is a single parseable command instead of the hand-typed
-// `sightmap browser eval "window.__sightkick.call(...)"` one-liner `browser`
-// prints — which, on its own, is incomplete: sightmap's `browser eval` runs
-// with awaitPromise:false, so it returns the pending Promise object, never the
-// resolved result. `call` works around that by kicking off the call with one
-// eval, then polling a second eval for the stashed resolved value — the same
-// poll-until-ready shape `waitForTab` already uses for session startup.
+// runCall invokes one tool from a webmcp.tools.yaml manifest against a live
+// `sightmap browser` session and prints its ToolResult (including any
+// compiled guidance) as JSON.
+//
+// Execution is native: each step shells out directly to the matching
+// `sightmap browser <verb>` subcommand — a real, CDP-trusted DOM action —
+// instead of injecting sightkick's runtime and driving it through
+// window.__sightkick.call's synthetic, JS-dispatched click sequence. The
+// synthetic path is unreliable against portal-rendered elements (dropdown
+// menu items, modal buttons rendered outside the app's own DOM subtree):
+// confirmed live against two Fullstory components where the identical
+// element takes a real click fine and silently no-ops on the injected
+// runtime's dispatched one. The injected path also requires `sightmap
+// browser inject`, a subcommand neither the sightmap CLI installed in this
+// environment nor this fork's own `sightmap browser` implements, so it could
+// not register a tool at all. This path needs no injection and no
+// `sightkick browser` session — a plain `sightmap browser start` is enough.
 func runCall(args []string) error {
 	fset := flag.NewFlagSet("call", flag.ContinueOnError)
 	fset.Usage = func() {
@@ -29,7 +37,7 @@ func runCall(args []string) error {
 	}
 	var params stringList
 	fset.Var(&params, "param", "Tool param as key=value (repeatable). Value parses as JSON when possible, else a raw string.")
-	timeoutMs := fset.Int("timeout-ms", 10000, "How long to wait for the tool's promise to resolve")
+	timeoutMs := fset.Int("timeout-ms", 5000, "Default wait_for timeout (ms) for steps that don't declare their own timeout_ms")
 	if len(args) >= 1 && (args[0] == "-h" || args[0] == "--help") {
 		fset.Usage()
 		return nil
@@ -38,10 +46,10 @@ func runCall(args []string) error {
 		fset.Usage()
 		return fmt.Errorf("missing <app-dir> and/or <tool>")
 	}
-	target, tool := args[0], args[1]
-	if strings.HasPrefix(target, "-") || strings.HasPrefix(tool, "-") {
+	target, toolName := args[0], args[1]
+	if strings.HasPrefix(target, "-") || strings.HasPrefix(toolName, "-") {
 		fset.Usage()
-		return fmt.Errorf("first two arguments must be <app-dir> <tool>, got %q %q", target, tool)
+		return fmt.Errorf("first two arguments must be <app-dir> <tool>, got %q %q", target, toolName)
 	}
 	if err := fset.Parse(args[2:]); err == flag.ErrHelp {
 		return nil
@@ -49,7 +57,7 @@ func runCall(args []string) error {
 		return err
 	}
 
-	sm, err := exec.LookPath("sightmap")
+	sm, err := osexec.LookPath("sightmap")
 	if err != nil {
 		return fmt.Errorf("the 'sightmap' CLI is required but not on PATH — install it: npm i -g @sightmap/sightmap")
 	}
@@ -63,72 +71,66 @@ func runCall(args []string) error {
 	if err != nil {
 		return err
 	}
-	argsJSON, err := json.Marshal(argsObj)
+
+	manifestPath := gen.ResolveManifestPath(target)
+	m, diags, err := gen.LoadManifest(manifestPath)
+	if err != nil {
+		return fmt.Errorf("load manifest: %w", err)
+	}
+	if gen.HasErrors(diags) {
+		return fmt.Errorf("manifest has errors:\n%s", gen.Format(diags))
+	}
+
+	var toolDef *gen.ToolDef
+	for i := range m.Tools {
+		if m.Tools[i].Name == toolName {
+			toolDef = &m.Tools[i]
+			break
+		}
+	}
+	if toolDef == nil {
+		return fmt.Errorf("tool %q not found in %s", toolName, manifestPath)
+	}
+
+	// Resolved to an absolute path: every `sightmap` invocation below runs
+	// with cmd.Dir = appDir, so a corpus dir left relative to the CWD here
+	// would get silently re-joined against appDir and doubled.
+	corpusDir := m.Corpus
+	if !filepath.IsAbs(corpusDir) {
+		corpusDir = filepath.Join(filepath.Dir(manifestPath), corpusDir)
+	}
+	corpusDir, err = filepath.Abs(corpusDir)
+	if err != nil {
+		return fmt.Errorf("resolve corpus dir: %w", err)
+	}
+
+	// Guidance is compiled from the journey graph; build the full IR just to
+	// read this tool's slice of it, so the printed result keeps its
+	// next-step breadcrumbs. A build failure elsewhere in the manifest (e.g.
+	// another tool's bad compquery) shouldn't block calling *this* tool, so
+	// this is best-effort.
+	var guidance []gen.Suggestion
+	if ir, bdiags, berr := gen.Build(target); berr == nil && !gen.HasErrors(bdiags) {
+		for _, t := range ir.Tools {
+			if t.Name == toolName {
+				guidance = t.Guidance
+				break
+			}
+		}
+	}
+
+	ne := &nativeExec{sm: sm, appDir: appDir, corpusDir: corpusDir, defaultTimeoutMs: *timeoutMs}
+	outcome := ne.run(toolDef, argsObj)
+
+	b, err := outcome.toJSON(guidance)
 	if err != nil {
 		return err
 	}
-	toolJSON, err := json.Marshal(tool)
-	if err != nil {
-		return err
+	fmt.Println(string(b))
+	if !outcome.ok {
+		return fmt.Errorf("tool %q returned ok:false", toolName)
 	}
-
-	// A fresh, unique key per invocation, so two overlapping `call`s (or a
-	// leftover from a killed one) never read each other's stashed result.
-	slot := fmt.Sprintf("__sightkick_call_%d", time.Now().UnixNano())
-
-	kickoff := fmt.Sprintf(
-		`window.%s = null; window.__sightkick.call(%s, %s).then(function(r){ window.%s = JSON.stringify(r); }); "started"`,
-		slot, toolJSON, argsJSON, slot,
-	)
-	if _, err := runSightmapEval(sm, appDir, kickoff); err != nil {
-		return fmt.Errorf("start tool call: %w", err)
-	}
-
-	deadline := time.Now().Add(time.Duration(*timeoutMs) * time.Millisecond)
-	poll := fmt.Sprintf("window.%s", slot)
-	for {
-		out, err := runSightmapEval(sm, appDir, poll)
-		if err != nil {
-			return fmt.Errorf("poll tool result: %w", err)
-		}
-		out = strings.TrimSpace(out)
-		if out != "" && out != "null" {
-			// runSightmapEval already returned sightmap's own JSON encoding of the
-			// JS string value, i.e. a JSON string literal wrapping our JSON.
-			var resultJSONString string
-			if err := json.Unmarshal([]byte(out), &resultJSONString); err != nil {
-				return fmt.Errorf("unexpected eval output %q: %w", out, err)
-			}
-			var pretty map[string]any
-			if err := json.Unmarshal([]byte(resultJSONString), &pretty); err != nil {
-				// Not an object (shouldn't happen for a ToolResult) — print raw.
-				fmt.Println(resultJSONString)
-				return nil
-			}
-			b, _ := json.MarshalIndent(pretty, "", "  ")
-			fmt.Println(string(b))
-			if ok, _ := pretty["ok"].(bool); !ok {
-				return fmt.Errorf("tool %q returned ok:false", tool)
-			}
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("tool %q did not resolve within %dms", tool, *timeoutMs)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
-// runSightmapEval runs `sightmap browser eval <script>` from dir and returns
-// its stdout (sightmap's own JSON-encoded eval result), trimmed.
-func runSightmapEval(sm, dir, script string) (string, error) {
-	cmd := exec.Command(sm, "browser", "eval", script)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
-	}
-	return string(out), nil
+	return nil
 }
 
 // parseCallParams turns repeated --param k=v flags into a JSON-ready map. Each
