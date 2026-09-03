@@ -255,13 +255,24 @@
         clickElement(el);
         return;
       }
+      case "keypress": {
+        const key = step.key ?? "";
+        if (!key) throw new Error("keypress: no key given");
+        const el = document.activeElement ?? document.body;
+        el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+        el.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
+        return;
+      }
       case "waitFor": {
+        const routeSatisfied = () => !!step.route && routeMatches(step.route, typeof window !== "undefined" ? window.location.pathname : opts.currentPath);
+        const satisfied = step.query ? () => !!target() : routeSatisfied;
         const deadline = Date.now() + (step.timeoutMs ?? 5e3);
         for (; ; ) {
           if (opts.signal?.aborted) throw new Error("aborted");
-          if (target()) return;
+          if (satisfied()) return;
           if (Date.now() >= deadline) {
-            throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5e3}ms for ${describeTarget(step)}`);
+            const what = step.query ? describeTarget(step) : `route ${step.route}`;
+            throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5e3}ms for ${what}`);
           }
           await sleep(opts.pollMs);
         }

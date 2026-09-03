@@ -97,6 +97,65 @@ describe("boot / console driver", () => {
   });
 });
 
+describe("waitFor step (view: route form)", () => {
+  // These use the runtime's live window.location, not opts.currentPath's
+  // frozen-per-call snapshot — a route-form waitFor exists specifically to
+  // observe a client-side route change (real history.pushState) happening
+  // DURING the tool's own execution, which a fixed test override can't
+  // simulate. See the search example's "cross-view guided flow" test for the
+  // (deliberately different) frozen-per-boot model this doesn't replace.
+  beforeEach(() => {
+    history.replaceState({}, "", "/");
+  });
+
+  it("resolves once the live route matches, without touching the DOM", async () => {
+    const waitTool = {
+      name: "go",
+      steps: [{ op: "waitFor", route: "/other", timeoutMs: 1000 }],
+    } as unknown as Tool;
+
+    const done = runTool(waitTool, {}, fast);
+    // The route hasn't changed yet — the step should still be polling.
+    await new Promise((r) => setTimeout(r, 20));
+    history.pushState({}, "", "/other");
+    const res = await done;
+    expect(res.ok).toBe(true);
+  });
+
+  it("times out if the route never changes", async () => {
+    const waitTool = {
+      name: "go",
+      steps: [{ op: "waitFor", route: "/never", timeoutMs: 50 }],
+    } as unknown as Tool;
+    const res = await runTool(waitTool, {}, fast);
+    expect(res.ok).toBe(false);
+    expect(res.message).toMatch(/timed out.*route \/never/);
+  });
+});
+
+describe("keypress step", () => {
+  it("dispatches a real key event at document.activeElement", async () => {
+    document.body.innerHTML = `<input id="q" />`;
+    const input = document.querySelector("#q") as HTMLInputElement;
+    input.focus();
+    let seenKey = "";
+    input.addEventListener("keydown", (e) => {
+      seenKey = (e as KeyboardEvent).key;
+    });
+    const pressTool = { name: "press", steps: [{ op: "keypress", key: "Enter" }] } as unknown as Tool;
+    const res = await runTool(pressTool, {}, fast);
+    expect(res.ok).toBe(true);
+    expect(seenKey).toBe("Enter");
+  });
+
+  it("fails with no key given", async () => {
+    const pressTool = { name: "press", steps: [{ op: "keypress" }] } as unknown as Tool;
+    const res = await runTool(pressTool, {}, fast);
+    expect(res.ok).toBe(false);
+    expect(res.message).toMatch(/keypress: no key/);
+  });
+});
+
 describe("goto step", () => {
   it("navigates to the interpolated url, deferred until after the tool returns", async () => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => {});

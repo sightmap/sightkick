@@ -45,7 +45,14 @@ export interface Query {
 }
 
 export interface Step {
-  op: "navigate" | "goto" | "fill" | "click" | "waitFor";
+  op: "navigate" | "goto" | "fill" | "click" | "waitFor" | "keypress";
+  /**
+   * For navigate: the destination view. For waitFor: an alternative to `query`
+   * — waits for the current route to match `route` instead of a DOM element,
+   * for a tool whose last act navigates away (a route match alone is not proof
+   * the destination has rendered; pair with a `query`-form waitFor on the next
+   * tool's own content when that matters).
+   */
   view?: string;
   route?: string;
   /** Target URL for a goto step (a full-page navigation), with {{param}} interpolation. */
@@ -53,6 +60,8 @@ export interface Step {
   /** The target, addressed by a compquery. Absent for navigate and goto. */
   query?: Query;
   value?: string;
+  /** keypress's key, e.g. "Enter" — targets document.activeElement, no query of its own. */
+  key?: string;
   timeoutMs?: number;
 }
 

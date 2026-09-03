@@ -62,10 +62,17 @@ type Field struct {
 }
 
 // Step is one imperative action in a tool. Op discriminates the shape; unused
-// fields are omitted. Ops: navigate, goto, fill, click, waitFor. Every
-// DOM-addressing op (fill/click/waitFor) carries a Query; navigate and goto do
-// not (goto carries a URL template instead). Reads are not steps — a tool's
-// result is declared by Returns.
+// fields are omitted. Ops: navigate, goto, fill, click, waitFor, keypress.
+// fill/click always carry a Query; goto carries a URL template instead.
+// waitFor carries EITHER a Query (wait for a DOM match — the common case) OR a
+// View+Route (wait for the route alone, for a tool whose last act navigates
+// away and has no view-scoped content of its own to wait on). A route match is
+// not proof the destination has hydrated — see docs/spec's hydration note —
+// so prefer the Query form whenever a real target component exists to wait on;
+// the View form exists for the navigating tool itself, not as a general
+// substitute. keypress carries a Key and no Query — it targets whatever a
+// preceding fill/click left focused, matching the CLI's own keypress command.
+// Reads are not steps — a tool's result is declared by Returns.
 type Step struct {
 	Op        string `json:"op"`
 	View      string `json:"view,omitempty"`
@@ -73,6 +80,7 @@ type Step struct {
 	URL       string `json:"url,omitempty"`
 	Query     *Query `json:"query,omitempty"`
 	Value     string `json:"value,omitempty"`
+	Key       string `json:"key,omitempty"`
 	TimeoutMs int    `json:"timeoutMs,omitempty"`
 }
 

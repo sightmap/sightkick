@@ -47,14 +47,30 @@ func (f *FieldDef) UnmarshalYAML(value *yaml.Node) error {
 //
 // The target is addressed by a compquery (component identity + descendant scope),
 // e.g. `OptionGroup[name={{group}}] OptionButton[label={{option}}]`. Steps are
-// actions (fill/click/wait_for/navigate); reads are declared by `returns`, not
-// steps. There is no flat component/where shorthand.
+// actions (fill/click/wait_for/navigate/goto/keypress); reads are declared by
+// `returns`, not steps. There is no flat component/where shorthand.
+//
+// keypress dispatches a key event at document.activeElement (whatever a
+// preceding fill/click left focused) -- it has no query of its own, matching
+// the CLI's own `browser keypress KEY` semantics. It exists for form gates that
+// require a real discrete key event a fill's own dispatched per-character
+// keydown/keyup can't stand in for -- e.g. a field that only reveals a
+// dependent control once Enter is pressed, confirmed live in Fullstory's
+// metric-condition form (see fullstory's webmcp.tools.yaml).
+//
+// wait_for takes exactly one of query or view: `query` waits for a DOM match
+// (the existing form); `view` waits for the current route to match a named
+// corpus view instead, for the "the click navigated, but has the destination
+// actually rendered yet" gap a route match alone can't close (see Step.View's
+// doc in ir.go). A tool that ends by navigating away should almost always end
+// in a wait_for, not stop at the click.
 type StepBody struct {
 	Query     string `yaml:"query"`
 	Value     string `yaml:"value"`
 	TimeoutMs int    `yaml:"timeout_ms"`
-	View      string `yaml:"view"` // navigate target
+	View      string `yaml:"view"` // navigate target, or a wait_for's route postcondition
 	URL       string `yaml:"url"`  // goto target (URL template with {{param}} interpolation)
+	Key       string `yaml:"key"`  // keypress target key, e.g. "Enter", "Tab", "Escape"
 }
 
 // ValueRef is a returns.value reference: a compquery addressing the element, and
