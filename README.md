@@ -43,7 +43,8 @@ examples/
   todo/        # single-view example (tools + same-view guidance)
   search/      # two-view example (transition + cross-view guidance + rich returns)
 vendor/
-  webmcp-tool/ # vendored WebMCP inspector, to drive injected tools with a real client
+  webmcp-tool/ # WebMCP inspector, vendored from upstream + embedded in the CLI
+               #   (`--webmcp` auto-loads it to drive injected tools)
 ```
 
 The generator is Go and the runtime is TypeScript — a deliberate polyglot split

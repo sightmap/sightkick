@@ -33,6 +33,12 @@ jobs:
           git diff --exit-code -- skills || {
             echo "::error::embedded skills are out of sync — run 'go generate ./skills/...' and commit"; exit 1;
           }
+          go generate ./webmcpinspector/...
+          # same guard for the embedded WebMCP inspector, generated from the
+          # canonical <repo>/vendor/webmcp-tool/unpacked copy.
+          git diff --exit-code -- webmcpinspector || {
+            echo "::error::embedded WebMCP inspector is out of sync — run 'go generate ./webmcpinspector/...' and commit"; exit 1;
+          }
           go test ./...
           # The e2e test needs a browser and a served app, so it can't run
           # here — but vet still compiles it, so it can't rot unnoticed.

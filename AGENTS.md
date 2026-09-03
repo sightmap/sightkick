@@ -15,7 +15,7 @@ working notes.
 | `packages/runtime/` | TS: boots the IR, executes atomic tools against the live DOM, registers `document.modelContext`. |
 | `skills/` | Canonical agent skills (`sightkick-debug`). Embedded into the generator (`generator/skills/`, generated) and installable via the CLI. |
 | `examples/` | `todo` (single view), `search` (two-view SPA). |
-| `vendor/webmcp-tool/` | Vendored, unpacked WebMCP inspector extension used to drive injected tools with a real client. See its [`NOTES.md`](vendor/webmcp-tool/NOTES.md). |
+| `vendor/webmcp-tool/` | WebMCP inspector extension, vendored from upstream (`npm run vendor-inspector`) and embedded into the CLI (`generator/webmcpinspector/`) so `sightkick browser --webmcp` auto-loads it. See its [`NOTES.md`](vendor/webmcp-tool/NOTES.md). |
 
 ## Build / test
 
@@ -46,6 +46,19 @@ cd generator && go generate ./runtimebundle/... # copies it to generator/runtime
 
 CI's runtime job rebuilds the bundle and fails on any drift from the committed
 copy.
+
+The **WebMCP inspector** is embedded the same way so `sightkick browser --webmcp`
+can auto-load it. Its canonical copy at `vendor/webmcp-tool/unpacked/` is vendored
+from upstream (built from source — see `vendor/webmcp-tool/NOTES.md`) and the
+embedded copy under `generator/webmcpinspector/` is generated. To bump it:
+
+```sh
+npm run vendor-inspector                          # pull + build a newer upstream pin
+cd generator && go generate ./webmcpinspector/... # sync the embedded copy
+```
+
+Commit both the `vendor/` and `generator/webmcpinspector/` copies; CI fails on
+drift. Don't hand-edit either.
 
 ## Running the tools on a live page
 

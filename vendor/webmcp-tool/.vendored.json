@@ -1,0 +1,25 @@
+{
+  "source": "https://github.com/beaufortfrancois/model-context-tool-inspector",
+  "ref": "f164a9aa5c3f6083f5976ccae308257bdf86cb99",
+  "extensionVersion": "1.9.14",
+  "license": "Apache-2.0",
+  "vendoredAt": "2026-09-03T17:56:20.669Z",
+  "manifestStripped": [
+    "key",
+    "update_url",
+    "minimum_chrome_version"
+  ],
+  "build": "npm install (postinstall esbuild-bundles @google/genai → js-genai.js)",
+  "files": [
+    "LICENSE",
+    "background.js",
+    "content.js",
+    "js-genai.js",
+    "manifest.json",
+    "sidebar.html",
+    "sidebar.js",
+    "styles.css",
+    "utils.js"
+  ],
+  "sha256": "46c63d1346bbfb10496231dee5533f3416b73eae582bad031b97c37e284c3c92"
+}
