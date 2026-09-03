@@ -18,6 +18,7 @@ func usage() {
 Usage:
   sightkick build <manifest.yaml | app-dir> [-o out.json] [--verify]
   sightkick browser <app-dir> [--url URL] [--webmcp] [--extensions PATHS] [--profile DIR] [--cdp-port N] [--no-start]
+  sightkick call <app-dir> <tool> [--param k=v ...] [--timeout-ms N]
   sightkick runtime [-o out.js]
   sightkick skills install [--target DIR]
 
@@ -28,6 +29,11 @@ Usage:
            corpus home view unless --url; --webmcp adds the native-modelContext
            blink flags), and persist-inject the runtime + IR so the tools
            register on the page. Requires the sightmap CLI on PATH.
+  call     invoke one registered tool in a running 'browser' session by name and
+           print its ToolResult (with guidance) as JSON; exits non-zero on
+           ok:false. The practical alternative to hand-typing the eval one-liner
+           'browser' prints, which can't itself observe the tool's resolved
+           result (sightmap eval does not await promises).
   runtime  emit the runtime bundle to inject into a live page (stdout, or -o out.js).
   skills   install the embedded agent skills (default ~/.agents/skills).`)
 	os.Exit(2)
@@ -57,6 +63,13 @@ func main() {
 	}
 	if args[0] == "browser" {
 		if err := runBrowser(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, "✗ "+err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+	if args[0] == "call" {
+		if err := runCall(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, "✗ "+err.Error())
 			os.Exit(1)
 		}

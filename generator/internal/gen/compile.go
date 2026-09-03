@@ -499,11 +499,35 @@ func (cc *compiler) compileStep(
 		if timeout == 0 {
 			timeout = 5000
 		}
-		q, _, ok := cc.compileQuery(body.Query, comps, all, names, known, toolName)
-		if !ok {
+		hasQuery, hasView := strings.TrimSpace(body.Query) != "", strings.TrimSpace(body.View) != ""
+		switch {
+		case hasQuery && hasView:
+			cc.errf("compile.wait-for-shape", toolName, "tool %q wait_for has both query and view; use exactly one", toolName)
+			return Step{}, false
+		case hasView:
+			v := cc.c.ViewByName(body.View)
+			if v == nil {
+				cc.errf("compile.wait-for-view", toolName, "%s wait_for names unknown view %q", toolName, body.View)
+				return Step{}, false
+			}
+			return Step{Op: "waitFor", View: v.Name, Route: v.Route, TimeoutMs: timeout}, true
+		case hasQuery:
+			q, _, ok := cc.compileQuery(body.Query, comps, all, names, known, toolName)
+			if !ok {
+				return Step{}, false
+			}
+			return Step{Op: "waitFor", Query: q, TimeoutMs: timeout}, true
+		default:
+			cc.errf("compile.wait-for-shape", toolName, "tool %q wait_for has neither query nor view", toolName)
 			return Step{}, false
 		}
-		return Step{Op: "waitFor", Query: q, TimeoutMs: timeout}, true
+
+	case "keypress":
+		if strings.TrimSpace(body.Key) == "" {
+			cc.errf("compile.keypress", toolName, "tool %q has a keypress step with no key", toolName)
+			return Step{}, false
+		}
+		return Step{Op: "keypress", Key: body.Key}, true
 
 	default:
 		cc.errf("compile.step", toolName, "tool %q has an unrecognized step op %q", toolName, op)

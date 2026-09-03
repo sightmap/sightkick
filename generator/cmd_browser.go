@@ -183,8 +183,11 @@ func runBrowser(args []string) error {
 	if appDir != "." && appDir != "" {
 		cd = "cd " + appDir + " && "
 	}
-	fmt.Fprintf(os.Stderr, "\n✓ sightkick tools are live on the page. Drive them from the app dir:\n")
-	fmt.Fprintf(os.Stderr, "    %ssightmap browser eval \"window.__sightkick.call('<tool>', { ... })\"\n", cd)
+	fmt.Fprintf(os.Stderr, "\n✓ sightkick tools are live on the page. Drive them:\n")
+	fmt.Fprintf(os.Stderr, "    sightkick call %s <tool> --param k=v ...\n", target)
+	fmt.Fprintf(os.Stderr, "  (a plain 'sightmap browser eval \"window.__sightkick.call(...)\"' one-liner\n")
+	fmt.Fprintf(os.Stderr, "   only starts the call — eval doesn't await promises, so it can't return\n")
+	fmt.Fprintf(os.Stderr, "   the resolved result; 'call' polls for it instead)\n")
 	fmt.Fprintf(os.Stderr, "  list registered tools:\n")
 	fmt.Fprintf(os.Stderr, "    %ssightmap browser eval \"document.modelContext.getTools().then(t=>console.log(t.map(x=>x.name)))\"\n", cd)
 	fmt.Fprintf(os.Stderr, "  stop the session:  %ssightmap browser stop\n", cd)

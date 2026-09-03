@@ -143,13 +143,37 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
       clickElement(el);
       return;
     }
+    case "keypress": {
+      // No query of its own — targets whatever a preceding fill/click left
+      // focused, matching the CLI's own `browser keypress KEY`. Exists for a
+      // form gate a fill's own per-character keydown/keyup can't stand in for
+      // (e.g. a field that only reveals a dependent control once Enter is
+      // pressed as its own discrete event, not as part of typing a value).
+      const key = step.key ?? "";
+      if (!key) throw new Error("keypress: no key given");
+      const el = document.activeElement ?? document.body;
+      el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+      el.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
+      return;
+    }
     case "waitFor": {
+      // Two forms: a DOM query (the common case, resolved via target() above)
+      // or a bare route (for a tool whose last act navigates away and has no
+      // view-scoped content of its own to wait on instead). The route form
+      // re-reads window.location on every poll, unlike opts.currentPath's
+      // one-time snapshot, because it exists specifically to observe a
+      // same-context client-side route change happening *during* this wait.
+      const routeSatisfied = (): boolean =>
+        !!step.route &&
+        routeMatches(step.route, typeof window !== "undefined" ? window.location.pathname : opts.currentPath);
+      const satisfied = step.query ? () => !!target() : routeSatisfied;
       const deadline = Date.now() + (step.timeoutMs ?? 5000);
       for (;;) {
         if (opts.signal?.aborted) throw new Error("aborted");
-        if (target()) return;
+        if (satisfied()) return;
         if (Date.now() >= deadline) {
-          throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5000}ms for ${describeTarget(step)}`);
+          const what = step.query ? describeTarget(step) : `route ${step.route}`;
+          throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5000}ms for ${what}`);
         }
         await sleep(opts.pollMs);
       }
