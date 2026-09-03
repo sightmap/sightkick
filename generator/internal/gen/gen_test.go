@@ -331,7 +331,7 @@ func TestFieldDefShorthand(t *testing.T) {
 }
 
 // TestReturnHint: the generator bakes a self-describing result shape into the
-// tool description (yak-8a56) so agents don't guess the envelope key/field names.
+// tool description so agents don't guess the envelope key/field names.
 func TestReturnHint(t *testing.T) {
 	ir, diags, err := Build(searchDir)
 	if err != nil || HasErrors(diags) {
@@ -350,7 +350,7 @@ func TestReturnHint(t *testing.T) {
 }
 
 // TestJourneySelfLoopReported: a journey listing a tool twice in a row is a
-// self-edge (yields no guidance) and is reported (yak-9206).
+// self-edge (yields no guidance) and is reported.
 func TestJourneySelfLoopReported(t *testing.T) {
 	dir := t.TempDir()
 	corpus := filepath.Join(dir, ".sightmap")

@@ -1,7 +1,7 @@
 {
   "name": "@sightkick/runtime",
   "version": "0.0.0",
-  "description": "Browser runtime that executes sightkick IR tools via the UI (standalone or extension-mediated).",
+  "description": "Browser runtime that executes sightkick IR tools via the UI.",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {

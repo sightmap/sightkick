@@ -29,11 +29,11 @@ go_to_checkout → place_order`).
 
 1. Start the app: `npm run dev -- burrito` in the `potemkin` repo (serves
    `http://localhost:5173/`).
-2. Load the unpacked extension (`packages/extension/dist/`) in a Chromium
-   browser, open the popup, and **Add a local corpus**: name it, set match to
-   `http://localhost:5173/*`, and paste the IR JSON from the build above.
-3. Open `http://localhost:5173/` — the extension injects the tools at
-   `document_start`; an agent (or the popup) can now drive the ordering flow.
+2. Follow the **`sightkick-debug`** skill
+   ([`../../skills/sightkick-debug/SKILL.md`](../../skills/sightkick-debug/SKILL.md)):
+   launch a `sightmap browser` session against `http://localhost:5173/`, inject
+   the runtime bundle + the IR built above, and drive the ordering flow either
+   agent-driven or through the vendored WebMCP inspector.
 
 ## Known authoring limitations surfaced here
 

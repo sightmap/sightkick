@@ -63,9 +63,7 @@ sightmap browser start --detach --url <SITE_URL> --profile /tmp/sk-dbg
 Turn on the blink flags so Chrome exposes the real `document.modelContext`, and
 load the vendored **WebMCP inspector** (drive-with-Gemini sidebar). Our tools
 register on the native surface, so the inspector reads them like any site's own.
-See **`vendor/webmcp-tool/NOTES.md`** for the flag/CfT-version rationale (that
-doc predates this workflow and still lists the retired sightkick extension in its
-load command — the command below is the current one, overlay + inspector only):
+See **`vendor/webmcp-tool/NOTES.md`** for the flag/CfT-version rationale:
 
 ```sh
 sightmap browser start --detach --url <SITE_URL> --profile /tmp/sk-dbg \
@@ -133,10 +131,10 @@ native surface. This is the "does a real WebMCP agent complete the flow" test.
 
 `eval`-injection lives on **one document**:
 
-- **SPA** (client-side routing — e.g. the search demo, jetblue): inject once; the
+- **SPA** (client-side routing — e.g. the search demo): inject once; the
   runtime re-registers view-scoped tools on route changes. `wait-for --url` /
   `--selector` after an action that routes.
-- **MPA** (a real page load — e.g. netlify moving `/projects` → `/deploys`): the
+- **MPA** (a real page load — the URL changes with a full document load): the
   injected script is gone after the load. **Re-run §3** on the new page.
 
 (When the sightmap `browser inject --persist` facility lands — CDP

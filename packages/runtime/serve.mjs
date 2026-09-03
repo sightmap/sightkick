@@ -1,12 +1,10 @@
 // Dev server for the manual demos. Rebuilds the demo bundles on change and
-// serves the demo/ directory with clean-URL routing so the signup pages live at
-// /step1 and /step2 — matching the routes in the compiled signup IR. Uses HTTPS
-// when a local cert is present (see certs/README.md), otherwise plain HTTP.
+// serves the demo/ directory with clean-URL routing so the search demo's routes
+// (/ and /results) both resolve to the SPA document. Plain HTTP — the standalone
+// runtime polyfills document.modelContext in JS, so no TLS is needed.
 import { context } from "esbuild";
 import http from "node:http";
-import https from "node:https";
 import { readFile } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
 
 const DEMO = resolve("demo");
@@ -55,21 +53,9 @@ async function handler(req, res) {
   }
 }
 
-const CERTFILE = "certs/localhost.pem";
-const KEYFILE = "certs/localhost-key.pem";
-// HTTPS when a local cert is present, EXCEPT when SIGHTKICK_HTTP is set (the eval
-// harness forces HTTP: the standalone runtime polyfills modelContext in JS, so
-// it needs no HTTPS, and this sidesteps Chrome's self-signed-cert interstitial).
-const useHttps = existsSync(CERTFILE) && existsSync(KEYFILE) && !process.env.SIGHTKICK_HTTP;
-const server = useHttps
-  ? https.createServer({ cert: readFileSync(CERTFILE), key: readFileSync(KEYFILE) }, handler)
-  : http.createServer(handler);
+const server = http.createServer(handler);
 
 const PORT = 5174;
 server.listen(PORT, "127.0.0.1", () => {
-  const base = `${useHttps ? "https" : "http"}://localhost:${PORT}`;
-  console.log(`\n  sightkick search demo (two-view SPA) → ${base}/\n`);
-  if (!useHttps) {
-    console.log("  (http; Chrome's Ask Gemini needs https — see certs/README.md)\n");
-  }
+  console.log(`\n  sightkick search demo (two-view SPA) → http://localhost:${PORT}/\n`);
 });

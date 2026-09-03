@@ -1,4 +1,4 @@
-// Deterministic eval harness (yak-dd6d). Drives the self-contained search demo
+// Deterministic eval harness. Drives the self-contained search demo
 // through the `sightmap browser` CLI the way an agent would — getTools() +
 // executeTool() — and asserts the view-scoped tool set, guidance breadcrumbs,
 // rich returns, and idempotency guards at each step. No LLM, no Playwright: the
@@ -15,8 +15,8 @@ import { dirname, resolve } from "node:path";
 
 const RUNTIME_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = 5174;
-// We force serve.mjs to HTTP (SIGHTKICK_HTTP) so Chrome doesn't hit a self-signed
-// cert interstitial; the standalone runtime polyfills modelContext in JS anyway.
+// serve.mjs is plain HTTP; the standalone runtime polyfills modelContext in JS,
+// so no TLS is needed.
 const BASE = `http://localhost:${PORT}`;
 const PROFILE = "/tmp/sk-eval-profile";
 
@@ -92,7 +92,7 @@ function portUp(port) {
 
 async function ensureServer() {
   if (await portUp(PORT)) return null; // already running (dev, HTTP): reuse it
-  const proc = spawn("node", ["serve.mjs"], { cwd: RUNTIME_DIR, stdio: "ignore", env: { ...process.env, SIGHTKICK_HTTP: "1" } });
+  const proc = spawn("node", ["serve.mjs"], { cwd: RUNTIME_DIR, stdio: "ignore" });
   for (let i = 0; i < 60; i++) {
     if (await portUp(PORT)) return proc;
     await new Promise((r) => setTimeout(r, 500));
@@ -105,9 +105,8 @@ function startBrowser() {
   try { sm(["stop"], { stdio: "ignore" }); } catch { /* none running */ }
   rmSync(PROFILE, { recursive: true, force: true });
   // `start` is a blocking foreground daemon; --detach backgrounds it, waits
-  // until it is serving, and returns (the script-safe form). --ignore-cert for
-  // the self-signed demo cert.
-  sm(["start", "--detach", "--url", `${BASE}/`, "--profile", PROFILE, "--chrome-flag=--ignore-certificate-errors"], { stdio: "ignore" });
+  // until it is serving, and returns (the script-safe form).
+  sm(["start", "--detach", "--url", `${BASE}/`, "--profile", PROFILE], { stdio: "ignore" });
   // --detach returns once the daemon is serving, but the content tab can open a
   // beat later; page commands error with "no content tab" in that gap, so wait
   // for the tab (status lists it by URL) before issuing them.

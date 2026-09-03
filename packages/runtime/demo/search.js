@@ -87,10 +87,11 @@ window.addEventListener("popstate", render);
 render();
 
 // ?noboot simulates a third-party page that does NOT self-install sightkick, so
-// the browser extension can inject the very same IR + runtime instead. It's the
-// same page and paths, which is the point: injected vs. direct is identical.
+// an injector (`sightmap browser eval`) can load the very same IR + runtime
+// instead. It's the same page and paths, which is the point: injected vs. direct
+// is identical.
 if (location.search.includes("noboot")) {
-  console.log("[sightkick] ?noboot — not self-installing; waiting for extension injection.");
+  console.log("[sightkick] ?noboot — not self-installing; waiting for injection.");
 } else {
   boot(ir);
   wirePanel();

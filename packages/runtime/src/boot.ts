@@ -9,9 +9,10 @@ export interface BootOptions {
 }
 
 /**
- * Provenance only. The extension injects the *same* generated artifact into a
- * third-party page; it is not semantically different from a direct install, so
- * there is no "mediated" execution mode — this just records how we got here.
+ * Provenance only. A privileged host (e.g. a browser extension or a CDP driver)
+ * can inject the *same* generated artifact into a third-party page; that is not
+ * semantically different from a direct install, so there is no "mediated"
+ * execution mode — this just records how we got here.
  */
 export type Mode = "direct" | "injected";
 
@@ -34,7 +35,7 @@ declare global {
   interface Window {
     __sightkick?: SightkickGlobal;
     __sightkick_ir?: IR;
-    /** Present only when injected by the extension (provenance, not behavior). */
+    /** Present only when injected by a host bridge (provenance, not behavior). */
     __sightkick_host?: unknown;
   }
 }
@@ -92,8 +93,8 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
     const path = currentPath();
     for (const tool of ir.tools) {
       // View-scoped registration: a tool is offered only on its view. This is
-      // how the tool set changes per page — each page load (or the extension's
-      // per-page injection) boots fresh and registers just that view's tools.
+      // how the tool set changes per page — each page load (or a host's per-page
+      // injection) boots fresh and registers just that view's tools.
       if (tool.ensureView && !routeMatches(tool.ensureView.route, path)) continue;
       const controller = new AbortController();
       registrations.push(controller);

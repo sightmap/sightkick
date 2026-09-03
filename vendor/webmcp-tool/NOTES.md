@@ -3,8 +3,9 @@
 A local **unpacked** copy of the Chrome Web Store extension
 [WebMCP – Model Context Tool](https://chromewebstore.google.com/detail/webmcp-model-context-tool/gbpdfapgefenggkahomfgkhfehlcenpd)
 (store id `gbpdfapgefenggkahomfgkhfehlcenpd`), so it can be loaded into our
-Chrome-for-Testing instance alongside the sightmap overlay + the sightkick
-extension. **Temporary / playground vendoring** — revisit the long-term story.
+Chrome-for-Testing instance alongside the sightmap overlay to drive injected
+sightkick tools with a real WebMCP client. **Temporary / playground vendoring**
+— revisit the long-term story.
 
 ## Why it's copied, not downloaded
 
@@ -44,27 +45,27 @@ Removed three fields so it loads as a plain local unpacked extension:
    the feature names by `strings`-grepping the CfT framework
    (`blink/renderer/core/script_tools/model_context.cc`).
 
-Verified: on 152 with those flags, `document.modelContext` is native, and
-`document.modelContext.getTools()` on jetblue.com returns sightkick's tools —
-so the inspector reads them instead of throwing.
+Verified: on 152 with those flags, `document.modelContext` is native, and after
+injecting the runtime bundle + IR (`sightmap browser eval`),
+`document.modelContext.getTools()` on the target site returns sightkick's tools
+— so the inspector reads them instead of throwing.
 
 ## Load command (canonical)
 
-Run from the **sightkick repo root**, after building the sightkick extension
-(`pnpm install && pnpm build` — `packages/extension/dist` is a gitignored build
-output, so it won't exist on a fresh clone until you build it):
+Run from the **sightkick repo root**:
 
 ```sh
 sightmap browser start --detach \
-  --extensions ~/.sightmap/extension,"$PWD/packages/extension/dist","$PWD/vendor/webmcp-tool/unpacked" \
+  --extensions ~/.sightmap/extension,"$PWD/vendor/webmcp-tool/unpacked" \
   --chrome-flag=--enable-blink-features=ModelContext,ModelContextTesting \
   --chrome-flag=--enable-features=DevToolsWebMCPSupport
 ```
 
-Three extensions load together: the built-in **sightmap overlay**
-(`~/.sightmap/extension`), the **sightkick** injector
-(`packages/extension/dist`), and this **WebMCP inspector**
-(`vendor/webmcp-tool/unpacked`).
+Two extensions load together: the built-in **sightmap overlay**
+(`~/.sightmap/extension`) and this **WebMCP inspector**
+(`vendor/webmcp-tool/unpacked`). The sightkick tools themselves are not an
+extension — they're injected into the page with `sightmap browser eval` (see the
+`sightkick-debug` skill).
 
 Two constraints, both verified against the `sightmap browser` source:
 - **All entries must be absolute** and comma-separated — the CLI runs

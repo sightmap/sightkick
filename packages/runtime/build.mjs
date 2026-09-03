@@ -8,7 +8,8 @@ const common = {
 };
 
 // 1) The injectable runtime artifact. Attaches window.__sightkick and auto-boots
-//    from window.__sightkick_ir. This is what the exporter/extension ships.
+//    from window.__sightkick_ir. This is what a direct install or a host
+//    injector ships onto the page.
 await build({
   ...common,
   entryPoints: ["src/index.ts"],

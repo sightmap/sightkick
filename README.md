@@ -2,17 +2,17 @@
 
 Generate [WebMCP](https://github.com/webmachinelearning/webmcp) tools from
 [sightmap](https://github.com/sightmap/sightmap) corpora, and run them on
-arbitrary sites via a browser extension.
+arbitrary sites.
 
 sightkick lets an agent call named actions (`add_todo`, `search`, …) on a site
 instead of clicking around blind. Tools are **UI-driven** — they use the same
 affordances a user has, so every action produces visible feedback and there are
 no under-the-UI state pokes.
 
-A single compiled artifact runs the **same way** whether it's installed directly
-on a site (`<script>` / userscript) or injected by the sightkick browser
-extension into a third-party site. The extension is *only* an injector — there's
-no separate "mediated" behavior, no background state, no runtime executor.
+A single compiled artifact — the **IR** — runs the same way wherever it is
+loaded: installed directly on a site (`<script>` / userscript), or injected into
+a third-party page for debugging (`sightmap browser eval`). There is no separate
+"mediated" behavior and no background runtime executor.
 
 **Coordination model.** A *tool* is anything doable at a single point in time
 (same "page", no navigation crossing) — it may bundle several simultaneous
@@ -28,27 +28,28 @@ depends on the sightmap reference library
 ([`github.com/sightmap/sightmap/go`](https://pkg.go.dev/github.com/sightmap/sightmap/go/sightmap),
 pinned) for all corpus reading, `$ref` expansion, hierarchy flattening, and route
 matching — so there's no second implementation of the spec to keep honest. The
-compiled **IR** is the firewall: the runtime and extension consume it and never
-see a sightmap construct, so they stay pure TypeScript.
+compiled **IR** is the firewall: the runtime consumes it and never sees a
+sightmap construct, so it stays pure TypeScript.
 
 ## Layout
 
 ```
 generator/     # Go CLI: webmcp.tools.yaml + .sightmap corpus -> IR (JSON)
-               #   (consumes github.com/sightmap/sightmap/go)
+               #   (consumes github.com/sightmap/sightmap/go); embeds + installs the skills
 packages/
   runtime/     # browser: boot + atomic-tool execution + WebMCP registration
-  extension/   # MV3 extension: inject the generated artifact into 3rd-party sites
+skills/        # canonical agent skills (sightkick-debug); embedded into the generator
 examples/
   todo/        # single-view example (tools + same-view guidance)
   search/      # two-view example (transition + cross-view guidance + rich returns)
   burrito/     # external-corpus example (references a sibling repo's .sightmap)
-  jetblue/     # real third-party site (two apps under one domain)
+vendor/
+  webmcp-tool/ # vendored WebMCP inspector, to drive injected tools with a real client
 ```
 
-The generator is Go and the runtime/extension are TypeScript — a deliberate
-polyglot split across the IR firewall. The two sides share no code; they share
-the IR JSON contract.
+The generator is Go and the runtime is TypeScript — a deliberate polyglot split
+across the IR firewall. The two sides share no code; they share the IR JSON
+contract.
 
 ## Try the generator
 
@@ -59,9 +60,14 @@ go run . build ../examples/todo
 
 This compiles `examples/todo/webmcp.tools.yaml` against
 `examples/todo/.sightmap/` into a self-contained **IR**: every component
-reference resolved to concrete CSS locators, every property `where`/extract
+reference resolved to concrete DOM locators, every property `value`/`list`
 resolved to a DOM extractor, and unresolved refs reported at compile time with
 candidate lists.
+
+Tools reference corpus components by their sightmap identity through a
+CSS-shaped **component query** (`OptionGroup[name="Protein" i] OptionButton[label="{{option}}" i]`),
+so there is no raw-CSS escape hatch to keep honest — the query resolves against
+the corpus at compile time.
 
 ## Try the runtime
 
@@ -69,7 +75,7 @@ candidate lists.
 cd packages/runtime
 pnpm install   # from repo root the first time
 pnpm test      # headless: atomic-tool execution + WebMCP surface, driven by golden IR
-pnpm demo      # rebuilds + serves the todo demo
+pnpm demo      # rebuilds + serves the search demo
 ```
 
 `pnpm demo` serves the **search** demo — a two-view SPA (`/` → `/results`) wired
@@ -84,48 +90,31 @@ through the standard WebMCP surface:
 (await document.modelContext.getTools()).map(t => t.name)   // ["search"] on /
 const [s] = (await document.modelContext.getTools()).filter(t => t.name === 'search')
 await document.modelContext.executeTool(s, { query: 'ATL to LHR' })  // fills, clicks, navigates
-// now on /results: getTools() -> ["list_results","set_sort"]
+// now on /results: getTools() -> ["list_results","set_sort",...]
 ```
 
 Either way it happens through real clicks/fills — the same affordances a user has.
 This flow is verified agent-driven against a real browser with the `sightmap
 browser` CLI (using `examples/search/.sightmap`).
 
-## Test end-to-end in a real browser (extension)
+## Run the tools on a live page
 
-The runtime flow above is served locally. To exercise the **extension injector**
-against a real third-party site, load three unpacked extensions into one
-`sightmap browser` session:
+To exercise the compiled tools against a real third-party site (no direct install
+required), inject the runtime bundle + IR into a running page and drive them —
+either agent-driven over `sightmap browser eval`, or with the vendored **WebMCP
+inspector** (a Gemini sidebar) reading the tools off the page's native
+`document.modelContext`. The full loop — build the bundle + IR, launch the
+session with the right Chrome-for-Testing flags, inject, drive, and re-inject
+across navigations — is the **`sightkick-debug`** skill
+([`skills/sightkick-debug/SKILL.md`](skills/sightkick-debug/SKILL.md)). The
+Chrome-for-Testing flags and their rationale live in
+[`vendor/webmcp-tool/NOTES.md`](vendor/webmcp-tool/NOTES.md).
 
-1. the built-in **sightmap overlay** — `~/.sightmap/extension` (what `sightmap
-   browser` normally auto-loads on its own);
-2. the **sightkick** injector — `packages/extension/dist`, a gitignored build
-   output, so build it first;
-3. the vendored **WebMCP inspector** — `vendor/webmcp-tool/unpacked` (see its
-   [`NOTES.md`](vendor/webmcp-tool/NOTES.md) for the Chrome-for-Testing flags and
-   the gotchas behind them).
+Install the skills (this also pulls in the supporting sightmap skills):
 
 ```sh
-pnpm install && pnpm build          # builds packages/extension/dist
-
-# from the repo root:
-sightmap browser start --detach \
-  --extensions ~/.sightmap/extension,"$PWD/packages/extension/dist","$PWD/vendor/webmcp-tool/unpacked" \
-  --chrome-flag=--enable-blink-features=ModelContext,ModelContextTesting \
-  --chrome-flag=--enable-features=DevToolsWebMCPSupport
+sightkick skills install     # or, from a release: npx @sightmap/sightkick skills install
 ```
-
-Passing `--extensions` **replaces** the overlay that `sightmap browser`
-auto-loads, so all three paths must be listed explicitly, and each must be
-**absolute** (the CLI abs-resolves the whole comma-separated string; `~`/`$PWD`
-expand to absolute in the shell). With all three loaded on a site that has a
-sightkick corpus, `document.modelContext.getTools()` returns the injected
-sightkick tools and the inspector panel can drive them.
-
-To test with a real client, note that **Chrome's Ask Gemini gates WebMCP on
-`https:`**; `pnpm demo` auto-switches to HTTPS once a local cert is present —
-see [`packages/runtime/certs/README.md`](packages/runtime/certs/README.md)
-(one-time mkcert setup).
 
 ### WebMCP notes
 
@@ -141,30 +130,29 @@ see [`packages/runtime/certs/README.md`](packages/runtime/certs/README.md)
 - **`.sightmap/` corpus** — the sightmap authority (views, components,
   properties, routes). sightkick reads it; it never writes it.
 - **`webmcp.tools.yaml`** — the *skill layer*. A consumer format (not a sightmap
-  SEP): atomic, view-scoped tools that reference corpus components by name (`css:`
-  is the escape hatch), plus a `journeys:` transition graph that compiles into
-  guidance. Live DOM flows only; no `mode: fetch`.
+  SEP): atomic, view-scoped tools that reference corpus components by component
+  query, plus a `journeys:` transition graph that compiles into guidance. Live
+  DOM flows only; no `mode: fetch`.
 
 ## Status
 
-Early. The atomic-tools baseline is end-to-end for the single-page case:
+Early, but end-to-end for the single-page and SPA cases:
 
 - **Generator** (Go) compiles corpus + manifest → IR. `cd generator && go test ./...`
-  (golden-IR check on the todo example).
+  (golden-IR check on the todo/search examples).
 - **Runtime** (TS) executes IR tools against the live DOM as real WebMCP tools.
-  `cd packages/runtime && pnpm test` drives the fixture with the generator's
+  `cd packages/runtime && pnpm test` drives the fixtures with the generator's
   golden IR, covering the whole pipeline across the IR firewall.
 
-Journeys now compile into **guidance breadcrumbs** carried in each tool result;
-tools register **per view** (only the current view's tools are offered), and a
+Journeys compile into **guidance breadcrumbs** carried in each tool result; tools
+register **per view** (only the current view's tools are offered), and a
 cross-view edge yields `after_navigation` guidance ("read the results there").
-The `search` example exercises this end-to-end (`generator/.../testdata/search.ir.json`
-driven by a runtime test across a simulated navigation), with rich returns
-(machine ids + human fields).
+The `search` example exercises this end-to-end
+(`generator/.../testdata/search.ir.json` driven by a runtime test across a
+simulated navigation), with rich returns (machine ids + human fields) and
+same-page idempotency guards.
 
 The served two-view SPA is verified in a real browser via `sightmap browser`:
 view-scoped tools, SPA re-registration without reload, cross-view guidance, and
-rich returns all confirmed live.
-
-Next: same-page idempotency guards, then the extension injector (semantically
-identical to direct install). See `.yaks/` (local) for the working task herd.
+rich returns all confirmed live. A deterministic eval harness
+(`packages/runtime/eval/run.mjs`) replays the whole flow tools-in / DOM-out.

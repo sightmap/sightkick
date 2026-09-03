@@ -2,17 +2,15 @@ node_modules/
 dist/
 # bundled demo artifact
 **/demo/*.bundle.js
-# local dev certs (see packages/runtime/certs/README.md)
-**/certs/*.pem
 *.tsbuildinfo
 .DS_Store
+.helix/
 # local-only task herd
 .yaks/
 config.yaml
-# generator scratch output during dev (but keep test goldens + bundled demo corpora)
+# generator scratch output during dev (but keep test goldens)
 *.ir.json
 !**/testdata/*.ir.json
-!packages/extension/corpora/*.ir.json
 **/.sightmap/.session
 
 # release build outputs (goreleaser + npm packaging)

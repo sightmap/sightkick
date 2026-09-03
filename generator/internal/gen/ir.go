@@ -6,8 +6,8 @@
 package gen
 
 // The IR is a self-contained JSON artifact with every corpus reference resolved
-// to concrete CSS locators. It is the stable interface the runtime (standalone
-// or extension-mediated) and the exporter consume — they never see sightmap
+// to concrete CSS locators. It is the stable interface the runtime consumes —
+// whether directly installed or host-injected — and it never exposes sightmap
 // constructs. Field order and json tags define the wire format; keep them in
 // sync with the JSON Schema published alongside.
 
