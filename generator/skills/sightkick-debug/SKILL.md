@@ -17,33 +17,36 @@ a page: `sightmap browser eval` injects the runtime bundle, then
 
 ## Prerequisites
 
-This skill is a thin layer over the sightmap toolchain — it drives `sightmap
-browser` and reads a `.sightmap/` corpus — so it does **not** vendor the sightmap
-skills; it depends on them. Make sure they're installed:
+This skill uses two CLIs: **`sightkick`** (to build the IR and emit the runtime
+bundle) and **`sightmap`** (to drive the live browser session). Install whichever
+isn't already on your PATH, plus the supporting sightmap skills:
 
 ```sh
+npm i -g @sightmap/sightkick             # the sightkick CLI (build + runtime + skills)
 npx @sightmap/sightmap skills install    # or: sightmap skills install (if already on PATH)
 sightmap browser install                 # Chrome-for-Testing; needs >=152 for native document.modelContext
 ```
 
 That installs the **`sightmap-browser`** skill (driving a live session) and
 **`sightmap-authoring`** skill (building the `.sightmap/` corpus) alongside this
-one — everything needed to build and test a `webmcp.tools.yaml`. Paths below are
-relative to the **sightkick repo root**.
+one — everything needed to build and test a `webmcp.tools.yaml`. No repo checkout
+is required; `<CORPUS_DIR>` below is any directory holding a `webmcp.tools.yaml`
++ `.sightmap/` corpus.
 
 ## 1. Build the two artifacts
 
+Both come straight from the installed `sightkick` CLI:
+
 ```sh
-# The payload: the standalone runtime bundle (exposes window.__sightkick.load).
-( cd packages/runtime && node build.mjs )        # -> packages/runtime/dist/sightkick-runtime.js
+# The payload: the runtime bundle (exposes window.__sightkick.load).
+sightkick runtime -o /tmp/sightkick-runtime.js
 
 # The IR for the corpus you're testing (any dir with webmcp.tools.yaml + .sightmap/).
-( cd generator && go run . build <CORPUS_DIR> -o /tmp/x.ir.json )
-#   e.g. <CORPUS_DIR> = ../examples/search  or  ../../sites/netlify
+sightkick build <CORPUS_DIR> -o /tmp/x.ir.json
 ```
 
-Rebuild the IR whenever the corpus/manifest changes; rebuild the bundle whenever
-runtime source changes.
+Rebuild the IR whenever the corpus/manifest changes. The runtime bundle is
+embedded in the CLI, so re-emit it after upgrading `sightkick`.
 
 ## 2. Pick a mode, start the session
 
@@ -61,13 +64,16 @@ sightmap browser start --detach --url <SITE_URL> --profile /tmp/sk-dbg
 
 ### Mode B — inspector/Gemini-driven (native WebMCP surface)
 Turn on the blink flags so Chrome exposes the real `document.modelContext`, and
-load the vendored **WebMCP inspector** (drive-with-Gemini sidebar). Our tools
-register on the native surface, so the inspector reads them like any site's own.
-See **`vendor/webmcp-tool/NOTES.md`** for the flag/CfT-version rationale:
+load the **WebMCP inspector** (a drive-with-Gemini sidebar). Our tools register on
+the native surface, so the inspector reads them like any site's own. The inspector
+isn't shipped with the CLI — use the vendored copy in the sightkick repo
+(`vendor/webmcp-tool/unpacked`, whose `NOTES.md` explains the flag/CfT-version
+rationale) or install it from the Chrome Web Store. Point `<INSPECTOR_DIR>` at its
+unpacked directory:
 
 ```sh
 sightmap browser start --detach --url <SITE_URL> --profile /tmp/sk-dbg \
-  --extensions ~/.sightmap/extension,"$PWD/vendor/webmcp-tool/unpacked" \
+  --extensions ~/.sightmap/extension,<INSPECTOR_DIR> \
   --chrome-flag=--enable-blink-features=ModelContext,ModelContextTesting \
   --chrome-flag=--enable-features=DevToolsWebMCPSupport
 ```
@@ -85,8 +91,7 @@ sightmap browser eval "typeof document.modelContext"          # object
 ## 3. Inject the runtime + IR
 
 ```sh
-BUNDLE="$PWD/packages/runtime/dist/sightkick-runtime.js"
-sightmap browser eval "$(cat "$BUNDLE")"                       # sets window.__sightkick
+sightmap browser eval "$(cat /tmp/sightkick-runtime.js)"       # sets window.__sightkick
 sightmap browser eval "window.__sightkick.load($(cat /tmp/x.ir.json))"
 ```
 
@@ -114,8 +119,8 @@ sleep 2; sightmap browser eval "window.__r"                    # the ToolResult 
 
 The result envelope is `{content:[{type:'text',text:<ToolResult JSON>}]}`; the
 `ToolResult` carries `ok`, `value`/`items`, `skipped` (idempotency guard hit),
-and `guidance` (next-step breadcrumbs). See `packages/runtime/eval/run.mjs` for a
-full scripted example.
+and `guidance` (next-step breadcrumbs). The sightkick repo's
+`packages/runtime/eval/run.mjs` is a full scripted example of this loop.
 
 ### Mode B (native): drive via the inspector
 Open the inspector's sidebar and prompt Gemini — it enumerates

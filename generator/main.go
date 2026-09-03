@@ -17,12 +17,14 @@ func usage() {
 
 Usage:
   sightkick build <manifest.yaml | app-dir> [-o out.json] [--verify]
+  sightkick runtime [-o out.js]
   sightkick skills install [--target DIR]
 
-  build   compile a corpus + manifest into IR (stdout, or -o out.json).
-          --verify checks each tool's returns extractors against the view's
-          captured snapshots and warns on fields that resolve empty on every row.
-  skills  install the embedded agent skills (default ~/.agents/skills).`)
+  build    compile a corpus + manifest into IR (stdout, or -o out.json).
+           --verify checks each tool's returns extractors against the view's
+           captured snapshots and warns on fields that resolve empty on every row.
+  runtime  emit the runtime bundle to inject into a live page (stdout, or -o out.js).
+  skills   install the embedded agent skills (default ~/.agents/skills).`)
 	os.Exit(2)
 }
 
@@ -33,6 +35,13 @@ func main() {
 	}
 	if args[0] == "skills" {
 		if err := runSkills(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, "✗ "+err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+	if args[0] == "runtime" {
+		if err := runRuntime(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, "✗ "+err.Error())
 			os.Exit(1)
 		}

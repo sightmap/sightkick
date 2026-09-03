@@ -35,6 +35,18 @@ cd generator
 go build ./... && go generate ./skills/... && git diff --exit-code -- skills && go test ./...
 ```
 
+The compiled runtime bundle is also embedded in the binary (so `sightkick
+runtime` can emit it with no repo checkout). After changing runtime source,
+rebuild it and re-sync the embedded copy, then commit both:
+
+```sh
+pnpm --filter @sightkick/runtime build          # -> packages/runtime/dist/sightkick-runtime.js
+cd generator && go generate ./runtimebundle/... # copies it to generator/runtimebundle/
+```
+
+CI's runtime job rebuilds the bundle and fails on any drift from the committed
+copy.
+
 ## Running the tools on a live page
 
 sightkick has **no bespoke extension**. The generated tools are injected into a

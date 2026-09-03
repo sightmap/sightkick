@@ -48,9 +48,25 @@ jobs:
           node-version: "22"
           cache: pnpm
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: generator/go.sum
+
       - run: pnpm install --frozen-lockfile
 
-      - name: Typecheck + test
+      - name: Build, typecheck, test
         run: |
+          pnpm -r build
           pnpm -r typecheck
           pnpm -r test
+
+      # pnpm -r build produced packages/runtime/dist/sightkick-runtime.js; the
+      # copy embedded in the Go binary (generator/runtimebundle) must match it.
+      - name: Embedded runtime bundle in sync
+        working-directory: generator
+        run: |
+          go generate ./runtimebundle/...
+          git diff --exit-code -- runtimebundle || {
+            echo "::error::embedded runtime bundle is stale — rebuild the runtime and run 'go generate ./runtimebundle/...'"; exit 1;
+          }
