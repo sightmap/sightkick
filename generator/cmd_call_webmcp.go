@@ -1,132 +1,85 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
+	"os/exec"
+	"strings"
 
 	"sightkick/generator/internal/gen"
 )
 
-// probeJS reports what WebMCP surface the page offers, if any.
-//
-// `__sightkick` is the runtime's own entry point, present when the runtime
-// booted itself into a global. `modelContext` is the WebMCP surface proper,
-// which is what a real client talks to — a page that boots the runtime
-// privately populates it without exposing the global.
-const probeJS = `(function(){
-  if (window.__sightkick && window.__sightkick.call) return "sightkick";
-  if (document.modelContext && document.modelContext.executeTool) return "modelcontext";
-  return "none";
-})()`
-
-// callJS asks the page to run a tool and stashes the result in a global,
-// because the eval that starts it cannot await the promise it returns.
-//
-// It prefers the runtime's own entry point, which takes a plain name and
-// resolves to a plain result. Failing that it goes through the WebMCP surface,
-// which differs in three ways between Chrome's built-in modelContext and the
-// runtime's polyfill: the built-in rejects a bare {name} and wants the whole
-// registered tool that getTools() handed out; it takes arguments as a JSON
-// string where the polyfill takes an object; and it resolves to a JSON string
-// of the result envelope where the polyfill resolves to the envelope itself.
-// The polyfill marks itself, so the argument shape is chosen from that, and
-// the result is unwrapped by inspecting what came back. Either way the tool's
-// own result arrives as text content inside the envelope.
-const callJS = `window.%[1]s = null;
-(function(name, args){
-  var done = function(r){ window.%[1]s = JSON.stringify(r); };
-  var fail = function(e){ window.%[1]s = JSON.stringify({ok:false, message:String((e && e.message) || e)}); };
-  try {
-    if (window.__sightkick && window.__sightkick.call) {
-      window.__sightkick.call(name, args).then(done, fail);
-      return;
-    }
-    var ctx = document.modelContext;
-    Promise.resolve(ctx.getTools()).then(function(tools){
-      var registered = tools || [];
-      var tool = registered.filter(function(t){ return t.name === name; })[0];
-      if (!tool) {
-        // No tools at all means the runtime isn't on the page; some tools but
-        // not this one means it is, and this tool belongs to another view.
-        // Different problems, so say which one it is.
-        if (registered.length === 0) {
-          fail("no WebMCP tools are registered on this page. If it does not embed the sightkick " +
-               "runtime, either run 'sightkick browser <app-dir>' to inject it, or pass --via cli " +
-               "to drive the tool through the sightmap CLI instead (real input events, no runtime).");
-        } else {
-          fail('tool "' + name + '" is not among the ' + registered.length + " registered here (" +
-               registered.map(function(t){ return t.name; }).join(", ") + "). A tool is only " +
-               "offered on its own view, so check the page is the one it belongs to.");
-        }
-        return;
-      }
-      var payload = ctx.__sightkickPolyfill ? args : JSON.stringify(args);
-      return Promise.resolve(ctx.executeTool(tool, payload)).then(function(result){
-        try {
-          var envelope = (typeof result === "string") ? JSON.parse(result) : result;
-          done(JSON.parse(envelope.content[0].text));
-        } catch (e) {
-          fail("unexpected tool result: " + JSON.stringify(result));
-        }
-      });
-    }).catch(fail);
-  } catch (e) { fail(e); }
-})(%[2]s, %[3]s);
-"started"`
-
 // runWebMCP runs a tool by asking the page's registered WebMCP tool to run
-// itself, and returns the result it reports.
+// itself, through the sightmap CLI's own WebMCP driver, `sightmap browser mcp
+// call`. That driver talks to the standard `document.modelContext` surface and
+// owns the differences between Chrome's built-in modelContext (the whole
+// registered tool from getTools(), arguments as a JSON string, the result as a
+// JSON string of the envelope) and the runtime's polyfill (objects throughout).
+// Delegating means we no longer re-implement executeTool here, and `--via
+// webmcp` genuinely exercises the standard-surface contract a real WebMCP client
+// depends on — rather than reaching for the runtime's private global.
 //
-// Nothing here interprets the tool's steps: the page holds the compiled tool
-// and executes it. That makes this the path a real WebMCP client takes, and
-// the reason to prefer it — it exercises the contract the runtime actually
-// ships. Its cost is that the tool has to be registered on the page first, and
-// that the runtime clicks by dispatching synthetic events, which do not reach
-// elements rendered into a portal.
-func (s *session) runWebMCP(toolName string, args map[string]any, timeoutMs int) (toolOutcome, error) {
-	surface, err := s.evalValue(probeJS)
-	if err != nil {
-		return toolOutcome{}, fmt.Errorf("probe the page for WebMCP tools: %w", err)
-	}
-	if surface == "none" {
-		return toolOutcome{}, errors.New(
-			"no WebMCP tools are registered on this page.\n" +
-				"       Either serve a page that boots the sightkick runtime, or pass --via cli to\n" +
-				"       drive the tool through the sightmap CLI instead (real input events, no runtime).")
-	}
-
-	nameJSON, err := json.Marshal(toolName)
-	if err != nil {
-		return toolOutcome{}, err
-	}
+// Nothing here interprets the tool's steps: the page holds the compiled tool and
+// reports its own result, guidance included. The cost is that the tool must be
+// registered on the page first, and that the runtime clicks by dispatching
+// synthetic events, which do not reach elements rendered into a portal (use
+// `--via cli` for those).
+//
+// Requires the sightmap CLI to provide `browser mcp call` with native-argument
+// serialization — sightmap >= 0.31.x including the native-args fix. The
+// timeoutMs argument is unused here: the CLI bounds the call itself.
+func (s *session) runWebMCP(toolName string, args map[string]any, _ int) (toolOutcome, error) {
 	argsJSON, err := json.Marshal(args)
 	if err != nil {
 		return toolOutcome{}, err
 	}
 
-	// A fresh global per invocation, so two overlapping calls — or a leftover
-	// from one that was killed — cannot read each other's result.
-	slot := fmt.Sprintf("__sightkick_call_%d", time.Now().UnixNano())
-	if _, err := s.evalValue(fmt.Sprintf(callJS, slot, nameJSON, argsJSON)); err != nil {
-		return toolOutcome{}, fmt.Errorf("start tool %q: %w", toolName, err)
+	// --json emits the raw CallToolResult envelope. Capture stdout independent of
+	// the exit code: `mcp call` exits non-zero when the tool reports isError
+	// (ok:false), which is a valid outcome we still want to parse and report,
+	// distinct from being unable to run the tool at all (no result on stdout).
+	cmd := exec.Command(s.sm, "browser", "mcp", "call", toolName,
+		"--args", string(argsJSON), "--json", "--sightmap-dir", s.corpusDir)
+	cmd.Dir = s.appDir
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	runErr := cmd.Run()
+
+	if body := strings.TrimSpace(stdout.String()); body != "" {
+		return parseEnvelopeResult(body)
 	}
 
-	deadline := time.Now().Add(time.Duration(timeoutMs) * time.Millisecond)
-	for {
-		stashed, err := s.evalValue("window." + slot)
-		if err != nil {
-			return toolOutcome{}, fmt.Errorf("read the result of tool %q: %w", toolName, err)
-		}
-		if stashed != "" {
-			return parseWebMCPResult(stashed)
-		}
-		if time.Now().After(deadline) {
-			return toolOutcome{}, fmt.Errorf("tool %q did not finish within %dms", toolName, timeoutMs)
-		}
-		time.Sleep(100 * time.Millisecond)
+	// No result payload — the tool could not be run (no WebMCP surface on the
+	// page, the tool isn't registered on this view, ...). Surface sightmap's own
+	// explanation, which already distinguishes those cases.
+	if msg := strings.TrimSpace(stderr.String()); msg != "" {
+		return toolOutcome{}, errors.New(msg)
 	}
+	if runErr != nil {
+		return toolOutcome{}, fmt.Errorf("run tool %q via mcp call: %w", toolName, runErr)
+	}
+	return toolOutcome{}, fmt.Errorf("mcp call %q returned no result", toolName)
+}
+
+// parseEnvelopeResult unwraps the runtime's ToolResult from a WebMCP
+// CallToolResult envelope ({content:[{type,text}], isError}) as printed by
+// `sightmap browser mcp call --json`, and maps it to a toolOutcome. The
+// runtime encodes its ToolResult as the text of the first content part.
+func parseEnvelopeResult(s string) (toolOutcome, error) {
+	var env struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(s), &env); err != nil {
+		return toolOutcome{}, fmt.Errorf("unexpected mcp call output %q: %w", s, err)
+	}
+	if len(env.Content) == 0 || strings.TrimSpace(env.Content[0].Text) == "" {
+		return toolOutcome{}, fmt.Errorf("mcp call returned an empty result envelope: %q", s)
+	}
+	return parseWebMCPResult(env.Content[0].Text)
 }
 
 // webMCPResult is the result shape the runtime reports. items and value are
