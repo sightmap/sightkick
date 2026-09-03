@@ -86,10 +86,26 @@ func runCall(args []string) error {
 		return fmt.Errorf("resolve corpus dir: %w", err)
 	}
 
-	exe := &nativeExec{sm: sightmapPath, appDir: appDir, corpusDir: corpusDir, defaultTimeoutMs: *timeoutMs}
-	outcome := exe.run(&manifest.Tools[i], toolArgs)
+	toolDef := &manifest.Tools[i]
 
-	out, err := outcome.toJSON(toolGuidance(target, toolName))
+	// Two things come from compiling the manifest rather than reading it: the
+	// "call this next" hints, which are derived from its journeys, and the
+	// extractors behind a tool's returns, which are declared in the corpus and
+	// only named by the manifest.
+	compiled := compiledTool(target, toolName)
+	ret, err := returnSpecFor(toolDef.Returns, compiled)
+	if err != nil {
+		return err
+	}
+	var guidance []gen.Suggestion
+	if compiled != nil {
+		guidance = compiled.Guidance
+	}
+
+	exe := &nativeExec{sm: sightmapPath, appDir: appDir, corpusDir: corpusDir, defaultTimeoutMs: *timeoutMs}
+	outcome := exe.run(toolDef, ret, toolArgs)
+
+	out, err := outcome.toJSON(guidance)
 	if err != nil {
 		return err
 	}
@@ -100,20 +116,51 @@ func runCall(args []string) error {
 	return nil
 }
 
-// toolGuidance returns the "call this next" hints attached to a tool, which
-// are compiled from the manifest's journeys rather than declared on the tool
-// itself. Hints are a convenience, so a manifest that fails to compile — for a
-// reason that may have nothing to do with this tool — yields none instead of
-// failing the call.
-func toolGuidance(target, toolName string) []gen.Suggestion {
+// compiledTool compiles the manifest and returns this tool's compiled form, or
+// nil if the manifest does not compile. A compile failure may have nothing to
+// do with the tool being called, so it isn't fatal on its own — the caller
+// decides whether it needs what compiling would have produced.
+func compiledTool(target, toolName string) *gen.Tool {
 	ir, diags, err := gen.Build(target)
 	if err != nil || gen.HasErrors(diags) {
 		return nil
 	}
 	if i := slices.IndexFunc(ir.Tools, func(t gen.Tool) bool { return t.Name == toolName }); i >= 0 {
-		return ir.Tools[i].Guidance
+		return &ir.Tools[i]
 	}
 	return nil
+}
+
+// returnSpecFor pairs a tool's declared result with the compiled extractors
+// that read it. It returns nil for a tool that reads nothing, including a
+// returns: block carrying only a description.
+func returnSpecFor(declared *gen.ReturnDef, compiled *gen.Tool) (*returnSpec, error) {
+	if declared == nil || (declared.Value == nil && declared.List == nil) {
+		return nil, nil
+	}
+	// Reading a property means running the corpus's `extract:` directive for
+	// it, which only exists in compiled form. Without it there is no way to
+	// produce the result the tool promises, and returning nothing would look
+	// like a legitimately empty page.
+	if compiled == nil || compiled.Returns == nil {
+		return nil, errors.New("this tool returns a value, which needs the manifest to compile — run `sightkick build` to see why it doesn't")
+	}
+
+	if declared.Value != nil {
+		if compiled.Returns.Extractor == nil {
+			return nil, errors.New("compiled returns is missing its extractor")
+		}
+		return &returnSpec{
+			query:  declared.Value.Query,
+			fields: map[string]gen.Extractor{valueField: *compiled.Returns.Extractor},
+		}, nil
+	}
+
+	fields := make(map[string]gen.Extractor, len(compiled.Returns.Fields))
+	for name, f := range compiled.Returns.Fields {
+		fields[name] = f.Extractor
+	}
+	return &returnSpec{query: declared.List.Rows, fields: fields, isList: true}, nil
 }
 
 // parseCallParams turns repeated --param k=v flags into the tool's arguments.

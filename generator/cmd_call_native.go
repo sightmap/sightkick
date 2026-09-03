@@ -80,8 +80,9 @@ func (o toolOutcome) toJSON(guidance []gen.Suggestion) ([]byte, error) {
 
 // run executes a tool: check that the page is where the tool expects, skip the
 // steps if the tool's effect is already applied, otherwise run them, then read
-// back whatever the tool declares as its result.
-func (e *nativeExec) run(tool *gen.ToolDef, args map[string]any) toolOutcome {
+// back whatever the tool declares as its result. ret is nil for a tool that
+// declares no result to read.
+func (e *nativeExec) run(tool *gen.ToolDef, ret *returnSpec, args map[string]any) toolOutcome {
 	// A page mismatch is reported but not fatal. Tools are often callable from
 	// more than one place, and the steps themselves fail loudly enough if the
 	// page really is wrong.
@@ -115,8 +116,8 @@ func (e *nativeExec) run(tool *gen.ToolDef, args map[string]any) toolOutcome {
 		}
 	}
 
-	if tool.Returns != nil {
-		value, items, err := e.computeReturn(tool.Returns, args)
+	if ret != nil {
+		value, items, err := e.computeReturn(ret, args)
 		if err != nil {
 			return failf("returns: %v", err)
 		}
@@ -224,61 +225,74 @@ func (e *nativeExec) guardHolds(g *gen.GuardBody, args map[string]any) (bool, er
 	if err != nil {
 		return false, err
 	}
-	found, _, err := e.findElements(query, args)
+	found, err := e.findElements(query, args)
 	if err != nil {
 		return false, err
 	}
 	return (len(found) > 0) == wantMatch, nil
 }
 
-// returnValues reads a tool's declared result off elements already found on
-// the page.
-//
-// A `value` return reads one property from the first match; several matches is
-// not an error, the first one wins. Finding nothing yields no value at all,
-// which is different from finding an element whose property is empty. A `list`
-// return yields one row per match, and an empty list when there are no matches.
-func returnValues(ret *gen.ReturnDef, found []*sm.ComponentNode, props map[string]map[string]string) (*string, []map[string]string) {
-	switch {
-	case ret.Value != nil:
-		if len(found) == 0 {
-			return nil, nil
-		}
-		v := props[found[0].Id][ret.Value.Property]
-		return &v, nil
+// valueField is the field name a `value` return's single read is stored under
+// while it is being fetched. A list return's fields are named by the author,
+// and an empty name is not a legal one, so this cannot collide.
+const valueField = ""
 
-	case ret.List != nil:
-		items := make([]map[string]string, 0, len(found))
-		for _, node := range found {
-			row := make(map[string]string, len(ret.List.Fields))
-			for name, field := range ret.List.Fields {
-				row[name] = props[node.Id][field.Property]
+// returnSpec is what reading a tool's result takes: a query to find elements
+// with, and how to read each named field off one of them.
+//
+// The two halves come from different places. The query is the manifest's own
+// compquery string, resolved against a snapshot. The extractors are compiled
+// from the corpus, because reading a property means running the corpus's
+// `extract:` directive, which the manifest only names.
+type returnSpec struct {
+	query  string
+	fields map[string]gen.Extractor
+	isList bool
+}
+
+// computeReturn reads a tool's declared result off the live page: find the
+// elements the query names, then read each field off them.
+//
+// A `value` return reads from the first element found; several matches is not
+// an error, the first one wins. Finding nothing yields no value at all, which
+// is different from finding an element whose property is empty. A `list`
+// return yields one row per element, and an empty list when there are none.
+func (e *nativeExec) computeReturn(spec *returnSpec, args map[string]any) (*string, []map[string]string, error) {
+	found, err := e.findElements(spec.query, args)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ids := make([]string, len(found))
+	for i, node := range found {
+		ids[i] = node.Id
+	}
+	props, err := e.readProps(ids, spec.fields)
+	if err != nil {
+		return nil, nil, err
+	}
+	value, items := assembleReturn(spec, ids, props)
+	return value, items, nil
+}
+
+// assembleReturn shapes per-element property reads into the tool's result.
+func assembleReturn(spec *returnSpec, ids []string, props map[string]map[string]string) (*string, []map[string]string) {
+	if spec.isList {
+		items := make([]map[string]string, 0, len(ids))
+		for _, id := range ids {
+			row := props[id]
+			if row == nil {
+				row = map[string]string{}
 			}
 			items = append(items, row)
 		}
 		return nil, items
-
-	default:
-		return nil, nil // a returns: block with only a description reads nothing
 	}
-}
-
-func (e *nativeExec) computeReturn(ret *gen.ReturnDef, args map[string]any) (*string, []map[string]string, error) {
-	var query string
-	switch {
-	case ret.Value != nil:
-		query = ret.Value.Query
-	case ret.List != nil:
-		query = ret.List.Rows
-	default:
-		return nil, nil, nil
+	if len(ids) == 0 {
+		return nil, nil
 	}
-	found, props, err := e.findElements(query, args)
-	if err != nil {
-		return nil, nil, err
-	}
-	value, items := returnValues(ret, found, props)
-	return value, items, nil
+	v := props[ids[0]][valueField]
+	return &v, nil
 }
 
 // snapshotNode is the part of a `sightmap snapshot --json` tree this file
@@ -296,34 +310,34 @@ type snapshotDoc struct {
 }
 
 // findInSnapshot resolves a component query against a snapshot, returning the
-// elements it matched and every element's properties keyed by node id.
+// elements it matched.
 //
 // It reuses the same query engine the sightmap CLI uses to resolve its own
 // click and fill targets, so a query that selects an element here selects the
 // same one when acted on. A trailing `#N` in the query picks the Nth match;
 // out of range yields no match rather than an error.
-func findInSnapshot(data []byte, query string, args map[string]any) ([]*sm.ComponentNode, map[string]map[string]string, error) {
+func findInSnapshot(data []byte, query string, args map[string]any) ([]*sm.ComponentNode, error) {
 	var doc snapshotDoc
 	if err := json.Unmarshal(data, &doc); err != nil {
-		return nil, nil, fmt.Errorf("parse snapshot json: %w", err)
+		return nil, fmt.Errorf("parse snapshot json: %w", err)
 	}
 	if doc.Tree == nil {
-		return nil, nil, nil
+		return nil, nil
 	}
 	root, matches, props := snapshotToTree(doc.Tree)
 
 	q, err := compquery.ParseQuery(interpolate(query, args))
 	if err != nil {
-		return nil, nil, fmt.Errorf("parse query %q: %w", query, err)
+		return nil, fmt.Errorf("parse query %q: %w", query, err)
 	}
 	found := compquery.FindCandidates(root, matches, props, q)
 	if q.Index >= 0 {
 		if q.Index >= len(found) {
-			return nil, props, nil
+			return nil, nil
 		}
 		found = found[q.Index : q.Index+1]
 	}
-	return found, props, nil
+	return found, nil
 }
 
 // snapshotToTree rebuilds the snapshot as the three inputs the query engine
@@ -351,25 +365,115 @@ func snapshotToTree(n *snapshotNode) (*sm.ComponentNode, map[*sm.ComponentNode]*
 	return convert(n), matches, props
 }
 
-// findElements snapshots the live page and resolves query against it.
-func (e *nativeExec) findElements(query string, args map[string]any) ([]*sm.ComponentNode, map[string]map[string]string, error) {
+// findElements snapshots the live page and resolves query against it. The
+// snapshot also tags every element on the page with its node id, which is how
+// readProps finds them again afterwards.
+func (e *nativeExec) findElements(query string, args map[string]any) ([]*sm.ComponentNode, error) {
 	// `sightmap snapshot` writes to a path rather than stdout, so hand it a
 	// scratch file and read it straight back.
 	f, err := os.CreateTemp("", "sightkick-snapshot-*.json")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	f.Close()
 	defer os.Remove(f.Name())
 
 	if err := e.sightmap("snapshot", "--json", f.Name()); err != nil {
-		return nil, nil, fmt.Errorf("snapshot: %w", err)
+		return nil, fmt.Errorf("snapshot: %w", err)
 	}
 	data, err := os.ReadFile(f.Name())
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return findInSnapshot(data, query, args)
+	found, err := findInSnapshot(data, query, args)
+	return found, err
+}
+
+// extractJS reads a set of named properties off a set of elements, addressing
+// each element by the node id the last snapshot tagged it with.
+//
+// The extraction has to happen in the page. sightmap can also report property
+// values offline, from the snapshot alone, but its offline extractor
+// implements only a subset of the corpus `extract:` grammar — a property
+// declared as a bare CSS selector resolves to nothing there, and one declared
+// as `text` reads the accessibility tree's computed name, which is empty for a
+// plain container whose text sits in a child. Both cases silently return "",
+// which is indistinguishable from a genuinely empty value. Reading in the page
+// instead reproduces the extractor semantics exactly: prefer an explicit
+// accessible name, else the rendered text.
+const extractJS = `(function(ids, specs){
+  function accessibleText(el){
+    var labelledby = el.getAttribute && el.getAttribute("aria-labelledby");
+    if (labelledby) {
+      var text = labelledby.split(/\s+/)
+        .map(function(id){ var r = el.ownerDocument.getElementById(id); return r ? r.textContent.trim() : ""; })
+        .filter(Boolean).join(" ");
+      if (text) return text;
+    }
+    var aria = el.getAttribute && el.getAttribute("aria-label");
+    if (aria != null && aria.trim() !== "") return aria.trim();
+    if (el.labels && el.labels.length) {
+      var t = Array.prototype.map.call(el.labels, function(l){ return l.textContent.trim(); })
+        .filter(Boolean).join(" ");
+      if (t) return t;
+    }
+    var alt = el.getAttribute && el.getAttribute("alt");
+    if (alt != null && alt.trim() !== "") return alt.trim();
+    if (typeof el.innerText === "string" && el.innerText.trim() !== "") return el.innerText.trim();
+    return (el.textContent || "").trim();
+  }
+  function extract(el, ex){
+    if (ex.kind === "exists") return el.querySelector(ex.within || "*") ? "true" : "false";
+    var target = ex.within ? el.querySelector(ex.within) : el;
+    if (!target) return "";
+    if (ex.kind === "attr") return ex.attr ? (target.getAttribute(ex.attr) || "") : "";
+    return accessibleText(target);
+  }
+  var out = {};
+  ids.forEach(function(id){
+    var row = {};
+    var el = document.querySelector('[data-sightmap-id="' + id + '"]');
+    Object.keys(specs).forEach(function(name){ row[name] = el ? extract(el, specs[name]) : ""; });
+    out[id] = row;
+  });
+  return JSON.stringify(out);
+})(%s, %s)`
+
+// readProps reads every field in fields off every element in ids, in one round
+// trip, and returns them keyed by node id then field name.
+func (e *nativeExec) readProps(ids []string, fields map[string]gen.Extractor) (map[string]map[string]string, error) {
+	if len(ids) == 0 || len(fields) == 0 {
+		return map[string]map[string]string{}, nil
+	}
+	idsJSON, err := json.Marshal(ids)
+	if err != nil {
+		return nil, err
+	}
+	specsJSON, err := json.Marshal(fields)
+	if err != nil {
+		return nil, err
+	}
+
+	out, err := e.sightmapOutput("browser", "eval", fmt.Sprintf(extractJS, idsJSON, specsJSON))
+	if err != nil {
+		return nil, fmt.Errorf("read properties: %w", err)
+	}
+
+	// eval prints the expression's value JSON-encoded on the last line. The
+	// expression is itself a JSON string, so peel that one layer off first.
+	lines := strings.FieldsFunc(out, func(r rune) bool { return r == '\n' })
+	if len(lines) == 0 {
+		return nil, errors.New("read properties: eval returned nothing")
+	}
+	var inner string
+	if err := json.Unmarshal([]byte(strings.TrimSpace(lines[len(lines)-1])), &inner); err != nil {
+		return nil, fmt.Errorf("read properties: unexpected eval output %q: %w", out, err)
+	}
+	props := map[string]map[string]string{}
+	if err := json.Unmarshal([]byte(inner), &props); err != nil {
+		return nil, fmt.Errorf("read properties: %w", err)
+	}
+	return props, nil
 }
 
 // sightmap runs one sightmap subcommand. Every call names the corpus dir,
@@ -377,18 +481,26 @@ func (e *nativeExec) findElements(query string, args map[string]any) ([]*sm.Comp
 // the browser session to act on. A failure surfaces sightmap's own stderr,
 // where it explains things like a query that matched nothing.
 func (e *nativeExec) sightmap(args ...string) error {
+	_, err := e.sightmapOutput(args...)
+	return err
+}
+
+// sightmapOutput is sightmap plus the subcommand's stdout, for the few that
+// report their result there rather than acting on the page.
+func (e *nativeExec) sightmapOutput(args ...string) (string, error) {
 	cmd := exec.Command(e.sm, slices.Concat(args, []string{"--sightmap-dir", e.corpusDir})...)
 	cmd.Dir = e.appDir
-	if _, err := cmd.Output(); err != nil {
+	stdout, err := cmd.Output()
+	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			if msg := strings.TrimSpace(string(exitErr.Stderr)); msg != "" {
-				return errors.New(msg)
+				return "", errors.New(msg)
 			}
 		}
-		return err
+		return "", err
 	}
-	return nil
+	return string(stdout), nil
 }
 
 // paramPattern matches a {{param}} reference in a manifest string.

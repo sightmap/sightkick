@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"sightkick/generator/internal/gen"
-
-	sm "github.com/sightmap/sightmap/go/sightmap"
 )
 
 // fixtureSnapshot is a `sightmap snapshot --json` document: a tree of page
@@ -78,7 +76,7 @@ func TestFindInSnapshot(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			found, _, err := findInSnapshot([]byte(fixtureSnapshot), tc.query, tc.args)
+			found, err := findInSnapshot([]byte(fixtureSnapshot), tc.query, tc.args)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("findInSnapshot(%q) succeeded, want an error", tc.query)
@@ -248,86 +246,70 @@ func TestGuardQuery(t *testing.T) {
 	}
 }
 
-// TestReturnValues covers reading a tool's declared result off the elements
-// found on the page: which element a value comes from, how a missing element
-// differs from an empty property, and the shape of a list result.
-func TestReturnValues(t *testing.T) {
-	nodes := func(ids ...string) []*sm.ComponentNode {
-		var out []*sm.ComponentNode
-		for _, id := range ids {
-			out = append(out, &sm.ComponentNode{Id: id})
-		}
-		return out
-	}
+// TestAssembleReturn covers shaping property reads into a tool's result: which
+// element a value comes from, how a missing element differs from an empty
+// property, and the shape of a list result.
+func TestAssembleReturn(t *testing.T) {
 	props := map[string]map[string]string{
-		"a": {"total": "$10.00", "errorId": "payment-declined", "message": "Card declined"},
-		"b": {"total": "$99.99", "errorId": "promo-invalid", "message": "Invalid code"},
-		"c": {"total": ""},
+		"a": {valueField: "$10.00", "errorId": "payment-declined", "message": "Card declined"},
+		"b": {valueField: "$99.99", "errorId": "promo-invalid", "message": "Invalid code"},
+		"c": {valueField: ""},
 	}
 	strp := func(s string) *string { return &s }
 
 	tests := []struct {
 		name      string
-		ret       gen.ReturnDef
-		found     []*sm.ComponentNode
+		spec      returnSpec
+		ids       []string
 		wantValue *string
 		wantItems []map[string]string
 	}{
 		{
-			name:  "a value reads its property off the only match",
-			ret:   gen.ReturnDef{Value: &gen.ValueRef{Query: "Totals", Property: "total"}},
-			found: nodes("a"), wantValue: strp("$10.00"),
+			name: "a value reads from the only element found",
+			spec: returnSpec{query: "Totals"},
+			ids:  []string{"a"}, wantValue: strp("$10.00"),
 		},
 		{
-			name:  "several matches is not an error: the first one wins",
-			ret:   gen.ReturnDef{Value: &gen.ValueRef{Query: "Totals", Property: "total"}},
-			found: nodes("a", "b"), wantValue: strp("$10.00"),
+			name: "several elements is not an error: the first one wins",
+			spec: returnSpec{query: "Totals"},
+			ids:  []string{"a", "b"}, wantValue: strp("$10.00"),
 		},
 		{
-			name:  "an element whose property is empty still reports a value",
-			ret:   gen.ReturnDef{Value: &gen.ValueRef{Query: "Totals", Property: "total"}},
-			found: nodes("c"), wantValue: strp(""),
+			name: "an element whose property is empty still reports a value",
+			spec: returnSpec{query: "Totals"},
+			ids:  []string{"c"}, wantValue: strp(""),
 		},
 		{
-			name:  "no element at all reports no value",
-			ret:   gen.ReturnDef{Value: &gen.ValueRef{Query: "Totals", Property: "total"}},
-			found: nil, wantValue: nil,
+			name: "no element at all reports no value",
+			spec: returnSpec{query: "Totals"},
+			ids:  nil, wantValue: nil,
 		},
 		{
-			name: "a list emits one row per match, in match order",
-			ret: gen.ReturnDef{List: &gen.ListRef{Rows: "ErrorBanner", Fields: map[string]gen.FieldDef{
-				"errorId": {Property: "errorId"},
-				"message": {Property: "message"},
-			}}},
-			found: nodes("a", "b"),
+			name: "a list emits one row per element, in the order they were found",
+			spec: returnSpec{query: "ErrorBanner", isList: true},
+			ids:  []string{"a", "b"},
 			wantItems: []map[string]string{
-				{"errorId": "payment-declined", "message": "Card declined"},
-				{"errorId": "promo-invalid", "message": "Invalid code"},
+				{valueField: "$10.00", "errorId": "payment-declined", "message": "Card declined"},
+				{valueField: "$99.99", "errorId": "promo-invalid", "message": "Invalid code"},
 			},
 		},
 		{
-			name: "a field naming a property the row lacks comes back empty",
-			ret: gen.ReturnDef{List: &gen.ListRef{Rows: "ErrorBanner", Fields: map[string]gen.FieldDef{
-				"missing": {Property: "nope"},
-			}}},
-			found:     nodes("a"),
-			wantItems: []map[string]string{{"missing": ""}},
+			name:      "a row with nothing read off it is an empty row, not a missing one",
+			spec:      returnSpec{query: "ErrorBanner", isList: true},
+			ids:       []string{"unread"},
+			wantItems: []map[string]string{{}},
 		},
 		{
-			name:      "a list with no matches is an empty list, not an absent one",
-			ret:       gen.ReturnDef{List: &gen.ListRef{Rows: "ErrorBanner"}},
-			found:     nil,
+			name:      "a list with no elements is an empty list, not an absent one",
+			spec:      returnSpec{query: "ErrorBanner", isList: true},
+			ids:       nil,
 			wantItems: []map[string]string{},
-		},
-		{
-			name: "a returns block with only a description reads nothing",
-			ret:  gen.ReturnDef{Description: "just prose"},
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			value, items := returnValues(&tc.ret, tc.found, props)
+			value, items := assembleReturn(&tc.spec, tc.ids, props)
 			if !reflect.DeepEqual(value, tc.wantValue) {
 				t.Errorf("value = %v, want %v", derefOrNil(value), derefOrNil(tc.wantValue))
 			}
@@ -338,6 +320,97 @@ func TestReturnValues(t *testing.T) {
 			// toJSON renders the first as [] and omits the second entirely.
 			if (items == nil) != (tc.wantItems == nil) {
 				t.Errorf("items nil-ness = %v, want %v", items == nil, tc.wantItems == nil)
+			}
+		})
+	}
+}
+
+// TestReturnSpecFor covers pairing a tool's declared result with the compiled
+// extractors that read it. The declaration names a property; only the compiled
+// form knows how to pull it off an element, so a tool that returns something
+// cannot run without it.
+func TestReturnSpecFor(t *testing.T) {
+	textExtractor := gen.Extractor{Kind: "text"}
+	priceExtractor := gen.Extractor{Kind: "text", Within: ".result-price"}
+
+	tests := []struct {
+		name       string
+		declared   *gen.ReturnDef
+		compiled   *gen.Tool
+		wantNil    bool
+		wantErr    bool
+		wantQuery  string
+		wantFields map[string]gen.Extractor
+		wantList   bool
+	}{
+		{
+			name:     "a tool that returns nothing needs no spec",
+			declared: nil, wantNil: true,
+		},
+		{
+			name:     "a returns block with only a description reads nothing",
+			declared: &gen.ReturnDef{Description: "just prose"}, wantNil: true,
+		},
+		{
+			name:       "a value pairs its query with the single compiled extractor",
+			declared:   &gen.ReturnDef{Value: &gen.ValueRef{Query: "StarButton", Property: "label"}},
+			compiled:   &gen.Tool{Returns: &gen.Return{Kind: "value", Extractor: &textExtractor}},
+			wantQuery:  "StarButton",
+			wantFields: map[string]gen.Extractor{valueField: textExtractor},
+		},
+		{
+			name: "a list pairs its row query with one extractor per named field",
+			declared: &gen.ReturnDef{List: &gen.ListRef{Rows: "ResultItem", Fields: map[string]gen.FieldDef{
+				"price": {Property: "price"},
+			}}},
+			compiled: &gen.Tool{Returns: &gen.Return{Kind: "list", Fields: map[string]gen.Field{
+				"price": {Property: "price", Extractor: priceExtractor},
+			}}},
+			wantQuery:  "ResultItem",
+			wantFields: map[string]gen.Extractor{"price": priceExtractor},
+			wantList:   true,
+		},
+		{
+			name:     "a value with no compiled form at all is an error, not an empty result",
+			declared: &gen.ReturnDef{Value: &gen.ValueRef{Query: "StarButton", Property: "label"}},
+			compiled: nil, wantErr: true,
+		},
+		{
+			name:     "a value whose compiled form has no extractor is an error",
+			declared: &gen.ReturnDef{Value: &gen.ValueRef{Query: "StarButton", Property: "label"}},
+			compiled: &gen.Tool{Returns: &gen.Return{Kind: "value"}}, wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := returnSpecFor(tc.declared, tc.compiled)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("returnSpecFor = %+v, want an error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("returnSpecFor: %v", err)
+			}
+			if tc.wantNil {
+				if got != nil {
+					t.Errorf("spec = %+v, want nil", got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatal("spec = nil, want one")
+			}
+			if got.query != tc.wantQuery {
+				t.Errorf("query = %q, want %q", got.query, tc.wantQuery)
+			}
+			if !reflect.DeepEqual(got.fields, tc.wantFields) {
+				t.Errorf("fields = %+v, want %+v", got.fields, tc.wantFields)
+			}
+			if got.isList != tc.wantList {
+				t.Errorf("isList = %v, want %v", got.isList, tc.wantList)
 			}
 		})
 	}
