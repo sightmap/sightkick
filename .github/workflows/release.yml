@@ -1,37 +1,98 @@
 name: release
 
-# Tag-triggered release. Push a tag `vX.Y.Z` and this:
-#   1. verifies the build + that the embedded skills are in sync,
-#   2. goreleaser builds the cross-platform `sightkick` binaries (config:
-#      generator/.goreleaser.yml) and cuts a GitHub release with the archives,
-#   3. repackages those archives into npm packages and publishes them:
-#        - one @sightmap/sightkick-<os>-<arch> per platform (binary, os/cpu-gated),
+# Three jobs, one workflow, on every push to main:
+#
+#   1. version: while changesets are pending, changesets/action opens/updates a
+#      "Version Packages" PR that bumps generator/npm/package.json and writes its
+#      CHANGELOG.md. Nothing is tagged or published yet. Once that PR merges (no
+#      changesets left), this job also tags the release (vX.Y.Z) and pushes it.
+#
+#   2. goreleaser: verifies the build + embedded-skill sync, then builds the
+#      cross-platform `sightkick` binaries (config: generator/.goreleaser.yml) and
+#      cuts a GitHub release; its archives are handed to the npm job as an artifact.
+#
+#   3. publish-npm: repackages those archives into npm packages and publishes:
+#        - one @sightmap/sightkick-<os>-<arch> per platform (the binary, os/cpu-gated),
 #        - the @sightmap/sightkick meta package (optionalDependencies -> the above).
+#      npm auth uses OIDC trusted publishing; no NPM_TOKEN secret.
 #
-# The tag name is the version (goreleaser ldflags + the npm --version both key off
-# it), so `git tag v0.1.0 && git push origin v0.1.0` releases 0.1.0.
+# A tag pushed by a workflow's own GITHUB_TOKEN doesn't trigger another workflow,
+# so jobs 2 and 3 don't rely on the tag push to start; they're gated on job 1's
+# output. They no-op when generator/npm/package.json's version is already tagged,
+# so ordinary pushes to main (docs merges, etc.) are harmless.
 #
-# Auth: an NPM_TOKEN repo secret (automation/granular token with write to the
-# @sightmap/sightkick* packages). OIDC trusted publishing + provenance (what
-# sightmap uses) needs a PUBLIC source repo; switch the publish steps to it (drop
-# NODE_AUTH_TOKEN, add `permissions: id-token: write` + NPM_CONFIG_PROVENANCE) once
-# this repo is public.
+# One-time npm setup: register a Trusted Publisher (GitHub Actions, repository
+# "sightmap/sightkick", workflow "release.yml") on each published package — the
+# @sightmap/sightkick meta and all six @sightmap/sightkick-<os>-<arch> packages.
+# The repo must be public (npm rejects provenance from a private source repo).
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch: {}
 
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+# Least privilege by default; each job widens only what it needs.
 permissions:
   contents: read
 
 jobs:
-  release:
+  version:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # goreleaser creates the GitHub release + uploads assets
+      contents: write # push the Version Packages PR branch + the release tag
+      pull-requests: write
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Version Packages PR
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: npm run version-packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for unreleased version
+        id: check
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: |
+          VERSION=$(node -p "require('./generator/npm/package.json').version")
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "v$VERSION already tagged, nothing to release"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tag release
+        if: steps.check.outputs.should_release == 'true'
+        run: |
+          git tag "v${{ steps.check.outputs.version }}"
+          git push origin "v${{ steps.check.outputs.version }}"
+
+  goreleaser:
+    needs: version
+    if: needs.version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub release and upload the binary assets
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.version.outputs.version }}
           fetch-depth: 0
 
       - uses: actions/setup-go@v5
@@ -39,11 +100,7 @@ jobs:
           go-version: "1.23"
           cache-dependency-path: generator/go.sum
 
-      - name: Version from tag
-        id: v
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      # Fail fast on a broken build or drifted embedded skills before we tag/publish.
+      # Fail fast on a broken build or drifted embedded skills before we publish.
       - name: Verify
         working-directory: generator
         run: |
@@ -64,16 +121,53 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Hand the built archives to the npm job (avoids re-downloading the release
+      # we just cut, and keeps build and publish privileges separate).
+      - name: Upload release archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-archives
+          path: |
+            generator/dist/*.tar.gz
+            generator/dist/*.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-npm:
+    needs: [version, goreleaser]
+    if: needs.version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # mint the OIDC token npm uses for trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.version.outputs.version }}
+
+      - name: Download release archives
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-archives
+          path: dist-archives
+
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
+      # Trusted publishing (OIDC) requires npm >= 11.5.1; ensure a new enough CLI
+      # regardless of what the Node image bundles.
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      # Build the per-platform packages + version-synced meta from the archives.
       - name: Assemble npm packages
-        run: node generator/npm/scripts/build-npm-packages.mjs --version "${{ steps.v.outputs.version }}" --dist generator/dist --out npm-staging
+        run: node generator/npm/scripts/build-npm-packages.mjs --version "${{ needs.version.outputs.version }}" --dist dist-archives --out npm-staging
 
       # Platform packages first, then the meta (whose optionalDependencies point at
-      # them). Each generated package.json carries publishConfig.access=public.
+      # them). No NODE_AUTH_TOKEN: npm exchanges the OIDC token via each package's
+      # configured trusted publisher; provenance is attached.
       - name: Publish platform packages
         run: |
           for dir in npm-staging/@sightmap/sightkick-*/; do
@@ -81,9 +175,9 @@ jobs:
             ( cd "$dir" && npm publish )
           done
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
 
       - name: Publish meta package
         run: cd npm-staging/meta && npm publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true

@@ -1,4 +1,8 @@
 packages:
   - "packages/*"
+  # The published meta package (@sightmap/sightkick). Listed so changesets tracks
+  # and versions it; its platform optionalDependencies are generated at release
+  # time by generator/npm/scripts/build-npm-packages.mjs, not pinned here.
+  - "generator/npm"
 allowBuilds:
   esbuild: true

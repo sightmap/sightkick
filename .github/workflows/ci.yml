@@ -1,0 +1,55 @@
+name: ci
+
+# Per-PR verification (the release workflow only runs post-merge on main). Two
+# path-independent jobs: the Go generator (build + embedded-skill drift-check +
+# tests) and the TypeScript runtime (typecheck + tests).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  generator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: generator/go.sum
+
+      - name: Build, drift-check, test
+        working-directory: generator
+        run: |
+          go build ./...
+          go generate ./skills/...
+          # go generate rewrites the embedded copy (generator/skills = ./skills here);
+          # any diff means it drifted from the canonical <repo>/skills source.
+          git diff --exit-code -- skills || {
+            echo "::error::embedded skills are out of sync — run 'go generate ./skills/...' and commit"; exit 1;
+          }
+          go test ./...
+
+  runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck + test
+        run: |
+          pnpm -r typecheck
+          pnpm -r test

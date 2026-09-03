@@ -7,7 +7,9 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "changeset": "npx --yes @changesets/cli@^2.29.7",
+    "version-packages": "npx --yes @changesets/cli@^2.29.7 version"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

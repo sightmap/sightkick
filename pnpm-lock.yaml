@@ -15,6 +15,8 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.20.1)(happy-dom@15.11.7)
 
+  generator/npm: {}
+
   packages/runtime:
     devDependencies:
       esbuild:

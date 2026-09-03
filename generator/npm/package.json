@@ -30,14 +30,6 @@
     "README.md",
     "skills/"
   ],
-  "optionalDependencies": {
-    "@sightmap/sightkick-darwin-arm64": "0.0.0",
-    "@sightmap/sightkick-darwin-x64": "0.0.0",
-    "@sightmap/sightkick-linux-arm64": "0.0.0",
-    "@sightmap/sightkick-linux-x64": "0.0.0",
-    "@sightmap/sightkick-win32-arm64": "0.0.0",
-    "@sightmap/sightkick-win32-x64": "0.0.0"
-  },
   "publishConfig": {
     "access": "public"
   }
