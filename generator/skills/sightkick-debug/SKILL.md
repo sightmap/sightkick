@@ -37,6 +37,31 @@ To **write** the `webmcp.tools.yaml` (its tool/step/`returns`/`journeys` grammar
 see the **`sightkick-authoring`** skill — this skill assumes it already exists and
 compiles.
 
+## Quick start: `sightkick browser`
+
+For the common case, one command does the whole setup — build the IR, start a
+sightmap session, and persist-inject the runtime + tools:
+
+```sh
+sightkick browser <CORPUS_DIR>
+#   auto-opens the corpus's home-view URL (or pass --url URL)
+#   --webmcp         expose the native document.modelContext (adds the blink flags)
+#   --extensions P   load an unpacked extension (e.g. a WebMCP inspector)
+#   --profile/--cdp-port/--chrome-flag   passed through to sightmap
+#   --no-start       inject into an already-running session (e.g. after editing the corpus)
+```
+
+It runs sightmap from `<CORPUS_DIR>`, so the session lives in that dir's
+`.sightmap/` — **drive it from there** (`cd <CORPUS_DIR> && sightmap browser
+eval …`, see §4). The inject is **persisted**, so on SPA route changes (and, once
+sightmap's persist re-injection lands, full navigations too) the tools
+re-register automatically. Re-run `sightkick browser <CORPUS_DIR> --no-start`
+after editing the corpus to refresh the injected IR.
+
+The manual steps below (§1–§3) are the same thing unbundled — reach for them for
+finer control, to understand what's happening, or when driving a site the wrapper
+didn't start.
+
 ## 1. Build the two artifacts
 
 Both come straight from the installed `sightkick` CLI:

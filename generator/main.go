@@ -17,12 +17,17 @@ func usage() {
 
 Usage:
   sightkick build <manifest.yaml | app-dir> [-o out.json] [--verify]
+  sightkick browser <app-dir> [--url URL] [--webmcp] [--extensions PATHS] [--profile DIR] [--cdp-port N] [--no-start]
   sightkick runtime [-o out.js]
   sightkick skills install [--target DIR]
 
   build    compile a corpus + manifest into IR (stdout, or -o out.json).
            --verify checks each tool's returns extractors against the view's
            captured snapshots and warns on fields that resolve empty on every row.
+  browser  build the IR, start a sightmap browser session (auto-URL from the
+           corpus home view unless --url; --webmcp adds the native-modelContext
+           blink flags), and persist-inject the runtime + IR so the tools
+           register on the page. Requires the sightmap CLI on PATH.
   runtime  emit the runtime bundle to inject into a live page (stdout, or -o out.js).
   skills   install the embedded agent skills (default ~/.agents/skills).`)
 	os.Exit(2)
@@ -45,6 +50,13 @@ func main() {
 	}
 	if args[0] == "runtime" {
 		if err := runRuntime(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, "✗ "+err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+	if args[0] == "browser" {
+		if err := runBrowser(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, "✗ "+err.Error())
 			os.Exit(1)
 		}

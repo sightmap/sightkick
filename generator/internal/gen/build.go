@@ -23,6 +23,41 @@ func Build(target string) (IR, []Diagnostic, error) {
 	return build(target, false)
 }
 
+// StartURL returns a representative URL to open for the corpus behind target (a
+// manifest file or a directory holding webmcp.tools.yaml): the home view's URL
+// (route "/"), else the first view that declares a URL. Empty string if the
+// corpus declares no view URL. Used by `sightkick browser` to auto-derive where
+// to point the session.
+func StartURL(target string) (string, error) {
+	manifestPath := ResolveManifestPath(target)
+	m, _, err := LoadManifest(manifestPath)
+	if err != nil {
+		return "", err
+	}
+	corpusDir := m.Corpus
+	if !filepath.IsAbs(corpusDir) {
+		corpusDir = filepath.Join(filepath.Dir(manifestPath), corpusDir)
+	}
+	corpus, err := sm.Load(corpusDir)
+	if err != nil {
+		return "", err
+	}
+	var fallback string
+	for i := range corpus.Views {
+		v := corpus.Views[i]
+		if v.URL == "" {
+			continue
+		}
+		if v.Route == "/" {
+			return v.URL, nil
+		}
+		if fallback == "" {
+			fallback = v.URL
+		}
+	}
+	return fallback, nil
+}
+
 // BuildVerified is Build plus the build-time extractor verification pass, which
 // checks each tool's returns extractors against the view's captured snapshots
 // (see Verify). Opt-in because it requires captures on disk.
