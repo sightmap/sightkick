@@ -24,7 +24,7 @@ const (
 	viaCLI    = "cli"
 )
 
-// runCall invokes one tool from a webmcp.tools.yaml manifest against a live
+// runCall invokes one tool from the .sightkick/ tool layer against a live
 // browser session and prints its result as JSON, exiting non-zero if the tool
 // failed. The session has to already be running (`sightmap browser start`);
 // nothing is injected into the page. --via selects which of the two execution
@@ -68,8 +68,11 @@ func runCall(args []string) error {
 		return err
 	}
 
-	manifestPath := gen.ResolveManifestPath(target)
-	manifest, diags, err := gen.LoadManifest(manifestPath)
+	skDir, err := gen.ResolveSightkickDir(target)
+	if err != nil {
+		return err
+	}
+	manifest, diags, err := gen.LoadManifest(skDir)
 	if err != nil {
 		return fmt.Errorf("load manifest: %w", err)
 	}
@@ -79,19 +82,17 @@ func runCall(args []string) error {
 
 	i := slices.IndexFunc(manifest.Tools, func(t gen.ToolDef) bool { return t.Name == toolName })
 	if i < 0 {
-		return fmt.Errorf("tool %q not found in %s", toolName, manifestPath)
+		return fmt.Errorf("tool %q not found in %s", toolName, skDir)
 	}
 
-	// sightmap runs with its working directory set to appDir, so the corpus
-	// path has to be absolute — a relative one would resolve against appDir a
-	// second time and point somewhere that doesn't exist.
-	appDir := target
-	if info, statErr := os.Stat(target); statErr == nil && !info.IsDir() {
-		appDir = filepath.Dir(target)
-	}
+	// sightmap runs with its working directory set to appDir (the parent of the
+	// .sightkick dir), so the corpus path has to be absolute — a relative one
+	// would resolve against appDir a second time and point somewhere that
+	// doesn't exist.
+	appDir := filepath.Dir(skDir)
 	corpusDir := manifest.Corpus
 	if !filepath.IsAbs(corpusDir) {
-		corpusDir = filepath.Join(filepath.Dir(manifestPath), corpusDir)
+		corpusDir = filepath.Join(skDir, corpusDir)
 	}
 	if corpusDir, err = filepath.Abs(corpusDir); err != nil {
 		return fmt.Errorf("resolve corpus dir: %w", err)

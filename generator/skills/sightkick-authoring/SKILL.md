@@ -1,20 +1,35 @@
 ---
 name: sightkick-authoring
-description: Author a webmcp.tools.yaml — the sightkick manifest that turns a sightmap corpus into named WebMCP tools (atomic view-scoped actions + guidance journeys), then compile it to IR with `sightkick build`. Use when you have (or are building) a `.sightmap/` corpus and want to define the tools an agent can call on that app. Pairs with sightmap-authoring (writes the corpus this reads) and sightkick-debug (runs the compiled tools on a live page).
+description: Author a .sightkick/ tool layer — the sightkick manifest that turns a sightmap corpus into named WebMCP tools (atomic view-scoped actions + guidance journeys), then compile it to IR with `sightkick build`. Use when you have (or are building) a `.sightmap/` corpus and want to define the tools an agent can call on that app. Pairs with sightmap-authoring (writes the corpus this reads) and sightkick-debug (runs the compiled tools on a live page).
 activation:
   - a `.sightmap/` corpus exists (or is being authored) and you want to define WebMCP tools over it
-  - writing or editing a `webmcp.tools.yaml`
+  - writing or editing a `.sightkick/` tool layer
   - a `sightkick build` reports unresolved component/property/view references
 ---
 
-# sightkick-authoring: write a webmcp.tools.yaml
+# sightkick-authoring: write a .sightkick/ tool layer
 
 sightkick compiles two inputs into a self-contained **IR**: a `.sightmap/` corpus
 (the app's component map — authored with the **`sightmap-authoring`** skill) and a
-**`webmcp.tools.yaml`** manifest (the *tool layer*, authored here). `sightkick
-build` resolves every reference in the manifest against the corpus and reports
-unresolved ones with candidate lists. Once it compiles, drive the tools on a live
-page with the **`sightkick-debug`** skill.
+**`.sightkick/`** tool layer (authored here). `sightkick build` resolves every
+reference against the corpus and reports unresolved ones with candidate lists.
+Once it compiles, drive the tools on a live page with the **`sightkick-debug`**
+skill.
+
+The two sit side by side in the app directory:
+
+```
+<app>/
+  .sightmap/     # the corpus (components + views), read by sightkick
+  .sightkick/    # the tool layer, authored here
+    *.yaml       # any number of files — all merged into one manifest
+```
+
+`.sightkick/` mirrors `.sightmap/`: every `*.yaml` file inside is **merged** into
+one manifest (tools and journeys concatenated), with **no dependencies** between
+files — the whole directory is the manifest. Split a large tool layer however
+helps (e.g. one file per view, plus a `journeys.yaml`); keep a tiny one in a
+single `tools.yaml`.
 
 **Prerequisite:** the corpus must exist first — tools reference corpus
 **component names** and **declared properties**, so if a name/property isn't in
@@ -34,13 +49,21 @@ the corpus, author it there (sightmap-authoring) before referencing it here.
 
 ## File shape
 
+Each `.sightkick/*.yaml` file may set any of these top-level keys; they're merged
+across the directory:
+
 ```yaml
-version: 1                 # required (must be 1)
-name: myapp                # the IR name
-corpus: ./.sightmap        # required — path to the corpus dir, relative to this file
-tools: [ ... ]             # required, non-empty
+version: 1                 # optional (defaults to 1); set it once
+name: myapp                # optional — the IR name; defaults to the app dir's name
+corpus: ../.sightmap       # optional — path to the corpus, relative to .sightkick/;
+                           #   defaults to the sibling ../.sightmap
+tools: [ ... ]             # the tools (at least one across the whole directory)
 journeys: [ ... ]          # optional
 ```
+
+The singular fields (`version`/`name`/`corpus`) are taken from whichever file
+sets them (a conflict warns); `tools` and `journeys` accumulate. Most apps set
+`version`/`name` in the first file and never touch `corpus`.
 
 ## Tools
 
@@ -136,10 +159,12 @@ anything — they only shape the breadcrumbs in results.
 
 ## Worked example (a task-list app)
 
+One file, `.sightkick/tools.yaml` (no `corpus:` — it defaults to the sibling
+`../.sightmap`). Split it across several `.sightkick/*.yaml` files once it grows.
+
 ```yaml
 version: 1
 name: tasks
-corpus: ./.sightmap
 tools:
   - name: list_tasks
     description: List the current tasks and whether each is done.
@@ -194,9 +219,9 @@ journeys:
 ## Build & fix
 
 ```sh
-sightkick build <DIR> -o /tmp/x.ir.json     # <DIR> holds webmcp.tools.yaml + the corpus
-sightkick build <DIR> --verify              # also checks returns extractors against captured
-                                            #   view snapshots; warns on fields empty on every row
+sightkick build <APP_DIR> -o /tmp/x.ir.json  # <APP_DIR> holds .sightkick/ + .sightmap/
+sightkick build <APP_DIR> --verify           # also checks returns extractors against captured
+                                             #   view snapshots; warns on fields empty on every row
 ```
 
 The compiler is your validator. Common diagnostics and fixes:

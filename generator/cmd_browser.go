@@ -83,14 +83,15 @@ func runBrowser(args []string) error {
 			sm, sightmapVersion(sm))
 	}
 
-	// Run every sightmap subcommand from the app dir so its .sightmap/.session
-	// lands next to the corpus — the session is then discoverable by any
-	// `sightmap browser` command run from that dir, and start won't go sessionless
-	// for lack of a .sightmap/ (the corpus is right there).
-	appDir := target
-	if info, statErr := os.Stat(target); statErr == nil && !info.IsDir() {
-		appDir = filepath.Dir(target)
+	// Run every sightmap subcommand from the app dir (the parent of the
+	// .sightkick tool layer) so its .sightmap/.session lands next to the corpus —
+	// the session is then discoverable by any `sightmap browser` command run from
+	// that dir, and start won't go sessionless for lack of a .sightmap/.
+	skDir, err := gen.ResolveSightkickDir(target)
+	if err != nil {
+		return err
 	}
+	appDir := filepath.Dir(skDir)
 
 	// 1) Compile the corpus + manifest to IR.
 	ir, diags, err := gen.Build(target)

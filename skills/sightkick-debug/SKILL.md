@@ -1,14 +1,14 @@
 ---
 name: sightkick-debug
-description: Drive and debug a generated sightkick WebMCP tool script on a live page via `sightmap browser`, with no bespoke sightkick extension. Use when you have a sightkick corpus + `webmcp.tools.yaml` (in the sightkick repo's `examples/` or a `sites/<name>/` dir) and want to inject its compiled tools into a running site and exercise them — either agent-driven (getTools/executeTool over `sightmap browser eval`) or Gemini-driven via the vendored WebMCP inspector.
+description: Drive and debug a generated sightkick WebMCP tool script on a live page via `sightmap browser`, with no bespoke sightkick extension. Use when you have a sightkick `.sightkick/` tool layer + `.sightmap/` corpus (in the sightkick repo's `examples/` or a `sites/<name>/` dir) and want to inject its compiled tools into a running site and exercise them — either agent-driven (getTools/executeTool over `sightmap browser eval`) or Gemini-driven via the vendored WebMCP inspector.
 activation:
-  - a sightkick `webmcp.tools.yaml` + `.sightmap/` corpus is present and you want to run its tools on a live page
+  - a sightkick `.sightkick/` tool layer + `.sightmap/` corpus is present and you want to run its tools on a live page
   - debugging why a generated WebMCP tool does/doesn't register or fire on a real site
 ---
 
 # sightkick-debug: run generated WebMCP tools on a live page
 
-sightkick compiles a `.sightmap/` corpus + a `webmcp.tools.yaml` into an **IR**,
+sightkick compiles a `.sightmap/` corpus + a `.sightkick/` tool layer into an **IR**,
 and a ~19 KB runtime bundle turns that IR into WebMCP tools on
 `document.modelContext`. You do **not** need a bespoke extension to get them onto
 a page: `sightmap browser eval` injects the runtime bundle, then
@@ -29,11 +29,11 @@ sightmap browser install                 # Chrome-for-Testing; needs >=152 for n
 
 That installs the **`sightmap-browser`** skill (driving a live session) and
 **`sightmap-authoring`** skill (building the `.sightmap/` corpus) alongside this
-one — everything needed to build and test a `webmcp.tools.yaml`. No repo checkout
-is required; `<CORPUS_DIR>` below is any directory holding a `webmcp.tools.yaml`
+one — everything needed to build and test a `.sightkick/` tool layer. No repo checkout
+is required; `<CORPUS_DIR>` below is any directory holding a `.sightkick/` tool layer
 + `.sightmap/` corpus.
 
-To **write** the `webmcp.tools.yaml` (its tool/step/`returns`/`journeys` grammar),
+To **write** the `.sightkick/` tool layer (its tool/step/`returns`/`journeys` grammar),
 see the **`sightkick-authoring`** skill — this skill assumes it already exists and
 compiles.
 
@@ -70,7 +70,7 @@ Both come straight from the installed `sightkick` CLI:
 # The payload: the runtime bundle (exposes window.__sightkick.load).
 sightkick runtime -o /tmp/sightkick-runtime.js
 
-# The IR for the corpus you're testing (any dir with webmcp.tools.yaml + .sightmap/).
+# The IR for the corpus you're testing (any dir with .sightkick/ + .sightmap/).
 sightkick build <CORPUS_DIR> -o /tmp/x.ir.json
 ```
 

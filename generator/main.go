@@ -1,4 +1,4 @@
-// Command sightkick compiles a webmcp.tools.yaml + sightmap corpus into IR.
+// Command sightkick compiles a .sightkick/ tool layer + sightmap corpus into IR.
 package main
 
 import (
@@ -13,10 +13,10 @@ import (
 var Version = "dev"
 
 func usage() {
-	fmt.Fprintln(os.Stderr, `sightkick — compile a webmcp.tools.yaml + sightmap corpus into IR
+	fmt.Fprintln(os.Stderr, `sightkick — compile a .sightkick/ tool layer + sightmap corpus into IR
 
 Usage:
-  sightkick build <manifest.yaml | app-dir> [-o out.json] [--verify]
+  sightkick build <app-dir | .sightkick-dir> [-o out.json] [--verify]
   sightkick browser <app-dir> [--url URL] [--webmcp] [--extensions PATHS] [--profile DIR] [--cdp-port N] [--no-start]
   sightkick call <app-dir> <tool> [--param k=v ...] [--via webmcp|cli] [--timeout-ms N]
   sightkick runtime [-o out.js]
@@ -29,7 +29,7 @@ Usage:
            corpus home view unless --url; --webmcp adds the native-modelContext
            blink flags), and persist-inject the runtime + IR so the tools
            register on the page. Requires the sightmap CLI on PATH.
-  call     invoke one tool from a webmcp.tools.yaml manifest by name against a
+  call     invoke one tool from the .sightkick/ tool layer by name against a
            live browser session, and print its ToolResult (with guidance) as
            JSON; exits non-zero on ok:false. --via picks how it runs:
              webmcp (default)  ask the page's own registered WebMCP tool to

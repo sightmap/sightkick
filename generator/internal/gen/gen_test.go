@@ -216,8 +216,8 @@ views:
       - name: Field
         selector: ".field"
 `)
-	writeFile(t, filepath.Join(dir, "webmcp.tools.yaml"), `version: 1
-corpus: ./.sightmap
+	writeFile(t, filepath.Join(dir, ".sightkick", "tools.yaml"), `version: 1
+corpus: ../.sightmap
 tools:
   - name: do_thing
     mode: live
@@ -256,9 +256,9 @@ views:
       - name: Widget
         selector: ".widget"
 `)
-	writeFile(t, filepath.Join(dir, "webmcp.tools.yaml"), `version: 1
+	writeFile(t, filepath.Join(dir, ".sightkick", "tools.yaml"), `version: 1
 name: mini
-corpus: ./.sightmap
+corpus: ../.sightmap
 tools:
   - name: bad
     mode: live
@@ -293,8 +293,8 @@ views:
       - name: Field
         selector: ".field"
 `)
-	writeFile(t, filepath.Join(dir, "webmcp.tools.yaml"), `version: 1
-corpus: ./.sightmap
+	writeFile(t, filepath.Join(dir, ".sightkick", "tools.yaml"), `version: 1
+corpus: ../.sightmap
 tools:
   - name: bad
     mode: live
@@ -363,8 +363,8 @@ views:
       - name: Field
         selector: ".field"
 `)
-	writeFile(t, filepath.Join(dir, "webmcp.tools.yaml"), `version: 1
-corpus: ./.sightmap
+	writeFile(t, filepath.Join(dir, ".sightkick", "tools.yaml"), `version: 1
+corpus: ../.sightmap
 tools:
   - name: do_thing
     mode: live
@@ -406,6 +406,9 @@ func findDiag(diags []Diagnostic, code string) *Diagnostic {
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-// Package gen compiles a webmcp.tools.yaml manifest against a sightmap corpus
+// Package gen compiles a .sightkick/ tool layer against a sightmap corpus
 // into sightkick's self-contained IR. Corpus reading, $ref expansion, hierarchy
 // flattening, and route matching are delegated to the sightmap reference library
 // (github.com/sightmap/sightmap/go/sightmap); this package owns only the tool

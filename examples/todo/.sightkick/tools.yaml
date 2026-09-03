@@ -2,7 +2,6 @@ version: 1
 name: todo
 # Corpus is the copied Potemkin todo sightmap. sightkick references it purely at
 # the spec level — no dependency on the Potemkin app or the sightmap repo.
-corpus: ./.sightmap
 
 tools:
   - name: add_todo

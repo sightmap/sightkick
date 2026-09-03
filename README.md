@@ -34,7 +34,7 @@ sightmap construct, so it stays pure TypeScript.
 ## Layout
 
 ```
-generator/     # Go CLI: webmcp.tools.yaml + .sightmap corpus -> IR (JSON)
+generator/     # Go CLI: .sightkick/ tool layer + .sightmap corpus -> IR (JSON)
                #   (consumes github.com/sightmap/sightmap/go); embeds + installs the skills
 packages/
   runtime/     # browser: boot + atomic-tool execution + WebMCP registration
@@ -57,7 +57,7 @@ cd generator
 go run . build ../examples/todo
 ```
 
-This compiles `examples/todo/webmcp.tools.yaml` against
+This compiles `examples/todo/.sightkick/` against
 `examples/todo/.sightmap/` into a self-contained **IR**: every component
 reference resolved to concrete DOM locators, every property `value`/`list`
 resolved to a DOM extractor, and unresolved refs reported at compile time with
@@ -128,10 +128,11 @@ sightkick skills install     # or, from a release: npx @sightmap/sightkick skill
 
 - **`.sightmap/` corpus** — the sightmap authority (views, components,
   properties, routes). sightkick reads it; it never writes it.
-- **`webmcp.tools.yaml`** — the *skill layer*. A consumer format (not a sightmap
-  SEP): atomic, view-scoped tools that reference corpus components by component
-  query, plus a `journeys:` transition graph that compiles into guidance. Live
-  DOM flows only; no `mode: fetch`.
+- **`.sightkick/` tool layer** — a consumer format (not a sightmap SEP), sibling
+  to `.sightmap/`: any number of `*.yaml` files, merged into one manifest, of
+  atomic view-scoped tools that reference corpus components by component query,
+  plus a `journeys:` transition graph that compiles into guidance. Live DOM flows
+  only; no `mode: fetch`.
 
 ## Status
 

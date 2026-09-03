@@ -1,14 +1,21 @@
 package gen
 
 import (
+	"io/fs"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
-// webmcp.tools.yaml — the skill layer. A consumer format versioned independently
-// of the sightmap spec. Live DOM flows are the spine; mode:api is opt-in
-// reads-only; there is no mode:fetch.
+// The tool layer lives in a `.sightkick/` directory (a sibling of the corpus's
+// `.sightmap/`). Every *.yaml file inside is merged into one Manifest — tools
+// and journeys concatenated — so a large tool layer can be split across files
+// with no explicit dependencies (the whole directory is the manifest). It's a
+// consumer format versioned independently of the sightmap spec: live DOM flows
+// are the spine; mode:api is opt-in reads-only; there is no mode:fetch.
 
 // ParamDef is one tool input parameter.
 type ParamDef struct {
@@ -56,7 +63,7 @@ func (f *FieldDef) UnmarshalYAML(value *yaml.Node) error {
 // require a real discrete key event a fill's own dispatched per-character
 // keydown/keyup can't stand in for -- e.g. a field that only reveals a
 // dependent control once Enter is pressed, confirmed live in Fullstory's
-// metric-condition form (see fullstory's webmcp.tools.yaml).
+// metric-condition form (see fullstory's .sightkick tool layer).
 //
 // wait_for takes exactly one of query or view: `query` waits for a DOM match
 // (the existing form); `view` waits for the current route to match a named
@@ -156,7 +163,7 @@ type JourneyDef struct {
 	Steps       []JourneyStepDef `yaml:"steps"`
 }
 
-// Manifest is a parsed webmcp.tools.yaml.
+// Manifest is the merged tool layer from a .sightkick/ directory.
 type Manifest struct {
 	Version  int          `yaml:"version"`
 	Name     string       `yaml:"name"`
@@ -165,27 +172,100 @@ type Manifest struct {
 	Journeys []JourneyDef `yaml:"journeys"`
 }
 
-// LoadManifest reads + shallow-validates a manifest. Deep validation (component
-// refs, params, view names) happens in Compile where the corpus is available.
-func LoadManifest(path string) (*Manifest, []Diagnostic, error) {
-	data, err := os.ReadFile(path)
+// DefaultCorpus is the tool layer's corpus when `corpus:` is unspecified: the
+// sibling .sightmap/ directory, relative to the .sightkick/ dir.
+const DefaultCorpus = "../.sightmap"
+
+// manifestFiles returns the sorted *.yaml/*.yml files under a .sightkick/ dir,
+// walked recursively so a tool layer can be organized into subdirectories.
+func manifestFiles(dir string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, werr error) error {
+		if werr != nil {
+			return werr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		switch strings.ToLower(filepath.Ext(p)) {
+		case ".yaml", ".yml":
+			files = append(files, p)
+		}
+		return nil
+	})
+	sort.Strings(files)
+	return files, err
+}
+
+// LoadManifest merges every *.yaml file under a .sightkick/ directory into one
+// Manifest and shallow-validates it. Tools and journeys are concatenated across
+// files; the singular fields (version/name/corpus) are taken from wherever
+// they're set, and a conflict warns. Unset `name` defaults to the app dir's
+// name and `corpus` to the sibling .sightmap/. Deep validation (component refs,
+// params, view names) happens in Compile where the corpus is available.
+func LoadManifest(sightkickDir string) (*Manifest, []Diagnostic, error) {
+	files, err := manifestFiles(sightkickDir)
 	if err != nil {
 		return nil, nil, err
 	}
-	var m Manifest
-	if err := yaml.Unmarshal(data, &m); err != nil {
-		return nil, []Diagnostic{errf("manifest.parse-error", path, "YAML parse failed: %v", err)}, nil
+	var diags []Diagnostic
+	if len(files) == 0 {
+		diags = append(diags, errf("manifest.empty", sightkickDir, ".sightkick/ contains no .yaml files"))
+		return &Manifest{Version: 1}, diags, nil
 	}
 
-	var diags []Diagnostic
-	if m.Version != 1 {
-		diags = append(diags, warnf("manifest.version", path, "expected version 1, got %d", m.Version))
+	m := &Manifest{}
+	setStr := func(file, field string, cur *string, val string) {
+		if val == "" {
+			return
+		}
+		if *cur != "" && *cur != val {
+			diags = append(diags, warnf("manifest."+field+"-conflict", file, "%s %q conflicts with %q set earlier; keeping the first", field, val, *cur))
+			return
+		}
+		*cur = val
+	}
+	for _, f := range files {
+		data, rerr := os.ReadFile(f)
+		if rerr != nil {
+			return nil, diags, rerr
+		}
+		var part Manifest
+		if uerr := yaml.Unmarshal(data, &part); uerr != nil {
+			diags = append(diags, errf("manifest.parse-error", f, "YAML parse failed: %v", uerr))
+			continue
+		}
+		if part.Version != 0 {
+			if m.Version != 0 && m.Version != part.Version {
+				diags = append(diags, warnf("manifest.version-conflict", f, "version %d conflicts with %d set earlier; keeping the first", part.Version, m.Version))
+			} else {
+				m.Version = part.Version
+			}
+		}
+		setStr(f, "name", &m.Name, part.Name)
+		setStr(f, "corpus", &m.Corpus, part.Corpus)
+		m.Tools = append(m.Tools, part.Tools...)
+		m.Journeys = append(m.Journeys, part.Journeys...)
+	}
+
+	// Defaults.
+	if m.Version == 0 {
+		m.Version = 1
+	} else if m.Version != 1 {
+		diags = append(diags, warnf("manifest.version", sightkickDir, "expected version 1, got %d", m.Version))
+	}
+	if m.Name == "" {
+		if abs, aerr := filepath.Abs(sightkickDir); aerr == nil {
+			m.Name = filepath.Base(filepath.Dir(abs))
+		}
 	}
 	if m.Corpus == "" {
-		diags = append(diags, errf("manifest.corpus", path, "manifest is missing required `corpus` path"))
+		m.Corpus = DefaultCorpus
 	}
+
+	path := sightkickDir
 	if len(m.Tools) == 0 {
-		diags = append(diags, errf("manifest.tools", path, "manifest has no `tools`"))
+		diags = append(diags, errf("manifest.tools", path, ".sightkick/ defines no `tools`"))
 	}
 
 	seen := map[string]bool{}
@@ -224,7 +304,7 @@ func LoadManifest(path string) (*Manifest, []Diagnostic, error) {
 			diags = append(diags, warnf("manifest.journey-short", j.Name, "journey %q has fewer than 2 steps; it yields no guidance edges", j.Name))
 		}
 	}
-	return &m, diags, nil
+	return m, diags, nil
 }
 
 // stepOp returns the single op key + body of a step map, or ("", body, false)

@@ -1,6 +1,5 @@
 version: 1
 name: search
-corpus: ./.sightmap
 
 tools:
   - name: search
