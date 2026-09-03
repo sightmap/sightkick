@@ -14,6 +14,7 @@ import (
 
 	"sightkick/generator/internal/gen"
 	"sightkick/generator/runtimebundle"
+	"sightkick/generator/webmcpinspector"
 )
 
 // stringList is a repeatable string flag (e.g. --chrome-flag=A --chrome-flag=B).
@@ -40,8 +41,9 @@ func runBrowser(args []string) error {
 	profile := fset.String("profile", "", "Chrome user data dir (passed through to sightmap)")
 	cdpPort := fset.Int("cdp-port", 0, "Chrome remote debugging port (passed through to sightmap)")
 	headless := fset.Bool("headless", false, "Run headless (passed through to sightmap)")
-	webmcp := fset.Bool("webmcp", false, "Expose the native document.modelContext (adds the WebMCP blink flags)")
-	extensions := fset.String("extensions", "", "Comma-separated unpacked-extension DIRECTORIES (the folder containing manifest.json, not the file), e.g. a WebMCP inspector. Relative paths resolve against your CWD. NOTE: sightmap replaces its auto-loaded overlay when this is set — include it explicitly if you need it.")
+	webmcp := fset.Bool("webmcp", false, "Expose the native document.modelContext (adds the WebMCP blink flags) and auto-load the bundled WebMCP inspector extension (an in-browser client for the injected tools) alongside sightmap's overlay. See --no-inspector.")
+	noInspector := fset.Bool("no-inspector", false, "With --webmcp, skip loading the bundled WebMCP inspector extension (just enable the native surface for e.g. 'sightmap browser mcp').")
+	extensions := fset.String("extensions", "", "Comma-separated EXTRA unpacked-extension DIRECTORIES (the folder containing manifest.json, not the file) to load. Relative paths resolve against your CWD. These are merged with the inspector + overlay that --webmcp loads; without --webmcp, note that passing this replaces sightmap's auto-loaded overlay.")
 	noStart := fset.Bool("no-start", false, "Skip 'sightmap browser start'; inject into an already-running session")
 	var chromeFlags stringList
 	fset.Var(&chromeFlags, "chrome-flag", "Extra Chrome flag, e.g. --chrome-flag=--no-sandbox (repeatable; passed through to sightmap)")
@@ -150,12 +152,33 @@ func runBrowser(args []string) error {
 		if *headless {
 			startArgs = append(startArgs, "--headless")
 		}
+		// Assemble the extensions to load. Any user --extensions come first; when
+		// --webmcp loads the inspector we also re-add sightmap's overlay, because
+		// passing --extensions at all suppresses the overlay sightmap would
+		// otherwise auto-load.
+		var exts []string
 		if *extensions != "" {
-			abs, aerr := absCSVPaths(*extensions)
+			userExts, aerr := absCSVList(*extensions)
 			if aerr != nil {
 				return fmt.Errorf("resolve --extensions: %w", aerr)
 			}
-			startArgs = append(startArgs, "--extensions", abs)
+			exts = append(exts, userExts...)
+		}
+		if *webmcp && !*noInspector {
+			if overlay := sightmapOverlayDir(); overlay != "" {
+				exts = appendUnique(exts, overlay)
+			} else {
+				fmt.Fprintln(os.Stderr, "  note: sightmap overlay (~/.sightmap/extension) not found; loading the inspector without it")
+			}
+			inspector, ierr := webmcpinspector.EnsureExtracted()
+			if ierr != nil {
+				return fmt.Errorf("prepare WebMCP inspector extension: %w", ierr)
+			}
+			exts = appendUnique(exts, inspector)
+			fmt.Fprintf(os.Stderr, "→ loading WebMCP inspector extension (v%s) — open it from Chrome's side panel\n", webmcpinspector.Version())
+		}
+		if len(exts) > 0 {
+			startArgs = append(startArgs, "--extensions", strings.Join(exts, ","))
 		}
 		if *webmcp {
 			startArgs = append(startArgs,
@@ -214,25 +237,52 @@ func sightmapVersion(sm string) string {
 	return v
 }
 
-// absCSVPaths abs-resolves each comma-separated path against the current working
-// directory. Used for --extensions so a relative path the user typed still
-// points where they meant, even though sightmap runs from the corpus dir. Each
-// entry must be an unpacked-extension DIRECTORY (the folder containing
-// manifest.json), not the manifest file itself.
-func absCSVPaths(csv string) (string, error) {
-	parts := strings.Split(csv, ",")
-	for i, p := range parts {
+// absCSVList abs-resolves each comma-separated path against the current working
+// directory, returning the non-empty entries. Used for --extensions so a
+// relative path the user typed still points where they meant, even though
+// sightmap runs from the corpus dir. Each entry must be an unpacked-extension
+// DIRECTORY (the folder containing manifest.json), not the manifest file itself.
+func absCSVList(csv string) ([]string, error) {
+	var out []string
+	for _, p := range strings.Split(csv, ",") {
 		p = strings.TrimSpace(p)
 		if p == "" {
 			continue
 		}
 		a, err := filepath.Abs(p)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		parts[i] = a
+		out = append(out, a)
 	}
-	return strings.Join(parts, ","), nil
+	return out, nil
+}
+
+// appendUnique appends dir to list unless it's already present (paths are
+// absolute here, so a plain equality check dedupes correctly).
+func appendUnique(list []string, dir string) []string {
+	for _, d := range list {
+		if d == dir {
+			return list
+		}
+	}
+	return append(list, dir)
+}
+
+// sightmapOverlayDir returns sightmap's auto-extracted overlay extension
+// directory (~/.sightmap/extension) if it exists, else "". sightmap only
+// auto-loads the overlay when --extensions is omitted, so we re-add it
+// explicitly whenever we pass --extensions ourselves.
+func sightmapOverlayDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	dir := filepath.Join(home, ".sightmap", "extension")
+	if info, err := os.Stat(dir); err == nil && info.IsDir() {
+		return dir
+	}
+	return ""
 }
 
 // runSightmap runs a sightmap subcommand from dir (so .sightmap/.session

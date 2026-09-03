@@ -45,8 +45,11 @@ sightmap session, and persist-inject the runtime + tools:
 ```sh
 sightkick browser <CORPUS_DIR>
 #   auto-opens the corpus's home-view URL (or pass --url URL)
-#   --webmcp         expose the native document.modelContext (adds the blink flags)
-#   --extensions P   load an unpacked extension (e.g. a WebMCP inspector)
+#   --webmcp         expose the native document.modelContext AND auto-load the
+#                    bundled WebMCP inspector (+ sightmap's overlay) — open it
+#                    from Chrome's side panel to drive the tools with Gemini
+#   --no-inspector   with --webmcp, skip the inspector (native surface only)
+#   --extensions P   load EXTRA unpacked extensions, merged with the above
 #   --profile/--cdp-port/--chrome-flag   passed through to sightmap
 #   --no-start       inject into an already-running session (e.g. after editing the corpus)
 ```
@@ -94,11 +97,18 @@ sightmap browser start --detach --url <SITE_URL> --profile /tmp/sk-dbg
 ### Mode B — inspector/Gemini-driven (native WebMCP surface)
 Turn on the blink flags so Chrome exposes the real `document.modelContext`, and
 load the **WebMCP inspector** (a drive-with-Gemini sidebar). Our tools register on
-the native surface, so the inspector reads them like any site's own. The inspector
-isn't shipped with the CLI — use the vendored copy in the sightkick repo
-(`vendor/webmcp-tool/unpacked`, whose `NOTES.md` explains the flag/CfT-version
-rationale) or install it from the Chrome Web Store. Point `<INSPECTOR_DIR>` at its
-unpacked directory:
+the native surface, so the inspector reads them like any site's own.
+
+The easy path is `sightkick browser <CORPUS_DIR> --webmcp`: it flips the blink
+flags **and** auto-loads the bundled inspector (plus sightmap's overlay). The
+inspector is vendored from upstream
+([`beaufortfrancois/model-context-tool-inspector`](https://github.com/beaufortfrancois/model-context-tool-inspector),
+Apache-2.0) and embedded in the CLI, so nothing to install — open it from Chrome's
+side panel. Add `--no-inspector` for the native surface without it.
+
+To do it by hand instead (finer control, or a non-sightkick session), point
+`<INSPECTOR_DIR>` at an unpacked copy of the inspector — the repo's
+`vendor/webmcp-tool/unpacked` (see its `NOTES.md`) or a Chrome-Web-Store install:
 
 ```sh
 sightmap browser start --detach --url <SITE_URL> --profile /tmp/sk-dbg \
