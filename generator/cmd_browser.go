@@ -190,7 +190,7 @@ func runBrowser(args []string) error {
 	fmt.Fprintf(os.Stderr, "   browser <verb>' for each step rather than driving the runtime just\n")
 	fmt.Fprintf(os.Stderr, "   injected above, so it isn't subject to that runtime's portal-click gap)\n")
 	fmt.Fprintf(os.Stderr, "  list registered tools:\n")
-	fmt.Fprintf(os.Stderr, "    %ssightmap browser eval \"document.modelContext.getTools().then(t=>console.log(t.map(x=>x.name)))\"\n", cd)
+	fmt.Fprintf(os.Stderr, "    %ssightmap browser mcp list\n", cd)
 	fmt.Fprintf(os.Stderr, "  stop the session:  %ssightmap browser stop\n", cd)
 	return nil
 }
