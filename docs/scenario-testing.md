@@ -195,10 +195,10 @@ see §11 for what real planning over this manifest would additionally require.
 
 ## 7. The output is runtime-agnostic
 
-This is the load-bearing technical claim, and it's a description of what already exists, not a
-roadmap item. `sightkick build` compiles the corpus + tool layer into a self-contained IR with
-every reference already resolved — real CSS locators, real extractors, real predicates, no
-sightmap concepts left for a consumer to know about. Full compiled `add_to_cart`, from
+This is a description of what already exists, not a roadmap item. `sightkick build` compiles
+the corpus + tool layer into a self-contained IR with every reference already resolved — real
+CSS locators, real extractors, real predicates, no sightmap concepts left for a consumer to
+know about. Full compiled `add_to_cart`, from
 `examples/saucedemo`:
 
 ```json
