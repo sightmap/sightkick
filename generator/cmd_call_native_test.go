@@ -76,7 +76,7 @@ func TestFindInSnapshot(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			found, err := findInSnapshot([]byte(fixtureSnapshot), tc.query, tc.args)
+			found, comps, err := findInSnapshot([]byte(fixtureSnapshot), tc.query, tc.args)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("findInSnapshot(%q) succeeded, want an error", tc.query)
@@ -92,6 +92,12 @@ func TestFindInSnapshot(t *testing.T) {
 			}
 			if !slices.Equal(got, tc.want) {
 				t.Errorf("findInSnapshot(%q) matched ids %v, want %v", tc.query, got, tc.want)
+			}
+			// Every matched node should be named with the component it matched.
+			for _, node := range found {
+				if comps[node.Id] == "" {
+					t.Errorf("findInSnapshot(%q) node %s has no component name", tc.query, node.Id)
+				}
 			}
 		})
 	}

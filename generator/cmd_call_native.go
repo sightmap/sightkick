@@ -31,6 +31,18 @@ type session struct {
 	appDir           string // directory to run sightmap from
 	corpusDir        string // absolute path to the .sightmap/ corpus
 	defaultTimeoutMs int    // wait_for timeout for steps that declare none
+
+	// Optional --trace instrumentation. trace is nil unless the caller asked
+	// for a trace; the recording hooks are no-ops when it is. shotDir is the
+	// directory screenshots are written to (empty disables them); shotTool
+	// names the running tool for screenshot filenames; shotSeq counts them;
+	// lastShot is the most recent screenshot path (what returns provenance
+	// points at, since a read changes nothing on the page).
+	trace    *traceRec
+	shotDir  string
+	shotTool string
+	shotSeq  int
+	lastShot string
 }
 
 // toolOutcome is one tool's result, before serialization.
@@ -55,6 +67,13 @@ func failf(format string, a ...any) toolOutcome {
 // list. `omitempty` collapses the first two, and omitting the tag renders the
 // first as `null`; both would misreport an empty result as something else.
 func (o toolOutcome) toJSON() ([]byte, error) {
+	return json.MarshalIndent(o.resultMap(), "", "  ")
+}
+
+// resultMap is the outcome as the map that toJSON renders. It is also folded
+// into a trace's Result field, so the trace carries the same public ToolResult
+// the caller sees on stdout.
+func (o toolOutcome) resultMap() map[string]any {
 	out := map[string]any{"ok": o.ok}
 	if o.value != nil {
 		out["value"] = *o.value
@@ -71,7 +90,7 @@ func (o toolOutcome) toJSON() ([]byte, error) {
 	if len(o.guidance) > 0 {
 		out["guidance"] = o.guidance
 	}
-	return json.MarshalIndent(out, "", "  ")
+	return out
 }
 
 // runNative executes a tool by translating each of its steps into a `sightmap
@@ -87,22 +106,44 @@ func (o toolOutcome) toJSON() ([]byte, error) {
 // compiled tool a real client would run.
 //
 // ret is nil for a tool that declares no result to read.
-func (e *session) runNative(tool *gen.ToolDef, ret *returnSpec, args map[string]any) toolOutcome {
+func (e *session) runNative(tool *gen.ToolDef, compiled *gen.Tool, ret *returnSpec, args map[string]any) toolOutcome {
 	// A page mismatch is reported but not fatal. Tools are often callable from
 	// more than one place, and the steps themselves fail loudly enough if the
 	// page really is wrong.
 	if tool.EnsureView != "" {
-		if err := e.sightmap(waitForViewArgs(tool.EnsureView, ensureViewTimeoutMs)...); err != nil {
+		err := e.sightmap(waitForViewArgs(tool.EnsureView, ensureViewTimeoutMs)...)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "ensure_view: %q expects view %q but the page does not match; proceeding best-effort\n",
 				tool.Name, tool.EnsureView)
+		}
+		if e.trace != nil {
+			ev := &ensureViewTrace{View: tool.EnsureView, Matched: err == nil}
+			if compiled != nil && compiled.EnsureView != nil {
+				ev.Route = compiled.EnsureView.Route
+			}
+			ev.Screenshot = e.snap("before")
+			e.trace.EnsureView = ev
 		}
 	}
 
 	skip := false
 	if tool.Guard != nil {
 		var err error
-		if skip, err = e.guardHolds(tool.Guard, args); err != nil {
+		var matched int
+		if skip, matched, err = e.guardHolds(tool.Guard, args); err != nil {
 			return failf("guard: %v", err)
+		}
+		if e.trace != nil {
+			query, _, _ := guardQuery(tool.Guard)
+			kind := "present"
+			if tool.Guard.Absent != nil {
+				kind = "absent"
+			}
+			gt := &guardTrace{Kind: kind, Query: interpolate(query, args), Matched: matched, Skipped: skip}
+			if compiled != nil && compiled.Guard != nil {
+				gt.Compiled = compiledParts(compiled.Guard.Query)
+			}
+			e.trace.Guard = gt
 		}
 	}
 
@@ -110,25 +151,37 @@ func (e *session) runNative(tool *gen.ToolDef, ret *returnSpec, args map[string]
 	if skip {
 		out.message = "guard satisfied; steps skipped (already applied)"
 	} else {
-		for _, step := range tool.Steps {
+		for i, step := range tool.Steps {
 			op, body, ok := stepOp(step)
 			if !ok {
 				return failf("tool %q has a step that is not a single op", tool.Name)
 			}
-			if err := e.runStep(op, body, args); err != nil {
+			st := e.traceStepBegin(i, op, body, compiled, args)
+			err := e.runStep(op, body, args)
+			e.traceStepEnd(st, err)
+			if err != nil {
 				return failf("%s: %v", op, err)
 			}
 		}
 	}
 
 	if ret != nil {
-		value, items, err := e.computeReturn(ret, args)
+		value, items, err := e.computeReturn(ret, compiledReturn(compiled), args)
 		if err != nil {
 			return failf("returns: %v", err)
 		}
 		out.value, out.items = value, items
 	}
 	return out
+}
+
+// compiledReturn is the compiled Return for a tool, or nil. It carries the CSS
+// the returns query resolves to, which the manifest only names.
+func compiledReturn(compiled *gen.Tool) *gen.Return {
+	if compiled == nil {
+		return nil
+	}
+	return compiled.Returns
 }
 
 // stepOp unpacks a step, which is a map holding exactly one entry: the op name
@@ -224,17 +277,18 @@ func guardQuery(g *gen.GuardBody) (query string, wantMatch bool, err error) {
 }
 
 // guardHolds reports whether the tool's effect is already applied, meaning its
-// steps should be skipped.
-func (e *session) guardHolds(g *gen.GuardBody, args map[string]any) (bool, error) {
+// steps should be skipped. It also returns how many elements the guard query
+// matched, for the trace.
+func (e *session) guardHolds(g *gen.GuardBody, args map[string]any) (skip bool, matched int, err error) {
 	query, wantMatch, err := guardQuery(g)
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
-	found, err := e.findElements(query, args)
+	found, _, err := e.findElements(query, args)
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
-	return (len(found) > 0) == wantMatch, nil
+	return (len(found) > 0) == wantMatch, len(found), nil
 }
 
 // valueField is the field name a `value` return's single read is stored under
@@ -262,8 +316,8 @@ type returnSpec struct {
 // an error, the first one wins. Finding nothing yields no value at all, which
 // is different from finding an element whose property is empty. A `list`
 // return yields one row per element, and an empty list when there are none.
-func (e *session) computeReturn(spec *returnSpec, args map[string]any) (*string, []map[string]string, error) {
-	found, err := e.findElements(spec.query, args)
+func (e *session) computeReturn(spec *returnSpec, compiled *gen.Return, args map[string]any) (*string, []map[string]string, error) {
+	found, comps, err := e.findElements(spec.query, args)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -276,8 +330,47 @@ func (e *session) computeReturn(spec *returnSpec, args map[string]any) (*string,
 	if err != nil {
 		return nil, nil, err
 	}
+	if e.trace != nil {
+		e.trace.Returns = buildReturnTrace(spec, compiled, args, ids, comps, props, e.lastShot)
+	}
 	value, items := assembleReturn(spec, ids, props)
 	return value, items, nil
+}
+
+// buildReturnTrace records the provenance of a returns result: the query that
+// ran (authored and compiled forms), each field's extractor, and one entry per
+// matched node carrying its component name and the values read off it.
+func buildReturnTrace(spec *returnSpec, compiled *gen.Return, args map[string]any, ids []string, comps map[string]string, props map[string]map[string]string, shot string) *returnTrace {
+	rt := &returnTrace{
+		Kind:          "value",
+		QueryTemplate: spec.query,
+		Query:         interpolate(spec.query, args),
+		Fields:        map[string]fieldTrace{},
+		Screenshot:    shot,
+	}
+	if spec.isList {
+		rt.Kind = "list"
+	}
+	if compiled != nil {
+		rt.Compiled = compiledParts(compiled.Query)
+	}
+	for name, ex := range spec.fields {
+		ft := fieldTrace{Extractor: ex}
+		if compiled != nil {
+			if f, ok := compiled.Fields[name]; ok {
+				ft.Property = f.Property
+			}
+		}
+		rt.Fields[name] = ft
+	}
+	for _, id := range ids {
+		values := props[id]
+		if values == nil {
+			values = map[string]string{}
+		}
+		rt.Matches = append(rt.Matches, matchTrace{NodeID: id, Component: comps[id], Values: values})
+	}
+	return rt
 }
 
 // assembleReturn shapes per-element property reads into the tool's result.
@@ -321,28 +414,35 @@ type snapshotDoc struct {
 // click and fill targets, so a query that selects an element here selects the
 // same one when acted on. A trailing `#N` in the query picks the Nth match;
 // out of range yields no match rather than an error.
-func findInSnapshot(data []byte, query string, args map[string]any) ([]*sm.ComponentNode, error) {
+func findInSnapshot(data []byte, query string, args map[string]any) ([]*sm.ComponentNode, map[string]string, error) {
 	var doc snapshotDoc
 	if err := json.Unmarshal(data, &doc); err != nil {
-		return nil, fmt.Errorf("parse snapshot json: %w", err)
+		return nil, nil, fmt.Errorf("parse snapshot json: %w", err)
 	}
 	if doc.Tree == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	root, matches, props := snapshotToTree(doc.Tree)
 
 	q, err := compquery.ParseQuery(interpolate(query, args))
 	if err != nil {
-		return nil, fmt.Errorf("parse query %q: %w", query, err)
+		return nil, nil, fmt.Errorf("parse query %q: %w", query, err)
 	}
 	found := compquery.FindCandidates(root, matches, props, q)
 	if q.Index >= 0 {
 		if q.Index >= len(found) {
-			return nil, nil
+			return nil, nil, nil
 		}
 		found = found[q.Index : q.Index+1]
 	}
-	return found, nil
+	// Name each matched node with the corpus component it matched, for the trace.
+	comps := make(map[string]string, len(found))
+	for _, n := range found {
+		if m := matches[n]; m != nil {
+			comps[n.Id] = m.Name
+		}
+	}
+	return found, comps, nil
 }
 
 // snapshotToTree rebuilds the snapshot as the three inputs the query engine
@@ -373,25 +473,24 @@ func snapshotToTree(n *snapshotNode) (*sm.ComponentNode, map[*sm.ComponentNode]*
 // findElements snapshots the live page and resolves query against it. The
 // snapshot also tags every element on the page with its node id, which is how
 // readProps finds them again afterwards.
-func (e *session) findElements(query string, args map[string]any) ([]*sm.ComponentNode, error) {
+func (e *session) findElements(query string, args map[string]any) ([]*sm.ComponentNode, map[string]string, error) {
 	// `sightmap snapshot` writes to a path rather than stdout, so hand it a
 	// scratch file and read it straight back.
 	f, err := os.CreateTemp("", "sightkick-snapshot-*.json")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	f.Close()
 	defer os.Remove(f.Name())
 
 	if err := e.sightmap("snapshot", "--json", f.Name()); err != nil {
-		return nil, fmt.Errorf("snapshot: %w", err)
+		return nil, nil, fmt.Errorf("snapshot: %w", err)
 	}
 	data, err := os.ReadFile(f.Name())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	found, err := findInSnapshot(data, query, args)
-	return found, err
+	return findInSnapshot(data, query, args)
 }
 
 // extractJS reads a set of named properties off a set of elements, addressing

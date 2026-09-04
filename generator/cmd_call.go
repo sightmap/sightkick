@@ -39,6 +39,8 @@ func runCall(args []string) error {
 	fset.Var(&params, "param", "Tool param as key=value (repeatable). Value parses as JSON when possible, else a raw string.")
 	via := fset.String("via", viaWebMCP, "How to run the tool: 'webmcp' asks the page's registered WebMCP tool to run itself (the path a real client takes; the page must have the runtime); 'cli' translates the tool's steps into 'sightmap browser' commands (real input events, no runtime needed).")
 	timeoutMs := fset.Int("timeout-ms", 5000, "For --via webmcp, how long to wait for the tool to finish. For --via cli, the default wait_for timeout for steps that don't declare their own timeout_ms.")
+	tracePath := fset.String("trace", "", "For --via cli, write a JSON trace of the tool's internal execution (ensure_view, guard, each step's resolved command + compiled selector, and the returns provenance) to this file.")
+	shotDir := fset.String("screenshot-dir", "", "For --via cli, capture a screenshot after ensure_view and after each step into this directory, and reference them from the trace.")
 	if len(args) >= 1 && (args[0] == "-h" || args[0] == "--help") {
 		fset.Usage()
 		return nil
@@ -101,6 +103,24 @@ func runCall(args []string) error {
 	toolDef := &manifest.Tools[i]
 	sess := &session{sm: sightmapPath, appDir: appDir, corpusDir: corpusDir, defaultTimeoutMs: *timeoutMs}
 
+	// A trace records the tool's internal execution for --via cli, where the
+	// steps run here and every sub-action is observable. It is opt-in (--trace
+	// or --screenshot-dir); the recording hooks are no-ops when trace is nil.
+	var rec *traceRec
+	if *via == viaCLI && (*tracePath != "" || *shotDir != "") {
+		rec = &traceRec{Tool: toolName, Via: *via, Params: toolArgs}
+		sess.trace = rec
+		sess.shotTool = toolName
+		if *shotDir != "" {
+			if err := os.MkdirAll(*shotDir, 0o755); err != nil {
+				return fmt.Errorf("create screenshot dir: %w", err)
+			}
+			sess.shotDir = *shotDir
+		}
+	} else if *tracePath != "" || *shotDir != "" {
+		fmt.Fprintln(os.Stderr, "note: --trace/--screenshot-dir only apply to --via cli; ignoring")
+	}
+
 	var outcome toolOutcome
 	switch *via {
 	case viaWebMCP:
@@ -120,7 +140,7 @@ func runCall(args []string) error {
 		if specErr != nil {
 			return specErr
 		}
-		outcome = sess.runNative(toolDef, ret, toolArgs)
+		outcome = sess.runNative(toolDef, compiled, ret, toolArgs)
 		if compiled != nil {
 			outcome.guidance = compiled.Guidance
 		}
@@ -134,6 +154,17 @@ func runCall(args []string) error {
 		return err
 	}
 	fmt.Println(string(out))
+
+	// Persist the trace last, so it captures the final result and any guidance,
+	// even when the tool ended with ok:false (a failed step is worth recording).
+	if rec != nil {
+		rec.Result = outcome.resultMap()
+		if *tracePath != "" {
+			if werr := writeTrace(*tracePath, rec); werr != nil {
+				fmt.Fprintf(os.Stderr, "write trace: %v\n", werr)
+			}
+		}
+	}
 	if !outcome.ok {
 		return fmt.Errorf("tool %q returned ok:false", toolName)
 	}
