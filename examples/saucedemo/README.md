@@ -35,6 +35,10 @@ go run . build ../examples/saucedemo          # compile the manifest against the
 go run . build --verify ../examples/saucedemo # + check returns against captured snapshots
 ```
 
+`--verify` needs captured snapshots, which aren't checked in (`.sightmap/snapshots/` is gitignored —
+they're a local cache of a live site's DOM, not source). Regenerate them by driving the corpus's
+views live once with `sightmap capture`.
+
 Driving it live needs a running `sightmap browser` session pointed at `https://www.saucedemo.com/`
 and `--via cli` (the default `--via webmcp` needs a sightmap release this environment doesn't have
 — see the repo README's Runtimes section):

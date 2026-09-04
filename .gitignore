@@ -12,6 +12,7 @@ config.yaml
 *.ir.json
 !**/testdata/*.ir.json
 **/.sightmap/.session
+**/.sightmap/snapshots/
 
 # release build outputs (goreleaser + npm packaging)
 generator/dist/
