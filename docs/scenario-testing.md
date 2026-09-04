@@ -8,6 +8,30 @@ Everything concrete in this document lives in [`examples/saucedemo/`](../example
 sightkick corpus and tool layer targeting the real [saucedemo.com](https://www.saucedemo.com/) —
 no app shipped in this repo, no toy DOM. Every claim below was checked against that corpus.
 
+Here's the shape of what this produces — a real scenario from that example,
+[`features/checkout.feature`](../examples/saucedemo/features/checkout.feature):
+
+```gherkin
+Feature: Checkout
+  As a shopper
+  I want to buy an item
+  So that I receive an order confirmation
+
+  Background:
+    Given I am logged in as "standard_user"
+
+  Scenario: Buy a single item with valid details
+    When I open "Sauce Labs Backpack"
+    And I add it to the cart
+    And I go to the cart
+    And I check out with first name "Ada", last name "Lovelace", postal code "30301"
+    And I place the order
+    Then the order is confirmed
+```
+
+Plain language, no selectors, no code. The rest of this document is about what turns this into a
+test that actually runs, and stays running as the app changes underneath it.
+
 ## 1. The problem BDD actually has
 
 Gherkin itself has held up for over a decade: a `.feature` file reads like a spec because it *is*
