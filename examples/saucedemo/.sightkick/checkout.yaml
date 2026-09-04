@@ -1,0 +1,61 @@
+version: 1
+
+tools:
+  - name: fill_checkout_info
+    description: >
+      Fill the first checkout step and continue to the order review. Leaving
+      any field empty is the required-field-missing fixture, checked here —
+      call read_checkout_error rather than assuming the timed-out wait_for
+      is a bug.
+    ensure_view: CheckoutInfo
+    params:
+      - name: first_name
+        type: string
+        required: true
+      - name: last_name
+        type: string
+        required: true
+      - name: postal_code
+        type: string
+        required: true
+    steps:
+      - fill:
+          query: FirstNameField
+          value: "{{first_name}}"
+      - fill:
+          query: LastNameField
+          value: "{{last_name}}"
+      - fill:
+          query: PostalCodeField
+          value: "{{postal_code}}"
+      - click:
+          query: ContinueButton
+      - wait_for:
+          view: CheckoutOverview
+
+  - name: read_checkout_error
+    description: Read the checkout-info error banner, if any.
+    ensure_view: CheckoutInfo
+    returns:
+      description: The error message, if one is showing.
+      value:
+        query: CheckoutError
+        property: message
+
+  - name: place_order
+    description: Submit the order from the review step.
+    ensure_view: CheckoutOverview
+    steps:
+      - click:
+          query: FinishButton
+      - wait_for:
+          view: Complete
+
+  - name: read_confirmation
+    description: Read the confirmation heading ("Thank you for your order!").
+    ensure_view: Complete
+    returns:
+      description: The confirmation heading.
+      value:
+        query: CompleteHeader
+        property: text

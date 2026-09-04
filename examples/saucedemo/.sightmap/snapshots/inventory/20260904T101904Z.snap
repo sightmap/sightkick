@@ -1,0 +1,89 @@
+[View: Inventory]
+route: /inventory.html
+
+[Guide]
+AddToCartButton    6
+InventoryItem      6
+ItemName           6
+ItemPrice          6
+AllItemsLink       1
+CartLink           1
+CloseMenuButton    1
+FacebookLink       1
+LinkedInLink       1
+LogoutLink         1
+MenuButton         1
+ResetAppStateLink  1
+SortSelect         1
+TwitterLink        1
+
+--- component tree ---
+
+20 generic
+  21 generic
+    22 generic
+      27 generic
+        28 [MenuButton "Open Menu"]
+        30 image "Open Menu"
+      51 [CartLink]
+      59 [SortSelect value="Name (A to Z)"]
+    72 [InventoryItem]
+      74 link
+        75 image "Sauce Labs Backpack"
+      78 link "Sauce Labs Backpack"
+        79 [ItemName]
+      84 [ItemPrice]
+      87 [AddToCartButton label="Add to cart"]
+    89 [InventoryItem]
+      91 link
+        92 image "Sauce Labs Bike Light"
+      95 link "Sauce Labs Bike Light"
+        96 [ItemName]
+      101 [ItemPrice]
+      104 [AddToCartButton label="Add to cart"]
+    106 [InventoryItem]
+      108 link
+        109 image "Sauce Labs Bolt T-Shirt"
+      112 link "Sauce Labs Bolt T-Shirt"
+        113 [ItemName]
+      118 [ItemPrice]
+      121 [AddToCartButton label="Add to cart"]
+    123 [InventoryItem]
+      125 link
+        126 image "Sauce Labs Fleece Jacket"
+      129 link "Sauce Labs Fleece Jacket"
+        130 [ItemName]
+      135 [ItemPrice]
+      138 [AddToCartButton label="Add to cart"]
+    140 [InventoryItem]
+      142 link
+        143 image "Sauce Labs Onesie"
+      146 link "Sauce Labs Onesie"
+        147 [ItemName]
+      152 [ItemPrice]
+      155 [AddToCartButton label="Add to cart"]
+    157 [InventoryItem]
+      159 link
+        160 image "Test.allTheThings() T-Shirt (Red)"
+      163 link "Test.allTheThings() T-Shirt (Red)"
+        164 [ItemName]
+      169 [ItemPrice]
+      172 [AddToCartButton label="Add to cart"]
+  174 contentinfo
+    175 list
+      176 listitem
+        177 [TwitterLink "Twitter"]
+      179 listitem
+        180 [FacebookLink "Facebook"]
+      182 listitem
+        183 [LinkedInLink "LinkedIn"]
+[Warnings]
+Inventory: CartBadge — 0 matches
+Inventory: CancelButton — 0 matches
+Inventory: CartItem — 0 matches
+Inventory: Quantity — 0 matches
+Inventory: RemoveButton — 0 matches
+
+
+[Coverage] (visible only)
+36 interactive · 18 direct T1 (50%) · 18 scoped T2 (50%) · 0 orphaned T3 ✓

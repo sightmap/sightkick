@@ -2,7 +2,7 @@
   "name": "sightkick",
   "version": "0.0.0",
   "private": true,
-  "description": "Generate WebMCP tools from sightmap corpora, and run them on arbitrary sites.",
+  "description": "Compile a sightmap corpus and tool layer into a runtime-agnostic IR (WebMCP, CLI, or Playwright), and run it on arbitrary sites.",
   "type": "module",
   "scripts": {
     "build": "pnpm -r build",

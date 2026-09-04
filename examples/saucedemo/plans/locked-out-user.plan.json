@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "app": "examples/saucedemo",
+  "scenario": {
+    "feature": "features/locked-out-user.feature",
+    "name": "A locked-out user cannot log in",
+    "hash": "sha256:3c991a601c3cdc1ad47c0f6369126cc21f0bdbe10d6fd75200d8bf60c61e3fb7"
+  },
+  "steps": [
+    {
+      "gherkin": "Given I am on the login page",
+      "note": "The starting state — no tool call, log_in's own ensure_view: Login covers it."
+    },
+    {
+      "gherkin": "When I log in as \"locked_out_user\"",
+      "tool": "log_in",
+      "params": {
+        "username": "locked_out_user",
+        "password": "secret_sauce"
+      },
+      "expect": {
+        "ok": false
+      },
+      "note": "ok:false is the correct, expected outcome here — a bad login never navigates."
+    },
+    {
+      "gherkin": "Then I see the error \"Sorry, this user has been locked out\"",
+      "tool": "read_login_error",
+      "expect": {
+        "value": {
+          "contains": "Sorry, this user has been locked out"
+        }
+      }
+    }
+  ],
+  "irHash": "sha256:8f2bd54f9d9ddd4d12b666243206b435662fc2866a5d47af6e957616c99db397",
+  "generatedAt": "2026-09-04T10:50:02.100Z"
+}

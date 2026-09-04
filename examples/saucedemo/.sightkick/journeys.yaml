@@ -1,0 +1,28 @@
+version: 1
+
+journeys:
+  - name: purchase
+    description: Log in, buy one item, and read the confirmation.
+    steps:
+      - log_in
+      - tool: open_item
+        reason: browse to a product's detail page
+      - tool: add_current_item_to_cart
+        reason: cart the item shown
+      - tool: go_to_cart
+        reason: review before checking out
+      - tool: go_to_checkout
+        reason: proceed once the cart has at least one item
+      - tool: fill_checkout_info
+        reason: enter delivery details to reach the order review
+      - tool: place_order
+        reason: submit from the review step
+      - tool: read_confirmation
+        reason: read the generated confirmation back
+
+  - name: locked_out
+    description: Confirm a locked-out login is reported, not a bare failure.
+    steps:
+      - log_in
+      - tool: read_login_error
+        reason: log_in's wait_for times out for a bad login; read why

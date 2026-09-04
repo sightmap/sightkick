@@ -1,0 +1,53 @@
+[View: Item]
+route: /inventory-item.html
+
+[Guide]
+AddToCartButton       1
+AllItemsLink          1
+BackToProductsButton  1
+CartBadge             1
+CartLink              1
+CloseMenuButton       1
+FacebookLink          1
+ItemName              1
+ItemPrice             1
+LinkedInLink          1
+LogoutLink            1
+MenuButton            1
+ResetAppStateLink     1
+TwitterLink           1
+
+--- component tree ---
+
+20 generic
+  21 generic
+    22 generic
+      27 generic
+        28 [MenuButton "Open Menu"]
+        30 image "Open Menu"
+      51 [CartLink "1"]
+        52 [CartBadge]
+      56 [BackToProductsButton "Go back Back to products"]
+        58 image "Go back"
+    61 generic
+      63 image "Sauce Labs Backpack"
+      65 [ItemName]
+      69 [ItemPrice]
+      72 [AddToCartButton label="Remove"]
+  74 contentinfo
+    75 list
+      76 listitem
+        77 [TwitterLink "Twitter"]
+      79 listitem
+        80 [FacebookLink "Facebook"]
+      82 listitem
+        83 [LinkedInLink "LinkedIn"]
+[Warnings]
+Item: CancelButton — 0 matches
+Item: CartItem — 0 matches
+Item: Quantity — 0 matches
+Item: RemoveButton — 0 matches
+
+
+[Coverage] (visible only)
+8 interactive · 7 direct T1 (88%) · 1 scoped T2 (13%) · 0 orphaned T3 ✓

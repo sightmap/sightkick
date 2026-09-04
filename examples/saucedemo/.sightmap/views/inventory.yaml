@@ -1,0 +1,35 @@
+version: 1
+views:
+  - name: Inventory
+    route: "/inventory.html"
+    url: https://www.saucedemo.com/inventory.html
+    description: The product catalog, six items, reachable only after login.
+    components:
+      - name: SortSelect
+        selector: '[data-test="product-sort-container"]'
+        description: Cycles sort order (name/price, ascending/descending).
+        properties:
+          - name: active
+            extract: attr=value
+        memory:
+          - >-
+            Confirmed live: a real click (Input.dispatchMouseEvent) and a
+            real ArrowDown/Enter keypress on this native <select> change
+            neither document.activeElement nor its value — no sightkick
+            tool is authored against it. Native select popups are a known
+            gap for CDP input-event automation generally; Playwright works
+            around it with a dedicated selectOption() API that sets the
+            value directly rather than simulating input, which sightmap
+            does not implement.
+      - name: InventoryItem
+        selector: '.inventory_item'
+        description: >
+          No price property — ItemPrice's own text never extracts (see its
+          memory note); read the price visually or via a screenshot instead.
+        properties:
+          - name: name
+            extract: ItemName.text
+        children:
+          - $ref: ItemName
+          - $ref: ItemPrice
+          - $ref: AddToCartButton

@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "app": "examples/saucedemo",
+  "scenario": {
+    "feature": "features/multi-item.feature",
+    "name": "Add one item from its detail page, another from the catalog, then check out",
+    "hash": "sha256:84f60e9bffc85fab9de61c66eda55dd425633b481368074c4673ba09b8a58f37"
+  },
+  "steps": [
+    {
+      "gherkin": "Given I am logged in as \"standard_user\"",
+      "tool": "log_in",
+      "params": {
+        "username": "standard_user",
+        "password": "secret_sauce"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "When I open \"Sauce Labs Backpack\"",
+      "tool": "open_item",
+      "params": {
+        "name": "Sauce Labs Backpack"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I add it to the cart",
+      "tool": "add_current_item_to_cart",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I go back to the catalog",
+      "tool": "back_to_products",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I add \"Sauce Labs Bike Light\" to the cart from the catalog",
+      "tool": "add_to_cart",
+      "params": {
+        "name": "Sauce Labs Bike Light"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I go to the cart",
+      "tool": "go_to_cart",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "Then the cart contains 2 items",
+      "tool": "read_cart",
+      "expect": {
+        "list": {
+          "length": 2
+        }
+      }
+    },
+    {
+      "gherkin": "And I check out with first name \"Ada\", last name \"Lovelace\", postal code \"30301\" (1/2: proceed to checkout)",
+      "tool": "go_to_checkout",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I check out with first name \"Ada\", last name \"Lovelace\", postal code \"30301\" (2/2: fill details)",
+      "tool": "fill_checkout_info",
+      "params": {
+        "first_name": "Ada",
+        "last_name": "Lovelace",
+        "postal_code": "30301"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I place the order",
+      "tool": "place_order",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "Then the order is confirmed",
+      "tool": "read_confirmation",
+      "expect": {
+        "value": {
+          "contains": "Thank you for your order"
+        }
+      }
+    }
+  ],
+  "irHash": "sha256:8f2bd54f9d9ddd4d12b666243206b435662fc2866a5d47af6e957616c99db397",
+  "generatedAt": "2026-09-04T10:50:02.137Z"
+}

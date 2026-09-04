@@ -1,0 +1,24 @@
+version: 1
+views:
+  - name: CheckoutOverview
+    route: "/checkout-step-two.html"
+    url: https://www.saucedemo.com/checkout-step-two.html
+    description: >
+      Order review — line items (global CartItem, no RemoveButton here),
+      totals, Cancel/Finish. SubtotalLabel/TaxLabel/TotalLabel are modeled
+      for coverage but not readable — see their memory notes.
+    components:
+      - name: SubtotalLabel
+        selector: '[data-test="subtotal-label"]'
+        memory:
+          - >-
+            Confirmed live: extract: text never resolves on this bare div —
+            same finding as ItemPrice, and no wrapping link/button/heading
+            exists anywhere in its ancestry to retarget to. Read visually
+            or via a screenshot; no sightkick tool reads this value.
+      - name: TaxLabel
+        selector: '[data-test="tax-label"]'
+      - name: TotalLabel
+        selector: '[data-test="total-label"]'
+      - name: FinishButton
+        selector: '[data-test="finish"]'

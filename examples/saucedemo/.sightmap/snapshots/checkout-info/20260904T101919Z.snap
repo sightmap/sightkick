@@ -1,0 +1,64 @@
+[View: CheckoutInfo]
+route: /checkout-step-one.html
+
+[Guide]
+AllItemsLink       1
+CancelButton       1
+CartBadge          1
+CartLink           1
+CheckoutError      1
+CloseMenuButton    1
+ContinueButton     1
+FacebookLink       1
+FirstNameField     1
+LastNameField      1
+LinkedInLink       1
+LogoutLink         1
+MenuButton         1
+PostalCodeField    1
+ResetAppStateLink  1
+TwitterLink        1
+
+--- component tree ---
+
+21 generic
+  22 generic
+    23 generic
+      28 generic
+        29 [MenuButton "Open Menu"]
+        31 image "Open Menu"
+      52 [CartLink "1"]
+        53 [CartBadge]
+    60 form
+      62 generic
+        63 [FirstNameField "First Name"]
+      66 generic
+        67 [LastNameField "Last Name"]
+      70 generic
+        71 [PostalCodeField "Zip/Postal Code"]
+      75 [CheckoutError message="Error: First Name is required"]
+        77 button
+      81 [CancelButton "Go back Cancel"]
+        83 image "Go back"
+      84 [ContinueButton "Continue"]
+  85 contentinfo
+    86 list
+      87 listitem
+        88 [TwitterLink "Twitter"]
+      90 listitem
+        91 [FacebookLink "Facebook"]
+      93 listitem
+        94 [LinkedInLink "LinkedIn"]
+[Warnings]
+CheckoutInfo: ItemName — 0 matches
+CheckoutInfo: ItemPrice — 0 matches
+CheckoutInfo: AddToCartButton — 0 matches
+CheckoutInfo: CartItem — 0 matches
+CheckoutInfo: ItemName — 0 matches
+CheckoutInfo: ItemPrice — 0 matches
+CheckoutInfo: Quantity — 0 matches
+CheckoutInfo: RemoveButton — 0 matches
+
+
+[Coverage] (visible only)
+12 interactive · 10 direct T1 (83%) · 2 scoped T2 (17%) · 0 orphaned T3 ✓
