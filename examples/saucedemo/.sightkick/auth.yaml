@@ -1,0 +1,51 @@
+version: 1
+name: saucedemo
+
+tools:
+  - name: log_in
+    description: >
+      Log in from the Login page. saucedemo's published test users are all
+      valid usernames (standard_user, locked_out_user, problem_user,
+      performance_glitch_user); the password for every one of them is
+      secret_sauce. A bad login does not navigate — call read_login_error
+      to read why, rather than treating the timed-out wait_for as a bug.
+    ensure_view: Login
+    params:
+      - name: username
+        type: string
+        required: true
+      - name: password
+        type: string
+        required: true
+    steps:
+      - fill:
+          query: UsernameField
+          value: "{{username}}"
+      - fill:
+          query: PasswordField
+          value: "{{password}}"
+      - click:
+          query: LoginButton
+      - wait_for:
+          view: Inventory
+
+  - name: read_login_error
+    description: Read the login error banner, if any (e.g. after log_in with locked_out_user).
+    ensure_view: Login
+    returns:
+      description: The error message, if one is showing.
+      value:
+        query: LoginError
+        property: message
+
+  - name: log_out
+    description: Log out via the sidebar menu, back to Login.
+    steps:
+      - click:
+          query: MenuButton
+      - wait_for:
+          query: LogoutLink
+      - click:
+          query: LogoutLink
+      - wait_for:
+          view: Login

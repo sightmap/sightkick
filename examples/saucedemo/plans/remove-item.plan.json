@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "app": "examples/saucedemo",
+  "scenario": {
+    "feature": "features/remove-item.feature",
+    "name": "Remove an item before checking out",
+    "hash": "sha256:ba99136f69ce109a95eb146304f75150b528d83acd3b7533d6fade8aab29d587"
+  },
+  "steps": [
+    {
+      "gherkin": "Given I am logged in as \"standard_user\"",
+      "tool": "log_in",
+      "params": {
+        "username": "standard_user",
+        "password": "secret_sauce"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "When I add \"Sauce Labs Backpack\" to the cart from the catalog",
+      "tool": "add_to_cart",
+      "params": {
+        "name": "Sauce Labs Backpack"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I go to the cart",
+      "tool": "go_to_cart",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I remove \"Sauce Labs Backpack\" from the cart",
+      "tool": "remove_from_cart",
+      "params": {
+        "name": "Sauce Labs Backpack"
+      },
+      "expect": {
+        "value": {
+          "absent": true
+        }
+      }
+    },
+    {
+      "gherkin": "Then the cart is empty",
+      "tool": "read_cart",
+      "expect": {
+        "list": {
+          "length": 0
+        }
+      }
+    }
+  ],
+  "irHash": "sha256:8f2bd54f9d9ddd4d12b666243206b435662fc2866a5d47af6e957616c99db397",
+  "generatedAt": "2026-09-04T10:50:02.172Z"
+}

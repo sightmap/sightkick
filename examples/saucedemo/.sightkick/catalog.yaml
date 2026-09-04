@@ -1,0 +1,60 @@
+version: 1
+
+tools:
+  - name: open_item
+    description: Open a product's detail page by name, from the Inventory list.
+    ensure_view: Inventory
+    params:
+      - name: name
+        type: string
+        required: true
+        description: The product's title, e.g. "Sauce Labs Backpack".
+    steps:
+      - click:
+          query: 'InventoryItem[name*="{{name}}"] ItemName'
+      - wait_for:
+          view: Item
+
+  - name: add_to_cart
+    description: Add a product to the cart by name, from the Inventory list. Idempotent.
+    ensure_view: Inventory
+    params:
+      - name: name
+        type: string
+        required: true
+    guard:
+      present:
+        query: 'InventoryItem[name*="{{name}}"] AddToCartButton[label="Remove"]'
+    steps:
+      - click:
+          query: 'InventoryItem[name*="{{name}}"] AddToCartButton'
+      - wait_for:
+          query: 'InventoryItem[name*="{{name}}"] AddToCartButton[label="Remove"]'
+
+  - name: add_current_item_to_cart
+    description: Add the currently-open item (Item detail page) to the cart. Idempotent.
+    ensure_view: Item
+    guard:
+      present:
+        query: 'AddToCartButton[label="Remove"]'
+    steps:
+      - click:
+          query: AddToCartButton
+      - wait_for:
+          query: 'AddToCartButton[label="Remove"]'
+
+  - name: remove_from_cart
+    description: Remove a line item from the cart by name.
+    ensure_view: Cart
+    params:
+      - name: name
+        type: string
+        required: true
+    steps:
+      - click:
+          query: 'CartItem[name*="{{name}}"] RemoveButton'
+    returns:
+      description: The cart badge count after removal (absent when the cart is now empty).
+      value:
+        query: CartLink
+        property: count

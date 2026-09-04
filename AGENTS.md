@@ -1,11 +1,13 @@
 # AGENTS.md
 
-Guidance for coding agents working in **sightkick** — the tool that compiles
-[WebMCP](https://github.com/webmachinelearning/webmcp) tools from
-[sightmap](https://github.com/sightmap/sightmap) corpora and runs them on live
-sites. Start with [`README.md`](README.md) for the architecture (the IR firewall,
-tools vs. journeys, the polyglot Go/TS split); this file only adds agent-facing
-working notes.
+Guidance for coding agents working in **sightkick** — the tool that compiles a
+[sightmap](https://github.com/sightmap/sightmap) corpus and a tool layer into a
+runtime-agnostic IR, and runs it on live sites via
+[WebMCP](https://github.com/webmachinelearning/webmcp) or a CLI executor (peers,
+not a primary and a fallback — see the README's Runtimes section). Start with
+[`README.md`](README.md) for the architecture (the IR firewall, tools vs.
+journeys, the polyglot Go/TS split); this file only adds agent-facing working
+notes.
 
 ## Layout
 
@@ -14,7 +16,9 @@ working notes.
 | `generator/` | Go CLI: `.sightkick/` tool layer + `.sightmap` corpus → IR JSON. Consumes `github.com/sightmap/sightmap/go` (pinned). Also embeds + installs the agent skills (`sightkick skills install`). |
 | `packages/runtime/` | TS: boots the IR, executes atomic tools against the live DOM, registers `document.modelContext`. |
 | `skills/` | Canonical agent skills (`sightkick-debug`). Embedded into the generator (`generator/skills/`, generated) and installable via the CLI. |
-| `examples/` | `todo` (single view), `search` (two-view SPA). |
+| `examples/` | `todo` (single view), `search` (two-view SPA), `saucedemo` (real external site, no app shipped — see `docs/scenario-testing.md`). |
+| `docs/scenario-testing.md` | Scenario → corpus → tools/journeys → plan, worked end to end; states what's built vs. designed. |
+| `scripts/run-plan.mjs` | Replays a stored plan (`examples/saucedemo/plans/*.json`) with no agent; drift-checks it against the scenario file and the compiled manifest first. |
 | `vendor/webmcp-tool/` | WebMCP inspector extension, vendored from upstream (`npm run vendor-inspector`) and embedded into the CLI (`generator/webmcpinspector/`) so `sightkick browser --webmcp` auto-loads it. See its [`NOTES.md`](vendor/webmcp-tool/NOTES.md). |
 
 ## Build / test

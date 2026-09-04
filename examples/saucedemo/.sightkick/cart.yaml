@@ -1,0 +1,50 @@
+version: 1
+
+tools:
+  - name: go_to_cart
+    description: Navigate to the cart from anywhere via the nav-bar cart link.
+    steps:
+      - click:
+          query: CartLink
+      - wait_for:
+          view: Cart
+
+  - name: continue_shopping
+    description: Return from Cart to Inventory without checking out.
+    ensure_view: Cart
+    steps:
+      - click:
+          query: ContinueShoppingButton
+      - wait_for:
+          view: Inventory
+
+  - name: back_to_products
+    description: Return from an item's detail page to Inventory.
+    ensure_view: Item
+    steps:
+      - click:
+          query: BackToProductsButton
+      - wait_for:
+          view: Inventory
+
+  - name: go_to_checkout
+    description: Proceed from the cart to checkout. Fails as "no element" on an empty cart — that's the app's own guard, not a bug.
+    ensure_view: Cart
+    steps:
+      - click:
+          query: CheckoutButton
+      - wait_for:
+          view: CheckoutInfo
+
+  - name: read_cart
+    description: >
+      List the cart's current line items by name. Price and quantity are not
+      readable here (see CartItem's own memory note) — use the row count for
+      "how many items" and read price/quantity visually or via a screenshot.
+    ensure_view: Cart
+    returns:
+      description: The current cart contents (name only).
+      list:
+        rows: CartItem
+        fields:
+          name: name

@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "app": "examples/saucedemo",
+  "scenario": {
+    "feature": "features/checkout.feature",
+    "name": "Buy a single item with valid details",
+    "hash": "sha256:8be6328ccb7569d53e86a408b5238b3956c47a2ddd5cd4eb8b3e6f1cfdd26ab7"
+  },
+  "steps": [
+    {
+      "gherkin": "Given I am logged in as \"standard_user\"",
+      "tool": "log_in",
+      "params": {
+        "username": "standard_user",
+        "password": "secret_sauce"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "When I open \"Sauce Labs Backpack\"",
+      "tool": "open_item",
+      "params": {
+        "name": "Sauce Labs Backpack"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I add it to the cart",
+      "tool": "add_current_item_to_cart",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I go to the cart",
+      "tool": "go_to_cart",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I check out with first name \"Ada\", last name \"Lovelace\", postal code \"30301\" (1/2: proceed to checkout)",
+      "tool": "go_to_checkout",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I check out with first name \"Ada\", last name \"Lovelace\", postal code \"30301\" (2/2: fill details)",
+      "tool": "fill_checkout_info",
+      "params": {
+        "first_name": "Ada",
+        "last_name": "Lovelace",
+        "postal_code": "30301"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I place the order",
+      "tool": "place_order",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "Then the order is confirmed",
+      "tool": "read_confirmation",
+      "expect": {
+        "value": {
+          "contains": "Thank you for your order"
+        }
+      }
+    }
+  ],
+  "irHash": "sha256:8f2bd54f9d9ddd4d12b666243206b435662fc2866a5d47af6e957616c99db397",
+  "generatedAt": "2026-09-04T10:50:02.070Z"
+}

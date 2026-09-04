@@ -1,18 +1,22 @@
 # sightkick
 
-Generate [WebMCP](https://github.com/webmachinelearning/webmcp) tools from
-[sightmap](https://github.com/sightmap/sightmap) corpora, and run them on
-arbitrary sites.
+Compile a [sightmap](https://github.com/sightmap/sightmap) corpus plus a tool
+layer into a runtime-agnostic **IR**, and run it on arbitrary sites. sightkick
+lets an agent (or a stored, replayable plan — see
+[`docs/scenario-testing.md`](docs/scenario-testing.md)) call named actions
+(`add_todo`, `search`, …) on a site instead of clicking around blind. Tools are
+**UI-driven** — they use the same affordances a user has, so every action
+produces visible feedback and there are no under-the-UI state pokes.
 
-sightkick lets an agent call named actions (`add_todo`, `search`, …) on a site
-instead of clicking around blind. Tools are **UI-driven** — they use the same
-affordances a user has, so every action produces visible feedback and there are
-no under-the-UI state pokes.
-
-A single compiled artifact — the **IR** — runs the same way wherever it is
-loaded: installed directly on a site (`<script>` / userscript), or injected into
-a third-party page for debugging (`sightmap browser eval`). There is no separate
-"mediated" behavior and no background runtime executor.
+The compiled IR — every component reference resolved to a concrete locator,
+every property to an extractor — is the thing that's runtime-agnostic, not any
+one way of executing it. [WebMCP](https://github.com/webmachinelearning/webmcp)
+(`document.modelContext`, when the runtime is installed on a page) and the
+CLI (`sightkick call --via cli`, shelling to real `sightmap browser` commands,
+no runtime install needed) are two independent, already-working consumers of
+that same artifact — see **Runtimes** below. A Playwright emitter is a
+straightforward third consumer, not yet built; the mapping is specified in
+`docs/scenario-testing.md`.
 
 **Coordination model.** A *tool* is anything doable at a single point in time
 (same "page", no navigation crossing) — it may bundle several simultaneous
@@ -42,6 +46,12 @@ skills/        # canonical agent skills (sightkick-debug); embedded into the gen
 examples/
   todo/        # single-view example (tools + same-view guidance)
   search/      # two-view example (transition + cross-view guidance + rich returns)
+  saucedemo/   # real external site, no app shipped — corpus + tools + Gherkin
+               #   scenarios + stored plans; see docs/scenario-testing.md
+docs/
+  scenario-testing.md  # scenario -> corpus -> tools/journeys -> plan, worked end to end
+scripts/
+  run-plan.mjs # replays a stored plan (examples/saucedemo/plans/*.json), no agent
 vendor/
   webmcp-tool/ # WebMCP inspector, vendored from upstream + embedded in the CLI
                #   (`--webmcp` auto-loads it to drive injected tools)
@@ -50,6 +60,20 @@ vendor/
 The generator is Go and the runtime is TypeScript — a deliberate polyglot split
 across the IR firewall. The two sides share no code; they share the IR JSON
 contract.
+
+## Runtimes
+
+The compiled IR has exactly one shape; three things can execute it:
+
+| Runtime | How | Status |
+|---|---|---|
+| WebMCP (`document.modelContext`) | The runtime bundle installed on the page, registering IR tools as native WebMCP tools | Built |
+| CLI (`sightkick call --via cli`) | Shells to real `sightmap browser click`/`fill`/`wait-for` commands — no runtime install, reaches portal-rendered elements a runtime's synthetic clicks can't | Built |
+| Playwright | Would emit `page.locator()`/`.click()`/`.fill()` from the same resolved locators/extractors | Not built — mapping specified in [`docs/scenario-testing.md`](docs/scenario-testing.md#7-the-output-is-runtime-agnostic) |
+
+`sightkick call`'s own `--via` flag switches between the first two today. Neither is more
+"canonical" than the other — they're peers over the same IR, chosen by what's available on the
+target page (a runtime install) versus what's always available (a running browser session).
 
 ## Try the generator
 
@@ -157,3 +181,10 @@ The served two-view SPA is verified in a real browser via `sightmap browser`:
 view-scoped tools, SPA re-registration without reload, cross-view guidance, and
 rich returns all confirmed live. A deterministic eval harness
 (`packages/runtime/eval/run.mjs`) replays the whole flow tools-in / DOM-out.
+
+Turning a corpus + tool layer into a database of scenario tests — Gherkin →
+plan → replay without an agent — is worked through end to end, on a real
+external site, in [`docs/scenario-testing.md`](docs/scenario-testing.md), which
+also states plainly what that pipeline doesn't do yet (scenario→plan resolution
+and a Playwright emitter are both designed, not built) and two permanent
+sightmap-level limitations found building it.
