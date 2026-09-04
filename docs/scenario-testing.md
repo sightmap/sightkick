@@ -256,15 +256,12 @@ have to live **outside** the manifest by necessity. The honest pattern: document
 a fixed, non-tool sequence a session runs once, and let every tool assume it already happened.
 
 **Site graph.** Views + routes + `ensure_view` *are* the graph. A tool's `ensure_view` states its
-precondition; a `wait_for: {view: X}` on its last step states its postcondition. Two findings from
-building `examples/saucedemo` worth generalizing:
-- **A missing back-edge is a missing capability, not a planning problem.** Before
-  `back_to_products`/`continue_shopping` existed, there was no way to express "add a second item"
-  at all — not because the planner couldn't figure it out, because no tool's steps ever went there.
-- **Leaving a wizard can silently reset it.** saucedemo's checkout always restarts at step one if
-  you navigate away and back, even though the cart itself is untouched. `add_to_cart`'s own
-  description says so; a plan that doesn't know this re-fills from scratch instead of assuming an
-  earlier pass survived.
+precondition; a `wait_for: {view: X}` on its last step states its postcondition. A missing back-edge
+is a missing capability, not a planning problem — §6 covers the concrete case. A second finding
+worth generalizing: **leaving a wizard can silently reset it.** saucedemo's checkout always
+restarts at step one if you navigate away and back, even though the cart itself is untouched.
+`add_to_cart`'s own description says so; a plan that doesn't know this re-fills from scratch
+instead of assuming an earlier pass survived.
 
 **Fixtures.** saucedemo's own published test users are the whole mechanism:
 `standard_user`/`locked_out_user`/`problem_user`/`performance_glitch_user`, one shared password.
