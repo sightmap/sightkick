@@ -2,38 +2,53 @@
 
 Compile a [sightmap](https://github.com/sightmap/sightmap) corpus plus a tool
 layer into a runtime-agnostic **IR**, and run it on arbitrary sites. sightkick
-lets an agent (or a stored, replayable plan — see
+lets an agent (or a stored, replayable plan, see
 [`docs/scenario-testing.md`](docs/scenario-testing.md)) call named actions
 (`add_todo`, `search`, …) on a site instead of clicking around blind. Tools are
-**UI-driven** — they use the same affordances a user has, so every action
-produces visible feedback and there are no under-the-UI state pokes.
+**UI-driven**: they use the same affordances a user has, so every action
+produces visible feedback, with no under-the-UI state pokes.
 
-The compiled IR — every component reference resolved to a concrete locator,
-every property to an extractor — is the thing that's runtime-agnostic, not any
-one way of executing it. [WebMCP](https://github.com/webmachinelearning/webmcp)
-(`document.modelContext`, when the runtime is installed on a page) and the
-CLI (`sightkick call --via cli`, shelling to real `sightmap browser` commands,
-no runtime install needed) are two independent, already-working consumers of
-that same artifact — see **Runtimes** below. A Playwright emitter is a
+The compiled IR is what's runtime-agnostic (every component reference resolved
+to a concrete locator, every property to an extractor), not any one way of
+executing it. [WebMCP](https://github.com/webmachinelearning/webmcp)
+(`document.modelContext`, when the runtime is installed on a page) and the CLI
+(`sightkick call --via cli`, shelling to real `sightmap browser` commands, no
+runtime install needed) are two independent, already-working consumers of that
+same artifact — see **Runtimes** below. A Playwright emitter is a
 straightforward third consumer, not yet built; the mapping is specified in
 `docs/scenario-testing.md`.
 
 **Coordination model.** A *tool* is anything doable at a single point in time
 (same "page", no navigation crossing) — it may bundle several simultaneous
-sub-actions and returns a structured result. Multi-step flows are **not** run by
-a runtime executor; instead a *journey* is a compile-time transition graph over
-tools that is projected into **guidance breadcrumbs** attached to each tool's
-result ("consider `set_filters` and/or `list_flights` next"). The agent does the
-sequencing; we hand it a good map. This sidesteps WebMCP's unsolved
+sub-actions and returns a structured result. Multi-step flows are **not** run
+by a runtime executor; instead a *journey* is a compile-time transition graph
+over tools, projected into **guidance breadcrumbs** attached to each tool's
+result ("consider `set_filters` and/or `list_flights` next"). The agent does
+the sequencing; we hand it a good map. This sidesteps WebMCP's unsolved
 cross-document-response problem entirely.
 
 sightkick is a **library-level consumer** of sightmap: the offline generator
 depends on the sightmap reference library
 ([`github.com/sightmap/sightmap/go`](https://pkg.go.dev/github.com/sightmap/sightmap/go/sightmap),
-pinned) for all corpus reading, `$ref` expansion, hierarchy flattening, and route
-matching — so there's no second implementation of the spec to keep honest. The
-compiled **IR** is the firewall: the runtime consumes it and never sees a
-sightmap construct, so it stays pure TypeScript.
+pinned) for all corpus reading, `$ref` expansion, hierarchy flattening, and
+route matching, so there's no second implementation of the spec to keep
+honest. The compiled **IR** is the firewall: the runtime consumes it and never
+sees a sightmap construct, so it stays pure TypeScript.
+
+## Install
+
+```sh
+npm i -g @sightmap/sightkick
+sightkick skills install
+```
+
+The CLI is the only thing you need: it embeds the generator, the runtime
+bundle, and the agent skills. `skills install` writes the canonical
+sightkick + sightmap skills to `~/.agents/skills` (`--target DIR` to place
+them elsewhere) so an agent picks up `sightkick-authoring`/`sightkick-debug`
+without any extra setup.
+
+Building from source instead: see **Try the generator** below.
 
 ## Layout
 
@@ -123,22 +138,16 @@ browser` CLI (using `examples/search/.sightmap`).
 
 ## Run the tools on a live page
 
-To exercise the compiled tools against a real third-party site (no direct install
-required), inject the runtime bundle + IR into a running page and drive them —
-either agent-driven over `sightmap browser eval`, or with the vendored **WebMCP
-inspector** (a Gemini sidebar) reading the tools off the page's native
-`document.modelContext`. The full loop — build the bundle + IR, launch the
-session with the right Chrome-for-Testing flags, inject, drive, and re-inject
-across navigations — is the **`sightkick-debug`** skill
-([`skills/sightkick-debug/SKILL.md`](skills/sightkick-debug/SKILL.md)). The
-Chrome-for-Testing flags and their rationale live in
-[`vendor/webmcp-tool/NOTES.md`](vendor/webmcp-tool/NOTES.md).
-
-Install the skills (this also pulls in the supporting sightmap skills):
-
-```sh
-sightkick skills install     # or, from a release: npx @sightmap/sightkick skills install
-```
+To exercise the compiled tools against a real third-party site, with no direct
+install on that site, inject the runtime bundle + IR into a running page and
+drive them — either agent-driven over `sightmap browser eval`, or with the
+vendored **WebMCP inspector** (a Gemini sidebar) reading the tools off the
+page's native `document.modelContext`. The full loop — build the bundle + IR,
+launch the session with the right Chrome-for-Testing flags, inject, drive, and
+re-inject across navigations — is the **`sightkick-debug`** skill
+([`skills/sightkick-debug/SKILL.md`](skills/sightkick-debug/SKILL.md), part of
+`sightkick skills install` above). The Chrome-for-Testing flags and their
+rationale live in [`vendor/webmcp-tool/NOTES.md`](vendor/webmcp-tool/NOTES.md).
 
 ### WebMCP notes
 
@@ -169,10 +178,9 @@ Early, but end-to-end for the single-page and SPA cases:
   `cd packages/runtime && pnpm test` drives the fixtures with the generator's
   golden IR, covering the whole pipeline across the IR firewall.
 
-Journeys compile into **guidance breadcrumbs** carried in each tool result; tools
-register **per view** (only the current view's tools are offered), and a
-cross-view edge yields `after_navigation` guidance ("read the results there").
-The `search` example exercises this end-to-end
+Tools register **per view** (only the current view's tools are offered), and a
+cross-view edge yields `after_navigation` guidance ("read the results there"),
+confirmed end-to-end by the `search` example
 (`generator/.../testdata/search.ir.json` driven by a runtime test across a
 simulated navigation), with rich returns (machine ids + human fields) and
 same-page idempotency guards.
@@ -185,6 +193,5 @@ rich returns all confirmed live. A deterministic eval harness
 Turning a corpus + tool layer into a database of scenario tests — Gherkin →
 plan → replay without an agent — is worked through end to end, on a real
 external site, in [`docs/scenario-testing.md`](docs/scenario-testing.md), which
-also states plainly what that pipeline doesn't do yet (scenario→plan resolution
-and a Playwright emitter are both designed, not built) and two permanent
-sightmap-level limitations found building it.
+also states plainly what that pipeline doesn't do yet: scenario→plan resolution
+and a Playwright emitter are both designed, not built.

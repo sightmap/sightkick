@@ -1,8 +1,8 @@
 # Scenario-driven testing with sightkick
 
-This is a status report on a working thin slice, not a finished product. It says plainly, section
-by section, what runs today versus what's designed but not built — that distinction matters more
-here than usual, because the whole point is deciding whether to invest further.
+This is a status report on a working thin slice, not a finished product: every section states
+plainly what runs today versus what's only designed, because the whole point is deciding whether
+to invest further.
 
 Everything concrete in this document lives in [`examples/saucedemo/`](../examples/saucedemo/), a
 sightkick corpus and tool layer targeting the real [saucedemo.com](https://www.saucedemo.com/) —
@@ -40,10 +40,9 @@ just whoever wrote the automation.
 
 What hasn't held up is the layer underneath it. Classic Cucumber (and `playwright-bdd`, which
 inherits the same shape) matches each Gherkin line against a hand-written *step definition* — a
-regex plus imperative browser code with selectors baked in. That glue is a second codebase, grown
-one step definition at a time, that has to be kept in sync with the app by hand. It rots
-independently of the spec: a selector changes, a flow gains a step, and the step definition is
-wrong in a way the `.feature` file gives no hint of. The spec stays readable; the thing that
+regex plus imperative browser code with selectors baked in. That glue is a second codebase that
+rots independently of the spec: a selector changes or a flow gains a step, and the step definition
+breaks in a way the `.feature` file gives no hint of. The spec stays readable; the thing that
 executes it becomes exactly the brittle, why-is-this-failing artifact BDD was meant to replace.
 
 sightkick's bet is that this glue doesn't need to be hand-written at all, because most of it is
@@ -75,8 +74,7 @@ fixture is hand-written Java/C#/etc., verified only by running it. A sightkick t
 declarative (component queries, not imperative code), continuously checked against a live semantic
 model (`sightkick build` fails on any reference the corpus doesn't have), and — see §11 — the
 *ordering* knowledge (which journey step follows which) can eventually come from observed usage
-instead of an author's guess. FitNesse's fixtures don't have anything analogous to a corpus to be
-checked against, and nothing analogous to a journey at all.
+instead of an author's guess. FitNesse's fixtures have no equivalent of either.
 
 ## 3. The corpus
 
@@ -150,8 +148,8 @@ walks it pairwise and attaches "consider this next" guidance to each tool's own 
     # ...
 ```
 
-Say plainly what this is not, because it's the most likely misreading: **a journey does not grant
-a capability, and a planner does not need one to compose a valid tool sequence.** The compiler's
+The most likely misreading: **a journey does not grant a capability, and a planner does not need
+one to compose a valid tool sequence.** The compiler's
 own logic is a dumb adjacency walk over hand-authored pairs — no inference, no graph search. It
 exists to help a *live*, turn-by-turn agent that only sees one tool's result at a time decide what
 to try next without re-reading the whole manifest. A planner that reads the full manifest up front
@@ -181,20 +179,19 @@ resolves to
 ```
 
 A line that can't be resolved is a gap: either no tool exists for it (author one, following §4),
-or the request supplies a value no tool declares a param for. This is not a hypothetical — it's
-exactly how `examples/saucedemo`'s tool layer grew. Live driving surfaced that there was no way
-back from Cart or an item's detail page to the catalog at all (no tool's steps ever navigated
-there); `go_to_menu`-equivalent tools (`back_to_products`, `continue_shopping`) got added *because*
-a scenario needed the gap filled, not speculatively. See `features/multi-item.feature` and
+or the request supplies a value no tool declares a param for. That's exactly how
+`examples/saucedemo`'s tool layer grew. Live driving surfaced that there was no way back from
+Cart or an item's detail page to the catalog at all (no tool's steps ever navigated there);
+`go_to_menu`-equivalent tools (`back_to_products`, `continue_shopping`) got added *because* a
+scenario needed the gap filled, not speculatively. See `features/multi-item.feature` and
 `plans/multi-item.plan.json` for the resulting scenario.
 
-Be precise about what this resolution step actually is: **matching, not planning.** A request
-resolves against whichever journey's guidance it best fits, walked one hop at a time — it does not
-search for a *new* sequence the way a STRIPS-style planner would. Ask for something no journey
-covers and there's no fallback within this pipeline; an agent falls back to reading the manifest
-directly and reasoning per tool, which is a person doing the search a planner would otherwise do.
-That's the honest ceiling today, not an edge case — see §11 for what real planning over this
-manifest would additionally require.
+This resolution step is **matching, not planning**: a request resolves against whichever journey's
+guidance it best fits, walked one hop at a time — it does not search for a *new* sequence the way a
+STRIPS-style planner would. Ask for something no journey covers and there's no fallback within this
+pipeline; an agent falls back to reading the manifest directly and reasoning per tool, which is a
+person doing the search a planner would otherwise do. That's the ceiling today, not an edge case —
+see §11 for what real planning over this manifest would additionally require.
 
 ## 7. The output is runtime-agnostic
 
@@ -230,7 +227,7 @@ Two consumers of exactly this artifact exist today: `document.modelContext` (Web
 runtime is installed on the page) and `sightkick call --via cli` (shells to `sightmap browser`
 commands — no runtime install needed, and it reaches portal-rendered elements a runtime's
 synthetic events can't). A Playwright emitter would be a third, straightforward but **not
-built** — the mapping is direct enough to show honestly:
+built** — the mapping is direct enough to show:
 
 | IR piece | Playwright |
 |---|---|
@@ -298,9 +295,9 @@ assertion that broke, not a stack trace three layers removed from it:
 }
 ```
 
-The cost story this enables: an agent reads the manifest and produces a plan once. Every run after
-that is `node scripts/run-plan.mjs plan.json` — no LLM call, no token cost, until a hash moves and
-it's time to re-plan.
+An agent reads the manifest and produces a plan once. Every run after that is
+`node scripts/run-plan.mjs plan.json` — no LLM call, no token cost, until a hash moves and it's
+time to re-plan.
 
 ## 10. Keeping it true
 
