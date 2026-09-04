@@ -20,7 +20,3 @@ views:
         description: Returns to Inventory.
       - name: GeneratePdfLink
         selector: '[data-test="generate-pdf-order"]'
-        memory:
-          - >-
-            Renders on some purchases and not others — confirmed absent on a
-            plain single-item order. Not used by any tool here.

@@ -27,12 +27,8 @@ components:
     children:
       - name: CartBadge
         selector: '[data-test="shopping-cart-badge"]'
-        memory:
-          - Confirmed live, extract:text is broken here (a bare span). Read via the parent CartLink anchor's own text instead.
   - name: TwitterLink
     selector: '[data-test="social-twitter"]'
-    memory:
-      - Footer decoration, out of scope for every scenario. Modeled only to keep coverage at 0 orphaned.
   - name: FacebookLink
     selector: '[data-test="social-facebook"]'
   - name: LinkedInLink
@@ -54,15 +50,6 @@ components:
         extract: text
   - name: ItemPrice
     selector: '[data-test="inventory-item-price"]'
-    memory:
-      - >-
-        Confirmed live: extract: text never resolves here, or on any other
-        bare div with no accessibility-tree role (same finding as
-        ItemName's old div-based selector, and SubtotalLabel/TaxLabel/
-        TotalLabel below) — unlike ItemName, there is no wrapping
-        link/button/heading anywhere in this element's ancestry to retarget
-        to. Kept in the corpus for coverage and as a click-adjacent
-        landmark; not readable through any sightkick tool.
   - name: AddToCartButton
     selector: '.btn_inventory'
     description: >
@@ -78,8 +65,7 @@ components:
     selector: '.cart_item'
     description: >
       A line item, on Cart and on the CheckoutOverview summary (identical
-      markup, confirmed live). Only name is readable — see ItemPrice and
-      Quantity's own memory notes for why price/quantity are not.
+      markup, confirmed live). Only name is readable.
     properties:
       - name: name
         extract: ItemName.text
@@ -88,11 +74,6 @@ components:
       - $ref: ItemPrice
       - name: Quantity
         selector: '[data-test="item-quantity"]'
-        memory:
-          - >-
-            Confirmed live: no semantic ancestor exists here either — same
-            extract: text limitation as ItemPrice. Not readable through any
-            sightkick tool.
       - name: RemoveButton
         selector: '.cart_button'
         description: >

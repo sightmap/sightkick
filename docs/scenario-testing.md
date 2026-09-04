@@ -6,9 +6,7 @@ here than usual, because the whole point is deciding whether to invest further.
 
 Everything concrete in this document lives in [`examples/saucedemo/`](../examples/saucedemo/), a
 sightkick corpus and tool layer targeting the real [saucedemo.com](https://www.saucedemo.com/) —
-no app shipped in this repo, no toy DOM. Every claim below was checked against that corpus; where
-something didn't work, that's said directly, including two real, permanent limitations found while
-building it.
+no app shipped in this repo, no toy DOM. Every claim below was checked against that corpus.
 
 ## 1. The problem BDD actually has
 
@@ -166,6 +164,14 @@ there); `go_to_menu`-equivalent tools (`back_to_products`, `continue_shopping`) 
 a scenario needed the gap filled, not speculatively. See `features/multi-item.feature` and
 `plans/multi-item.plan.json` for the resulting scenario.
 
+Be precise about what this resolution step actually is: **matching, not planning.** A request
+resolves against whichever journey's guidance it best fits, walked one hop at a time — it does not
+search for a *new* sequence the way a STRIPS-style planner would. Ask for something no journey
+covers and there's no fallback within this pipeline; an agent falls back to reading the manifest
+directly and reasoning per tool, which is a person doing the search a planner would otherwise do.
+That's the honest ceiling today, not an edge case — see §11 for what real planning over this
+manifest would additionally require.
+
 ## 7. The output is runtime-agnostic
 
 This is the load-bearing technical claim, and it's a description of what already exists, not a
@@ -283,46 +289,44 @@ What catches drift automatically, today:
 - **`sightkick build`** fails on any unresolved component/property/view reference — a tool can't
   silently point at something the corpus no longer has.
 - **`sightkick build --verify`** checks every tool's `returns` extractor against captured
-  snapshots and warns when a field resolves empty on every one. This is how the two real
-  limitations in §11 were *found*, not theorized.
+  snapshots and warns when a field resolves empty on every one.
 - **Plan hashes** (§9) catch the spec or the compiled manifest changing under a stored plan.
 
 What can still break silently: a corpus that's stale relative to the *live* site (re-seeding is a
-manual trigger, not automatic), and — see the two findings below — a property that resolves to
-something other than empty but still isn't what a human would expect.
+manual trigger, not automatic), and a property that resolves to something other than empty but
+still isn't what a human would expect.
 
-**Two real, permanent limitations, found live while building `examples/saucedemo`, not
-hypothesized:**
+## 11. Beyond matching — two directions, neither shipped
 
-1. `extract: text` only resolves on elements with their own accessibility-tree role (a link,
-   button, heading, combobox — anything AX exposes). A plain `<div>`/`<span>` holding exactly the
-   text a property wants extracts **empty**, silently, even though the identical selector resolves
-   correctly for a click. Where a semantic wrapper exists nearby, retargeting the property there is
-   the fix (`ItemName` moved to the product's wrapping `<a>` rather than the inner `<div>`). Where
-   none exists — a price, an order total — there is no fix today; see the `memory:` notes on
-   `ItemPrice`/`SubtotalLabel`/`TaxLabel`/`TotalLabel`.
-2. Native `<select>` dropdowns aren't automatable via click/fill/keypress at all — confirmed live
-   on the inventory sort control: a real click and a real ArrowDown/Enter keypress change neither
-   `document.activeElement` nor the select's value. This is a known, general gap in CDP input-event
-   automation for native select popups; Playwright's answer is a dedicated `selectOption()` API
-   that sets the value directly rather than simulating input, which sightmap doesn't implement.
+**Real planning.** Search over the manifest — given a goal, compute a *new* tool sequence that
+reaches it, the classic STRIPS/PDDL shape — needs four things this manifest doesn't have yet:
 
-Both are stated in the example's own `README.md` and in `memory:` notes on the affected corpus
-components — the discipline is: a limitation lives next to the thing it limits, not only in this
-document.
+- **Declared effects.** A tool's `returns` reads state; nothing declares what a tool *changes*. No
+  field says `add_to_cart` results in "cart non-empty." Without that, nothing can compute a new
+  sequence — only replay one a human already wrote as a journey.
+- **A search algorithm.** Given effects, matching a goal to a sequence of tools whose effects
+  satisfy it is real, separate work on top of a much richer manifest than exists today.
+- **Current-state detection.** Every worked example in this doc assumes a known starting view. A
+  planner has to first know where "here" is; nothing reads live state to seed a plan today.
+- **Auth and session bootstrap as reachable state.** Reaching any tool at all needs whatever
+  bootstrap §8 describes (a pre-authenticated profile, an org chooser click) — none of it
+  expressible as a tool call. A planner over tool calls has nothing to say about the state before
+  any tool call is legal.
 
-## 11. Journeys from real usage — direction, not shipped
-
-Nothing below this line runs today. The idea: Subtext already records real user sessions against
-an app with a sightmap corpus attached, which means a session is, in principle, a sequence of
-named components interacted with in a real order — the same shape a hand-authored `journeys:` list
+**Journeys from real usage.** Separately: Subtext already records real user sessions against an
+app with a sightmap corpus attached, which means a session is, in principle, a sequence of named
+components interacted with in a real order — the same shape a hand-authored `journeys:` list
 already has. If observed trajectories could be mined into journey entries automatically, the
 guidance an agent gets (§5) would track how the app is actually being used rather than an author's
-best guess at launch time, and drift as real usage drifts. This does not change what's plannable
-(§5's point stands — journeys are guidance, not capability) but it would change whether the
-guidance stays accurate for free. This needs a defined pipeline (which session events count,
-how conflicting orderings across sessions get reconciled, how confidence is represented) that does
-not exist yet.
+best guess at launch time, and drift as real usage drifts. This doesn't change what's plannable —
+§5's point stands, journeys are guidance, not capability — but it would change whether the
+guidance stays accurate for free. Needs a defined pipeline (which session events count, how
+conflicting orderings across sessions get reconciled, how confidence is represented) that doesn't
+exist yet.
+
+These are independent: real planning would make journeys largely unnecessary for a well-specified
+goal; journey-mining makes matching (§6) better without touching planning at all. Either is a real
+project, not a follow-up patch.
 
 ## 12. Getting started
 
@@ -349,8 +353,8 @@ Everything past that is repetition: more views, more tools, more scenarios, foll
 | `examples/saucedemo` — corpus, tools, journeys, 4 `.feature` files | Built, this pass |
 | Stored plan format (`*.plan.json`), scenario/IR hashing | Built, this pass — example-local, not yet a sightkick spec |
 | `scripts/run-plan.mjs` — replay without an agent, drift detection | Built, this pass — confirmed both directions of drift detection live |
-| Live click execution for JS-`onClick`-driven buttons via `--via cli` | **Blocked**, this environment — see §10 and the example's own README; native-behavior clicks (form submit, focus) work, JS-handler clicks do not |
 | Scenario → plan resolution | Demonstrated manually (§6); no automated resolver yet |
 | Gap report (unresolvable scenario line → suggested new tool) | Not built |
 | Playwright emitter | Not built; mapping specified in §7 |
+| Real (STRIPS-style) planning over the manifest | Not built; 4 named prerequisites, §11 |
 | Subtext session → journey mining | Not built; direction only, §11 |

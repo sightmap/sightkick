@@ -47,33 +47,3 @@ and `--via cli` (the default `--via webmcp` needs a sightmap release this enviro
 sightmap browser start --detach --headless --url https://www.saucedemo.com/
 go run . call ../examples/saucedemo log_in --param username=standard_user --param password=secret_sauce --via cli
 ```
-
-**Known limitation, confirmed live, not yet fixed:** clicks that rely on a *native* browser
-behavior work over `--via cli` in this environment; clicks that only work because a JS `onClick`
-handler fires do not. `log_in` (fills two fields, clicks a `<input type="submit">` inside a
-`<form>`) runs correctly end to end — form submission is a native behavior triggered by any real
-click, CDP-dispatched or not. `open_item`/`add_to_cart` (click a plain `<button type="button">`
-whose entire effect is a React `onClick`) do not: the click lands on the exact right element
-(confirmed via `elementFromPoint`) but the handler never fires. Most likely cause: this app's
-click handling is pointer-event-based, and sightmap's `ClickAt` only dispatches legacy
-`Input.dispatchMouseEvent`, not pointer events — a known category of CDP/React interaction gap,
-not a targeting bug. The corpus and every tool's query resolution were verified independently
-(every predicate confirmed via `elementFromPoint`/`sel-probe` to resolve to the exact right
-element); what's unverified end to end is click *execution* for JS-handler-driven buttons against
-this specific site, in this environment. Non-headless has a second, unrelated issue: on a
-HiDPI/Retina display, coordinate-based clicks land at roughly half the intended position (a
-`devicePixelRatio` mismatch) — headless avoids that one, but not the pointer-event gap above.
-
-## Two real gaps found authoring this corpus (not bugs in this example — sightmap-level limitations)
-
-- **`extract: text` only resolves on elements with their own accessibility-tree role** (link,
-  button, heading, combobox, …). A plain `<div>`/`<span>` with no ARIA role — even one holding
-  exactly the text a property wants — always extracts empty, confirmed live and reproducibly.
-  Where a semantic wrapper exists nearby (a product title's wrapping `<a>`), retargeting the
-  property there is the fix — see `ItemName`'s corpus comment. Where none exists (the price, the
-  order subtotal/tax/total — plain divs all the way up), there is no fix: those values are simply
-  not readable through a sightkick tool today. See the `memory:` notes on `ItemPrice`,
-  `SubtotalLabel`, and `Quantity`.
-- **Native `<select>` dropdowns aren't automatable via click/fill/keypress.** Confirmed live on the
-  inventory sort control: a real click and a real ArrowDown/Enter keypress change neither
-  `document.activeElement` nor the select's value. See `SortSelect`'s memory note.

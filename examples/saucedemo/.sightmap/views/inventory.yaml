@@ -11,16 +11,6 @@ views:
         properties:
           - name: active
             extract: attr=value
-        memory:
-          - >-
-            Confirmed live: a real click (Input.dispatchMouseEvent) and a
-            real ArrowDown/Enter keypress on this native <select> change
-            neither document.activeElement nor its value — no sightkick
-            tool is authored against it. Native select popups are a known
-            gap for CDP input-event automation generally; Playwright works
-            around it with a dedicated selectOption() API that sets the
-            value directly rather than simulating input, which sightmap
-            does not implement.
       - name: InventoryItem
         selector: '.inventory_item'
         description: >
