@@ -44,9 +44,9 @@ scenario  →  corpus         →  tools + journeys       →  plan
 - **Plan** — a scenario resolved against the tool layer: each Gherkin line mapped to a tool call
   and an expectation, hashed against both the scenario and the compiled manifest, checked in.
 
-**The explicit Fitnesse comparison**, since it's a fair one: FitNesse has the same three-layer
-shape — a wiki-authored spec, fixture code that executes it, a system under test. The difference
-here isn't the shape, it's where the fixture layer comes from and how it's kept honest. A FitNesse
+**Compare this to FitNesse**, which has the same three-layer shape — a wiki-authored spec, fixture
+code that executes it, a system under test. The difference here isn't the shape, it's where the
+fixture layer comes from and how it's kept honest. A FitNesse
 fixture is hand-written Java/C#/etc., verified only by running it. A sightkick tool layer is
 declarative (component queries, not imperative code), continuously checked against a live semantic
 model (`sightkick build` fails on any reference the corpus doesn't have), and — see §11 — the
@@ -224,14 +224,12 @@ mapping is unclear.
 
 ## 8. The meaty details
 
-**Auth.** Two real shapes, both confirmed live this pass:
-- *Simple*: `examples/saucedemo`'s `log_in(username, password)` is an ordinary tool — fill two
-  fields, click submit, wait for the destination view. No special handling needed.
-- *Hard*: Fullstory's own internal verify skill needs Google OAuth followed by an org chooser with
-  no addressable corpus component at all. Both live **outside** the manifest by necessity — OAuth
-  because there is no programmatic way through a real third-party consent screen, the org chooser
-  because it has no stable selectors to model. The honest pattern: document the bootstrap as a
-  fixed, non-tool sequence a session runs once, and let every tool assume it already happened.
+**Auth.** `examples/saucedemo`'s `log_in(username, password)` is the simple case — an ordinary
+tool, fill two fields, click submit, wait for the destination view. Real SSO is harder: a
+third-party consent screen has no programmatic way through it, and a post-login screen (an org or
+workspace picker, say) often has no stable selectors worth modeling as a corpus component. Both
+have to live **outside** the manifest by necessity. The honest pattern: document the bootstrap as
+a fixed, non-tool sequence a session runs once, and let every tool assume it already happened.
 
 **Site graph.** Views + routes + `ensure_view` *are* the graph. A tool's `ensure_view` states its
 precondition; a `wait_for: {view: X}` on its last step states its postcondition. Two findings from
