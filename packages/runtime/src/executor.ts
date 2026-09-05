@@ -84,6 +84,42 @@ function describeTarget(step: Step): string {
   return `query ${JSON.stringify(parts.map((p) => p.locators.join("|")))}`;
 }
 
+/** Collect the {{param}} names a template string references into `out`. */
+function templateParamNames(s: string | undefined, out: Set<string>): void {
+  if (!s) return;
+  for (const m of s.matchAll(/\{\{\s*([\w.]+)\s*\}\}/g)) out.add(m[1]!);
+}
+
+/** Every param a step interpolates: its value/url/key plus any query pred values. */
+function stepParams(step: Step): string[] {
+  const out = new Set<string>();
+  templateParamNames(step.value, out);
+  templateParamNames(step.url, out);
+  templateParamNames(step.key, out);
+  for (const part of step.query?.parts ?? []) {
+    for (const pred of part.preds ?? []) templateParamNames(pred.value, out);
+  }
+  return [...out];
+}
+
+/**
+ * Optional/skippable steps, so a grouped tool can carry optional fields. An
+ * explicit `when` guard skips the step when it interpolates to empty. Otherwise a
+ * step AUTO-skips when any {{param}} it interpolates is absent from args (an
+ * omitted optional param — required params are guaranteed present by the tool's
+ * input schema). Omitted (undefined) is distinct from an explicit empty string,
+ * which is a real value and does not skip.
+ */
+function shouldSkipStep(step: Step, args: Record<string, unknown>): boolean {
+  if (step.when !== undefined) {
+    return interpolate(step.when, args).trim() === "";
+  }
+  for (const p of stepParams(step)) {
+    if (!(p in args) || args[p] === undefined) return true;
+  }
+  return false;
+}
+
 // isActionable skips responsive-hidden duplicates when picking an ACTION target:
 // layouts keep both a mobile and desktop copy in the DOM (Tailwind md:hidden /
 // max-md:hidden), and clicking/filling the hidden one is a silent no-op. Uses
@@ -231,6 +267,10 @@ export async function runTool(tool: Tool, args: Record<string, unknown> = {}, op
 
   try {
     for (const step of tool.steps) {
+      if (shouldSkipStep(step, args)) {
+        opts.log(`skip ${step.op} step (optional field absent)`);
+        continue;
+      }
       await runStep(step, args, opts);
     }
   } catch (err) {

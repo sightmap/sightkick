@@ -74,13 +74,18 @@ type Field struct {
 // preceding fill/click left focused, matching the CLI's own keypress command.
 // Reads are not steps — a tool's result is declared by Returns.
 type Step struct {
-	Op        string `json:"op"`
-	View      string `json:"view,omitempty"`
-	Route     string `json:"route,omitempty"`
-	URL       string `json:"url,omitempty"`
-	Query     *Query `json:"query,omitempty"`
-	Value     string `json:"value,omitempty"`
-	Key       string `json:"key,omitempty"`
+	Op    string `json:"op"`
+	View  string `json:"view,omitempty"`
+	Route string `json:"route,omitempty"`
+	URL   string `json:"url,omitempty"`
+	Query *Query `json:"query,omitempty"`
+	Value string `json:"value,omitempty"`
+	Key   string `json:"key,omitempty"`
+	// When is an optional skip guard: the runtime skips the step when When
+	// interpolates to empty (an omitted param). Steps also auto-skip when any
+	// {{param}} they interpolate is absent from args, so When is only needed to
+	// gate on a param the step doesn't otherwise reference.
+	When      string `json:"when,omitempty"`
 	TimeoutMs int    `json:"timeoutMs,omitempty"`
 }
 

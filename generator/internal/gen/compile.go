@@ -655,6 +655,10 @@ func (cc *compiler) compileTool(t ToolDef) Tool {
 			continue
 		}
 		if s, ok := cc.compileStep(op, body, comps, all, names, known, t.Name); ok {
+			if strings.TrimSpace(body.When) != "" {
+				cc.validateTemplate(body.When, known, t.Name)
+				s.When = body.When
+			}
 			tool.Steps = append(tool.Steps, s)
 		}
 	}
