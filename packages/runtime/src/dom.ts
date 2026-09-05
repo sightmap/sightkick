@@ -255,11 +255,49 @@ export function typeInto(el: Element, value: string): void {
  * <select> popups, showPopover(), clipboard, file/opener dialogs — still require
  * a host-driven trusted click; no main-world path can forge that.)
  */
-export function clickElement(el: Element): void {
+export async function clickElement(el: Element): Promise<void> {
   const t = el as HTMLElement;
-  const r = t.getBoundingClientRect?.();
-  const clientX = r ? Math.round(r.left + r.width / 2) : 0;
-  const clientY = r ? Math.round(r.top + r.height / 2) : 0;
+  // Click the element a USER's click would hit. A real click hit-tests at
+  // coordinates and lands on the TOPMOST element there, which for a custom
+  // element is often an inner child (e.g. <jb-select-option> > div.body) where
+  // the handler lives; an event dispatched on the resolved node bubbles UP and
+  // never reaches that child, so the click silently no-ops. So bring the node
+  // on-screen (coordinate hit-testing only works in the viewport), then dispatch
+  // at document.elementFromPoint(center). Coordinate-based, so it also reaches
+  // portal-rendered menu items rendered outside the app's own subtree.
+  //
+  // Settle race: a JUST-opened flyout/menu is still laying out for a few frames —
+  // getBoundingClientRect already reports the intended (post-scroll) position, but
+  // elementFromPoint returns the PRE-settle paint (a *different* option). An
+  // immediate hit-test would target the wrong node and no-op (below-fold dropdown
+  // options: State, DOB Month/Day/Year, phone country). So retry across animation
+  // frames — recomputing the centre each frame — until elementFromPoint resolves
+  // into the target's own subtree; fall back to the node if a short budget expires
+  // (an occluded/undecided point, dispatched on the node as before). In-viewport
+  // targets resolve on frame 1, so the fast path stays instant.
+  if (typeof t.scrollIntoView === "function" && !isInViewport(t)) {
+    t.scrollIntoView({ block: "center", inline: "center" });
+  }
+  const canHitTest = typeof document !== "undefined" && typeof document.elementFromPoint === "function";
+  let clientX = 0;
+  let clientY = 0;
+  let target: HTMLElement = t;
+  const deadline = Date.now() + 300;
+  for (;;) {
+    const r = t.getBoundingClientRect?.();
+    clientX = r ? Math.round(r.left + r.width / 2) : 0;
+    clientY = r ? Math.round(r.top + r.height / 2) : 0;
+    const hit = canHitTest ? document.elementFromPoint(clientX, clientY) : null;
+    if (hit && (hit === t || t.contains(hit))) {
+      target = hit as HTMLElement;
+      break;
+    }
+    if (!canHitTest || Date.now() >= deadline) {
+      target = t;
+      break;
+    }
+    await nextFrame();
+  }
   const init = (buttons: number): MouseEventInit => ({
     bubbles: true,
     cancelable: true,
@@ -272,18 +310,40 @@ export function clickElement(el: Element): void {
   const hasPE = typeof PointerEvent !== "undefined";
   const emit = (type: string, buttons: number, pointer: boolean) => {
     if (pointer && hasPE) {
-      t.dispatchEvent(
+      target.dispatchEvent(
         new PointerEvent(type, { ...init(buttons), pointerId: 1, pointerType: "mouse", isPrimary: true }),
       );
     } else {
-      t.dispatchEvent(new MouseEvent(type, init(buttons)));
+      target.dispatchEvent(new MouseEvent(type, init(buttons)));
     }
   };
   emit("pointerdown", 1, true);
   emit("mousedown", 1, false);
   emit("pointerup", 0, true);
   emit("mouseup", 0, false);
-  t.click();
+  target.click();
+}
+
+/** Resolve on the next animation frame (or a ~16ms timer where rAF is absent). */
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 16);
+  });
+}
+
+/**
+ * Is the element's box fully within the current viewport? Used to decide whether
+ * clickElement must scroll first so coordinate hit-testing lands on it. Returns
+ * true when there's no layout info (a test DOM) so we neither scroll nor mis-skip.
+ */
+function isInViewport(el: HTMLElement): boolean {
+  const r = el.getBoundingClientRect?.();
+  if (!r) return true;
+  const vh = (typeof window !== "undefined" && window.innerHeight) || 0;
+  const vw = (typeof window !== "undefined" && window.innerWidth) || 0;
+  if (!vh || !vw) return true;
+  return r.top >= 0 && r.left >= 0 && r.bottom <= vh && r.right <= vw;
 }
 
 /** Interpolate {{param}} placeholders in a string from an args object. */
