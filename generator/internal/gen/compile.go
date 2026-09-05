@@ -286,14 +286,33 @@ func (cc *compiler) warnf(code, where, format string, args ...any) {
 	cc.diags = append(cc.diags, warnf(code, where, format, args...))
 }
 
-// effectiveComponents mirrors Corpus.ComponentsForURL's merge for a named view:
-// view components win on name collision, then non-colliding globals. Returns a
-// name->def map plus a sorted name list for candidate diagnostics.
+// effectiveComponents returns the name->def map (plus a sorted name list for
+// candidate diagnostics) of the components a tool may reference.
+//
+// For a named view it mirrors Corpus.ComponentsForURL's merge: view components
+// win on name collision, then non-colliding globals. For an ensure_view-less
+// tool (view == nil) it isn't scoped to one route, so it resolves against the
+// WHOLE corpus: every view's components plus globals, deduped by name. On a
+// same-name collision across views the first occurrence in view order wins
+// (globals are added last, so a view name shadows a like-named global).
 func (cc *compiler) effectiveComponents(view *sm.ViewDef) (map[string]sm.ComponentDef, []string) {
 	byName := map[string]sm.ComponentDef{}
 	if view != nil {
+		// Named view: view components win on name collision (last-wins within the
+		// view, matching Corpus.ComponentsForURL), then non-colliding globals.
 		for _, vc := range view.Components {
 			byName[vc.Name] = vc
+		}
+	} else {
+		// No ensure_view: the tool isn't scoped to one route, so resolve against
+		// the whole corpus. Add every view's components, first-wins in view order,
+		// so a same-name component across views doesn't crash (first declared wins).
+		for i := range cc.c.Views {
+			for _, vc := range cc.c.Views[i].Components {
+				if _, ok := byName[vc.Name]; !ok {
+					byName[vc.Name] = vc
+				}
+			}
 		}
 	}
 	for _, gc := range cc.c.GlobalComponents {
@@ -309,13 +328,19 @@ func (cc *compiler) effectiveComponents(view *sm.ViewDef) (map[string]sm.Compone
 	return byName, names
 }
 
-// allComponents returns the flattened component defs in scope for a view (its
-// own components + globals), NOT deduped by name — so a Comp.prop lookup can
-// disambiguate same-named children by ParentChain.
+// allComponents returns the flattened component defs in scope, NOT deduped by
+// name — so a Comp.prop lookup can disambiguate same-named children by
+// ParentChain. For a named view that's its own components + globals; for an
+// ensure_view-less tool (view == nil) it's every view's components + globals,
+// matching the whole-corpus scope of effectiveComponents.
 func (cc *compiler) allComponents(view *sm.ViewDef) []sm.ComponentDef {
 	var all []sm.ComponentDef
 	if view != nil {
 		all = append(all, view.Components...)
+	} else {
+		for i := range cc.c.Views {
+			all = append(all, cc.c.Views[i].Components...)
+		}
 	}
 	all = append(all, cc.c.GlobalComponents...)
 	return all
