@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "app": "examples/saucedemo",
+  "scenario": {
+    "feature": "features/cart-prices.feature",
+    "name": "Cart line items show name and price together",
+    "hash": "sha256:5ca77a98134cd7153f1712f140fb96cd5ead70d6193e92d1f61e0cca8447d051"
+  },
+  "steps": [
+    {
+      "gherkin": "Given I am logged in as \"standard_user\"",
+      "tool": "log_in",
+      "params": {
+        "username": "standard_user",
+        "password": "secret_sauce"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "When I add \"Sauce Labs Backpack\" to the cart from the catalog",
+      "tool": "add_to_cart",
+      "params": {
+        "name": "Sauce Labs Backpack"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I add \"Sauce Labs Bike Light\" to the cart from the catalog",
+      "tool": "add_to_cart",
+      "params": {
+        "name": "Sauce Labs Bike Light"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I go to the cart",
+      "tool": "go_to_cart",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "Then the cart shows \"Sauce Labs Backpack\" at \"$29.99\"",
+      "tool": "read_cart_detailed",
+      "expect": {
+        "ok": true,
+        "list": {
+          "contains": {
+            "name": "Sauce Labs Backpack",
+            "price": "$29.99"
+          }
+        }
+      }
+    },
+    {
+      "gherkin": "And the cart shows \"Sauce Labs Bike Light\" at \"$9.99\"",
+      "tool": "read_cart_detailed",
+      "expect": {
+        "ok": true,
+        "list": {
+          "contains": {
+            "name": "Sauce Labs Bike Light",
+            "price": "$9.99"
+          }
+        }
+      }
+    }
+  ],
+  "irHash": "sha256:6f66d8cbbdaeb9c4ad563f83d0ba883cfc3e23e1bd8569b58f24b107a423fec2",
+  "generatedAt": "2026-09-05T08:06:23.764Z"
+}

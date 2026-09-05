@@ -38,9 +38,9 @@ tools:
 
   - name: read_cart
     description: >
-      List the cart's current line items by name. Price and quantity are not
-      readable here (see CartItem's own memory note) — use the row count for
-      "how many items" and read price/quantity visually or via a screenshot.
+      List the cart's current line items by name. Quantity is not readable
+      here (see Quantity's own note) — use the row count for "how many
+      items". For price too, use read_cart_detailed.
     ensure_view: Cart
     returns:
       description: The current cart contents (name only).
@@ -48,3 +48,18 @@ tools:
         rows: CartItem
         fields:
           name: name
+
+  - name: read_cart_detailed
+    description: >
+      List the cart's current line items by name and price — the same rows
+      as read_cart, plus price, for a scenario that needs to assert on cost
+      (e.g. a total, or that a specific item's price matches its catalog
+      listing). Quantity is still not readable (see Quantity's own note).
+    ensure_view: Cart
+    returns:
+      description: The current cart contents (name and price).
+      list:
+        rows: CartItem
+        fields:
+          name: name
+          price: price

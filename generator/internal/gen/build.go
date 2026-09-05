@@ -85,33 +85,64 @@ func BuildVerified(target string) (IR, []Diagnostic, error) {
 	return build(target, true)
 }
 
-func build(target string, verify bool) (IR, []Diagnostic, error) {
+// loaded is everything one load() pass produces: the manifest and corpus
+// alongside the compiled IR, so a second consumer (BuildOutline) can read the
+// manifest's authored fields — param order, journey names/descriptions — that
+// compiling into IR discards, without a second parse/compile pass. compiled is
+// false on the two corpus-failure paths below, mirroring build's early return
+// of a named-empty IR with no Compile call.
+type loaded struct {
+	manifest  *Manifest
+	corpus    *sm.Corpus
+	corpusDir string
+	ir        IR
+	compiled  bool
+}
+
+// load resolves and compiles target (an app dir or .sightkick dir) once,
+// carrying both the raw manifest/corpus and the compiled IR forward so
+// Build and BuildOutline can share a single parse/compile pass instead of
+// each reading the manifest and corpus on their own.
+func load(target string) (*loaded, []Diagnostic, error) {
 	skDir, err := ResolveSightkickDir(target)
 	if err != nil {
-		return IR{}, nil, err
+		return nil, nil, err
 	}
 
 	m, diags, err := LoadManifest(skDir)
 	if err != nil {
-		return IR{}, diags, err
+		return nil, diags, err
 	}
 
 	corpusDir := corpusDirFor(skDir, m.Corpus)
 	if _, err := os.Stat(corpusDir); err != nil {
 		diags = append(diags, errf("build.corpus-missing", skDir, "corpus directory not found: %s", corpusDir))
-		return IR{Version: 1, Name: m.Name, Views: []ViewRef{}, Tools: []Tool{}}, diags, nil
+		emptyIR := IR{Version: 1, Name: m.Name, Views: []ViewRef{}, Tools: []Tool{}}
+		return &loaded{manifest: m, corpusDir: corpusDir, ir: emptyIR}, diags, nil
 	}
 
 	corpus, err := sm.Load(corpusDir)
 	if err != nil {
 		diags = append(diags, errf("build.corpus-load", corpusDir, "failed to load corpus: %v", err))
-		return IR{Version: 1, Name: m.Name, Views: []ViewRef{}, Tools: []Tool{}}, diags, nil
+		emptyIR := IR{Version: 1, Name: m.Name, Views: []ViewRef{}, Tools: []Tool{}}
+		return &loaded{manifest: m, corpusDir: corpusDir, ir: emptyIR}, diags, nil
 	}
 
 	ir, cdiags := Compile(m, corpus)
 	diags = append(diags, cdiags...)
-	if verify {
-		diags = append(diags, Verify(m, corpus, corpusDir)...)
+	return &loaded{manifest: m, corpus: corpus, corpusDir: corpusDir, ir: ir, compiled: true}, diags, nil
+}
+
+func build(target string, verify bool) (IR, []Diagnostic, error) {
+	l, diags, err := load(target)
+	if err != nil {
+		return IR{}, diags, err
 	}
-	return ir, diags, nil
+	if !l.compiled {
+		return l.ir, diags, nil
+	}
+	if verify {
+		diags = append(diags, Verify(l.manifest, l.corpus, l.corpusDir)...)
+	}
+	return l.ir, diags, nil
 }

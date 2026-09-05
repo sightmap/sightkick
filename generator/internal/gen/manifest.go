@@ -163,6 +163,9 @@ func (s *JourneyStepDef) UnmarshalYAML(value *yaml.Node) error {
 // JourneyDef is a named flow: an ordered path over atomic tools. It is NOT
 // executed; it compiles into per-tool guidance breadcrumbs (successor -> "do this
 // next"). Tools shared across journeys accumulate the union of their successors.
+// Description is surfaced verbatim by `sightkick outline`/`explain` — the
+// one-line gloss a plan-time reader sees for this journey — even though
+// Compile itself never looks at it (attachGuidance reads only Name and Steps).
 type JourneyDef struct {
 	Name        string           `yaml:"name"`
 	Description string           `yaml:"description"`
