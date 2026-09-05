@@ -140,7 +140,7 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
     case "click": {
       const el = target();
       if (!el) throw new Error(`click: no element for ${describeTarget(step)}`);
-      clickElement(el);
+      await clickElement(el);
       return;
     }
     case "keypress": {

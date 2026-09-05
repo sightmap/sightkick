@@ -142,11 +142,31 @@
       target.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowDown", bubbles: true }));
     }
   }
-  function clickElement(el) {
+  async function clickElement(el) {
     const t = el;
-    const r = t.getBoundingClientRect?.();
-    const clientX = r ? Math.round(r.left + r.width / 2) : 0;
-    const clientY = r ? Math.round(r.top + r.height / 2) : 0;
+    if (typeof t.scrollIntoView === "function" && !isInViewport(t)) {
+      t.scrollIntoView({ block: "center", inline: "center" });
+    }
+    const canHitTest = typeof document !== "undefined" && typeof document.elementFromPoint === "function";
+    let clientX = 0;
+    let clientY = 0;
+    let target = t;
+    const deadline = Date.now() + 300;
+    for (; ; ) {
+      const r = t.getBoundingClientRect?.();
+      clientX = r ? Math.round(r.left + r.width / 2) : 0;
+      clientY = r ? Math.round(r.top + r.height / 2) : 0;
+      const hit = canHitTest ? document.elementFromPoint(clientX, clientY) : null;
+      if (hit && (hit === t || t.contains(hit))) {
+        target = hit;
+        break;
+      }
+      if (!canHitTest || Date.now() >= deadline) {
+        target = t;
+        break;
+      }
+      await nextFrame();
+    }
     const init = (buttons) => ({
       bubbles: true,
       cancelable: true,
@@ -159,18 +179,32 @@
     const hasPE = typeof PointerEvent !== "undefined";
     const emit = (type, buttons, pointer) => {
       if (pointer && hasPE) {
-        t.dispatchEvent(
+        target.dispatchEvent(
           new PointerEvent(type, { ...init(buttons), pointerId: 1, pointerType: "mouse", isPrimary: true })
         );
       } else {
-        t.dispatchEvent(new MouseEvent(type, init(buttons)));
+        target.dispatchEvent(new MouseEvent(type, init(buttons)));
       }
     };
     emit("pointerdown", 1, true);
     emit("mousedown", 1, false);
     emit("pointerup", 0, true);
     emit("mouseup", 0, false);
-    t.click();
+    target.click();
+  }
+  function nextFrame() {
+    return new Promise((resolve) => {
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve());
+      else setTimeout(resolve, 16);
+    });
+  }
+  function isInViewport(el) {
+    const r = el.getBoundingClientRect?.();
+    if (!r) return true;
+    const vh = typeof window !== "undefined" && window.innerHeight || 0;
+    const vw = typeof window !== "undefined" && window.innerWidth || 0;
+    if (!vh || !vw) return true;
+    return r.top >= 0 && r.left >= 0 && r.bottom <= vh && r.right <= vw;
   }
   function interpolate(template, args) {
     return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key) => {
@@ -252,7 +286,7 @@
       case "click": {
         const el = target();
         if (!el) throw new Error(`click: no element for ${describeTarget(step)}`);
-        clickElement(el);
+        await clickElement(el);
         return;
       }
       case "keypress": {
