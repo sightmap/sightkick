@@ -8,7 +8,6 @@ sightkick explain · saucedemo · 2026-09-05
 
 log_in  [Login  /]
   Log in from the Login page. saucedemo's published test users are all valid usernames (standard_user, locked_out_user, problem_user, performance_glitch_user); the password for every one of them is secret_sauce. A bad login does not navigate — call read_login_error to read why, rather than treating the timed-out wait_for as a bug.
-
     username  string     required
     password  string     required
 
@@ -27,7 +26,6 @@ add_current_item_to_cart  [Item  /inventory-item.html]
 
 fill_checkout_info  [CheckoutInfo  /checkout-step-one.html]
   Fill the first checkout step and continue to the order review. Leaving any field empty is the required-field-missing fixture, checked here — call read_checkout_error rather than assuming the timed-out wait_for is a bug.
-
     first_name   string     required
     last_name    string     required
     postal_code  string     required

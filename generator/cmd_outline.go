@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -40,42 +41,14 @@ func toJSONDiagnostics(diags []gen.Diagnostic) []jsonDiagnostic {
 }
 
 // writeJSON marshals v with sightmap's stats convention: indented, trailing
-// newline, nothing else on stdout.
-func writeJSON(v any) error {
+// newline, nothing else on the stream.
+func writeJSON(w io.Writer, v any) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	_, err = os.Stdout.Write(append(data, '\n'))
+	_, err = w.Write(append(data, '\n'))
 	return err
-}
-
-// buildOutline runs gen.BuildOutline and applies the two failure conventions
-// shared by outline and explain: on a hard load error or a compile error, a
-// --json caller gets the jsonFailure envelope on stdout (exit 1 either way);
-// a human caller gets diagnostics on stderr via gen.Format, matching `build`.
-// ok is false when the caller should return (without its own additional error
-// text — one of the two failure paths already reported it).
-func buildOutline(target string, asJSON bool) (o gen.Outline, ok bool, err error) {
-	o, diags, lerr := gen.BuildOutline(target)
-	if lerr != nil {
-		if asJSON {
-			writeJSON(jsonFailure{Error: lerr.Error(), Diagnostics: toJSONDiagnostics(diags)})
-			return gen.Outline{}, false, errPrinted
-		}
-		return gen.Outline{}, false, lerr
-	}
-	if len(diags) > 0 && !asJSON {
-		fmt.Fprintln(os.Stderr, gen.Format(diags))
-	}
-	if gen.HasErrors(diags) {
-		if asJSON {
-			writeJSON(jsonFailure{Error: fmt.Sprintf("%d error(s) compiling the tool layer", gen.CountErrors(diags)), Diagnostics: toJSONDiagnostics(diags)})
-			return gen.Outline{}, false, errPrinted
-		}
-		return gen.Outline{}, false, fmt.Errorf("%d error(s) compiling the tool layer", gen.CountErrors(diags))
-	}
-	return o, true, nil
 }
 
 // errPrinted signals "already reported, just exit non-zero" — main.go prints
@@ -83,6 +56,58 @@ func buildOutline(target string, asJSON bool) (o gen.Outline, ok bool, err error
 // otherwise duplicate (in a worse, non-JSON form) the failure already written
 // to stdout as the jsonFailure envelope.
 var errPrinted = errors.New("see the JSON error above")
+
+// parseTargetArgs applies the argument shape both outline and explain share
+// (and that `call` and `browser` already use): `<app-dir>` is positional and
+// must come first, everything after it is flags. A flag.ErrHelp return means
+// usage was printed and the caller should exit 0.
+func parseTargetArgs(fset *flag.FlagSet, args []string) (string, error) {
+	if len(args) >= 1 && (args[0] == "-h" || args[0] == "--help") {
+		fset.Usage()
+		return "", flag.ErrHelp
+	}
+	if len(args) < 1 {
+		fset.Usage()
+		return "", errors.New("missing <app-dir>")
+	}
+	target := args[0]
+	if strings.HasPrefix(target, "-") {
+		fset.Usage()
+		return "", fmt.Errorf("first argument must be the app dir, got flag %q", target)
+	}
+	if err := fset.Parse(args[1:]); err != nil {
+		return "", err
+	}
+	return target, nil
+}
+
+// buildOutline runs gen.BuildOutline and applies the two failure conventions
+// shared by outline and explain: on a hard load error or a compile error, a
+// --json caller gets the jsonFailure envelope on out (exit 1 either way); a
+// human caller gets diagnostics on stderr via gen.Format, matching `build`.
+// ok is false when the caller should return (without its own additional error
+// text — one of the two failure paths already reported it).
+func buildOutline(out io.Writer, target string, asJSON bool) (o gen.Outline, ok bool, err error) {
+	fail := func(msg string, diags []gen.Diagnostic) (gen.Outline, bool, error) {
+		if asJSON {
+			writeJSON(out, jsonFailure{Error: msg, Diagnostics: toJSONDiagnostics(diags)})
+			return gen.Outline{}, false, errPrinted
+		}
+		return gen.Outline{}, false, errors.New(msg)
+	}
+
+	o, diags, lerr := gen.BuildOutline(target)
+	if lerr != nil {
+		return fail(lerr.Error(), diags)
+	}
+	if len(diags) > 0 && !asJSON {
+		fmt.Fprintln(os.Stderr, gen.Format(diags))
+	}
+	if gen.HasErrors(diags) {
+		return fail(fmt.Sprintf("%d error(s) compiling the tool layer", gen.CountErrors(diags)), diags)
+	}
+	return o, true, nil
+}
 
 // runOutline is the orientation pass: journeys, views, and every tool's
 // one-line summary, grouped by ensure_view. This is `docs/scenario-testing.md`
@@ -98,32 +123,20 @@ func runOutline(args []string) error {
 		fmt.Fprintln(os.Stderr, "full detail.\n\nFlags:")
 		fset.PrintDefaults()
 	}
-	if len(args) >= 1 && (args[0] == "-h" || args[0] == "--help") {
-		fset.Usage()
-		return nil
-	}
-	if len(args) < 1 {
-		fset.Usage()
-		return errors.New("missing <app-dir>")
-	}
-	target := args[0]
-	if strings.HasPrefix(target, "-") {
-		fset.Usage()
-		return fmt.Errorf("first argument must be the app dir, got flag %q", target)
-	}
-	if err := fset.Parse(args[1:]); err == flag.ErrHelp {
+	target, err := parseTargetArgs(fset, args)
+	if err == flag.ErrHelp {
 		return nil
 	} else if err != nil {
 		return err
 	}
 
-	o, ok, err := buildOutline(target, *asJSON)
+	o, ok, err := buildOutline(os.Stdout, target, *asJSON)
 	if !ok {
 		return err
 	}
 	brief := o.Brief()
 	if *asJSON {
-		return writeJSON(brief)
+		return writeJSON(os.Stdout, brief)
 	}
 	renderOutline(os.Stdout, brief, time.Now())
 	return nil

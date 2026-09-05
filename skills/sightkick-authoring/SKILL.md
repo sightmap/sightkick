@@ -323,6 +323,6 @@ sightkick explain <APP_DIR> --view TaskList                    # or for a view's
 sightkick explain <APP_DIR> add_task                           # or for named tools directly
 ```
 
-`outline` is the orientation pass (~2 KB on a 16-tool corpus, about a tenth of the IR); `explain`
+`outline` is the orientation pass (~3 KB on a 16-tool corpus, about an eighth of the IR); `explain`
 fills in description/params/`ensure_view`/returns for a selected subset. Neither carries `steps`,
 `guard`, or a compiled query — that's runtime DOM-addressing detail, not plan-time information.

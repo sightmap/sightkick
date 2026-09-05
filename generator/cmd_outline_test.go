@@ -96,9 +96,9 @@ func TestOutlineJSONIsTiered(t *testing.T) {
 }
 
 // TestExplainJSONFailureEnvelope locks in the sightmap `stats --json`
-// contract: a broken manifest still prints exactly one JSON object on
-// stdout, with a present "error" key, rather than a bare human error a --json
-// caller (which parses stdout unconditionally) would have nothing to read.
+// contract: a broken manifest still prints exactly one JSON object, with a
+// present "error" key, rather than a bare human error a --json caller (which
+// parses stdout unconditionally) would have nothing to read.
 func TestExplainJSONFailureEnvelope(t *testing.T) {
 	dir := t.TempDir()
 	skDir := dir + "/.sightkick"
@@ -130,11 +130,23 @@ views:
 		t.Fatal(err)
 	}
 
-	_, ok, err := buildOutline(dir, true)
+	var out bytes.Buffer
+	_, ok, err := buildOutline(&out, dir, true)
 	if ok {
 		t.Fatal("buildOutline(broken manifest, json=true) unexpectedly ok")
 	}
 	if err != errPrinted {
 		t.Errorf("buildOutline error = %v, want errPrinted (the JSON envelope already reported it)", err)
+	}
+
+	var got jsonFailure
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("failure output is not one JSON object: %v\n%s", err, out.String())
+	}
+	if got.Error == "" {
+		t.Errorf("failure envelope has no \"error\" key: %s", out.String())
+	}
+	if len(got.Diagnostics) == 0 {
+		t.Errorf("failure envelope carries no diagnostics: %s", out.String())
 	}
 }

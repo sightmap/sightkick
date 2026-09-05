@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,6 +16,9 @@ import (
 // applied to the one column sightkick's own tables need.
 const toolNameColMax = 30
 
+// ruleWidth is the horizontal rule's width in characters.
+const ruleWidth = 60
+
 // banner renders sightmap's table-command banner convention: "<prog> <verb> ·
 // <name> · <date>". now is a parameter (not time.Now() called here) so golden
 // tests can render a fixed date instead of one that changes every run.
@@ -23,11 +26,8 @@ func banner(verb, name string, now time.Time) string {
 	return fmt.Sprintf("sightkick %s · %s · %s", verb, name, now.Format("2006-01-02"))
 }
 
-func rule(width int) string {
-	if width < 20 {
-		width = 20
-	}
-	return strings.Repeat("─", width)
+func rule() string {
+	return strings.Repeat("─", ruleWidth)
 }
 
 // nameColWidth returns the tool-name column width for a set of tools: the
@@ -98,6 +98,19 @@ func viewHeader(v gen.ViewOutline) string {
 	return v.Name + "  " + v.Route
 }
 
+// indent prefixes every line of s, so a multi-line description (a YAML block
+// scalar keeps its newlines through to here) stays inside the tool's block
+// instead of its continuation lines starting at column 0. Trimming first makes
+// spacing uniform: whether a description ends in a newline is an artifact of
+// the author's YAML scalar style, not something a reader should see.
+func indent(s, prefix string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	for i, l := range lines {
+		lines[i] = prefix + strings.TrimSpace(l)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // renderParams writes one tool's params table, name/type/required columns
 // padded, enum values rendered as `enum {A, B}`.
 func renderParams(w io.Writer, params []gen.ParamOutline) {
@@ -132,20 +145,19 @@ func renderParams(w io.Writer, params []gen.ParamOutline) {
 // tools — a free gap report, in docs/scenario-testing.md §6's sense of "gap".
 func renderOutline(w io.Writer, o gen.Outline, now time.Time) {
 	fmt.Fprintln(w, banner("outline", o.Name, now))
-	width := len(rule(0))
-	fmt.Fprintln(w, rule(width))
+	fmt.Fprintln(w, rule())
 	fmt.Fprintf(w, " %-9s %d\n", "Tools", o.Totals.Tools)
 	fmt.Fprintf(w, " %-9s %d\n", "Journeys", o.Totals.Journeys)
 	fmt.Fprintf(w, " %-9s %d\n", "Views", o.Totals.Views)
 
 	if len(o.Journeys) > 0 {
-		fmt.Fprintln(w, rule(width))
+		fmt.Fprintln(w, rule())
 		renderJourneys(w, o.Journeys)
 	}
 
-	fmt.Fprintln(w, rule(width))
+	fmt.Fprintln(w, rule())
 	renderToolGroups(w, o)
-	fmt.Fprintln(w, rule(width))
+	fmt.Fprintln(w, rule())
 
 	var noTools []string
 	for _, v := range o.Views {
@@ -156,7 +168,7 @@ func renderOutline(w io.Writer, o gen.Outline, now time.Time) {
 	summary := fmt.Sprintf(" %s  ·  %s  ·  %s",
 		plural(o.Totals.Tools, "tool"), plural(o.Totals.Journeys, "journey"), plural(o.Totals.Views, "view"))
 	if len(noTools) > 0 {
-		sort.Strings(noTools)
+		slices.Sort(noTools)
 		noun := "view has"
 		if len(noTools) > 1 {
 			noun = "views have"
@@ -192,7 +204,7 @@ func renderExplain(w io.Writer, full, selected gen.Outline, now time.Time) {
 			fmt.Fprintf(w, "  (mode: %s)\n", t.Mode)
 		}
 		if t.Description != "" {
-			fmt.Fprintf(w, "  %s\n", t.Description)
+			fmt.Fprintln(w, indent(t.Description, "  "))
 		}
 		renderParams(w, t.Params)
 	}

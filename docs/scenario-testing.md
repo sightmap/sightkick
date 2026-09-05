@@ -204,21 +204,21 @@ see §11 for what real planning over this manifest would additionally require.
 
 "Read every tool's `description`/`params`/`ensure_view`/`returns`" (§6's opening line) is a real
 cost, and until this pass it had exactly one artifact to pay it against: the compiled IR, which is
-mostly *not* that list. On `examples/saucedemo` (16 tools) the IR is 22 KB, and ~97% of it is
-`steps`/`guard`/compiled `Query` trees — real CSS locators and predicates, runtime DOM-addressing
-detail a plan-time reader has no use for. The raw `.sightkick/`+`.sightmap/` YAML is cheaper (15
+mostly *not* that list. On `examples/saucedemo` (16 tools) the IR is 22 KB, and roughly two thirds
+of it is `steps`/`guard`/compiled `Query` trees — real CSS locators and predicates, runtime
+DOM-addressing detail a plan-time reader has no use for. The raw `.sightkick/`+`.sightmap/` YAML is cheaper (15
 KB) but still all-or-nothing, and it has no offline equivalent of a journey at all: `sightkick
 build` consumes `Manifest.Journeys` into per-tool guidance and discards the rest, so "which journey
 does this scenario match" was not answerable from any artifact.
 
 `sightkick outline <app-dir>` is the fix: journeys (name, description, ordered tool names) plus
-every tool's one-line summary, grouped by view — 2 KB on saucedemo, about a tenth of the IR.
+every tool's one-line summary, grouped by view — 2.8 KB on saucedemo, about an eighth of the IR.
 `sightkick explain <app-dir> [--journey NAME] [--view NAME] [<tool>...]` fills in full plan-time
 detail (description, params, `ensure_view`, returns shape — never `guidance`, which is the journey
 adjacency `outline` already showed once, in a better form, and never a filtered tool's compiled
 query) for a selector that **unions** rather than intersects: `--journey purchase
 back_to_products` means "that path, plus one extra tool." Resolving `checkout.feature` end to end
-is `outline` (2 KB) + `explain --journey purchase` (2 KB) — under 4 KB against a 22 KB IR.
+is `outline` (2.8 KB) + `explain --journey purchase` (2 KB) — under 5 KB against a 22 KB IR.
 
 The symmetry with §5 is the point: **`guidance` is the run-time consumer's breadcrumb; `outline`/
 `explain` are the plan-time consumer's map.** Neither replaces reading — both make what gets read

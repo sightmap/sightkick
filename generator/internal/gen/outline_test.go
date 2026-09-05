@@ -117,6 +117,11 @@ func TestSummaryLine(t *testing.T) {
 			want: "Fill the first checkout step and continue to the order review.",
 		},
 		{
+			name: "a short first sentence is still the summary, not extended past it",
+			in:   "Add a todo. Returns `value` (string): the new item's text.",
+			want: "Add a todo.",
+		},
+		{
 			name: "a description that is only a result hint",
 			in:   "Returns `value`: a single string.",
 			want: "Returns `value`: a single string.",

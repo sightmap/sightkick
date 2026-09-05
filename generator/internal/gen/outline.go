@@ -2,7 +2,8 @@ package gen
 
 import (
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -169,10 +170,7 @@ func returnOutline(r *Return) *ReturnOutline {
 	switch r.Kind {
 	case "list":
 		ro.Key = "items"
-		for k := range r.Fields {
-			ro.Fields = append(ro.Fields, k)
-		}
-		sort.Strings(ro.Fields)
+		ro.Fields = slices.Sorted(maps.Keys(r.Fields))
 	case "value":
 		if r.Query == nil && r.Extractor == nil {
 			return nil // description-only, nothing to read — see returnHint
@@ -187,13 +185,12 @@ func returnOutline(r *Return) *ReturnOutline {
 // then cut at the first sentence boundary that reads like a real sentence end
 // rather than an abbreviation, then hard-capped at 140 runes.
 //
-// "Sentence boundary" is a period at rune index >= 24 (skip anything that
-// looks like an initial abbreviation) followed by whitespace and then either
-// an uppercase letter or a backtick, or by end-of-string. The uppercase/
-// backtick lookahead is load-bearing: without it, descriptions with a
-// mid-sentence "e.g." or "i.e." (common in this corpus — see log_in,
-// read_login_error) would cut after "e.g." instead of at the real sentence
-// end, because a bare period-plus-space isn't enough to tell the two apart.
+// "Sentence boundary" is a period followed by whitespace and then either an
+// uppercase letter or a backtick, or by end-of-string. The uppercase/backtick
+// lookahead is load-bearing: without it, descriptions with a mid-sentence
+// "e.g." or "i.e." (common in this corpus — see log_in, read_login_error)
+// would cut after "e.g." instead of at the real sentence end, because a bare
+// period-plus-space isn't enough to tell the two apart.
 func summaryLine(desc string) string {
 	s := strings.Join(strings.Fields(desc), " ")
 	if s == "" {
@@ -202,7 +199,7 @@ func summaryLine(desc string) string {
 
 	runes := []rune(s)
 	for i, r := range runes {
-		if r != '.' || i < 24 {
+		if r != '.' {
 			continue
 		}
 		if i == len(runes)-1 {
@@ -258,29 +255,23 @@ func (s Selector) Empty() bool {
 // cheapest possible gap report, in the sense docs/scenario-testing.md §6
 // calls an unresolvable Gherkin line a gap.
 func (o Outline) Select(sel Selector) (Outline, error) {
-	toolNames := make([]string, 0, len(o.Tools))
 	toolByName := make(map[string]ToolOutline, len(o.Tools))
 	for _, t := range o.Tools {
-		toolNames = append(toolNames, t.Name)
 		toolByName[t.Name] = t
 	}
 	journeyByName := make(map[string]JourneyOutline, len(o.Journeys))
-	journeyNames := make([]string, 0, len(o.Journeys))
 	for _, j := range o.Journeys {
 		journeyByName[j.Name] = j
-		journeyNames = append(journeyNames, j.Name)
 	}
 	viewByName := make(map[string]ViewOutline, len(o.Views))
-	viewNames := make([]string, 0, len(o.Views))
 	for _, v := range o.Views {
 		viewByName[v.Name] = v
-		viewNames = append(viewNames, v.Name)
 	}
 
 	want := map[string]bool{}
 	for _, name := range sel.Tools {
 		if _, ok := toolByName[name]; !ok {
-			return Outline{}, fmt.Errorf("no such tool %q. Available: %s", name, candidateList(sortedCopy(toolNames)))
+			return Outline{}, fmt.Errorf("no such tool %q. Available: %s", name, candidateList(slices.Sorted(maps.Keys(toolByName))))
 		}
 		want[name] = true
 	}
@@ -288,7 +279,7 @@ func (o Outline) Select(sel Selector) (Outline, error) {
 	for _, name := range sel.Journeys {
 		j, ok := journeyByName[name]
 		if !ok {
-			return Outline{}, fmt.Errorf("no such journey %q. Available: %s", name, candidateList(sortedCopy(journeyNames)))
+			return Outline{}, fmt.Errorf("no such journey %q. Available: %s", name, candidateList(slices.Sorted(maps.Keys(journeyByName))))
 		}
 		usedJourneys[name] = true
 		for _, tn := range j.Steps {
@@ -297,7 +288,7 @@ func (o Outline) Select(sel Selector) (Outline, error) {
 	}
 	for _, name := range sel.Views {
 		if _, ok := viewByName[name]; !ok {
-			return Outline{}, fmt.Errorf("no such view %q. Available: %s", name, candidateList(sortedCopy(viewNames)))
+			return Outline{}, fmt.Errorf("no such view %q. Available: %s", name, candidateList(slices.Sorted(maps.Keys(viewByName))))
 		}
 		for _, t := range o.Tools {
 			if t.View == name {
@@ -356,11 +347,5 @@ func (o Outline) Brief() Outline {
 	for i, t := range o.Tools {
 		out.Tools[i] = ToolOutline{Name: t.Name, Summary: t.Summary, View: t.View, Route: t.Route}
 	}
-	return out
-}
-
-func sortedCopy(s []string) []string {
-	out := append([]string(nil), s...)
-	sort.Strings(out)
 	return out
 }

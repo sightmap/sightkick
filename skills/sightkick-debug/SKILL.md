@@ -79,8 +79,8 @@ sightkick build <CORPUS_DIR> -o /tmp/x.ir.json
 
 To *read* the tool layer — what's in it, rather than injecting it — run `sightkick outline
 <CORPUS_DIR>` (journeys + every tool's one-liner) or `explain` for full detail on a subset. Never
-`cat` the IR file for this: it's ~90% compiled DOM-addressing detail (`steps`/`guard`/`Query`
-trees) that's noise for a reader.
+`cat` the IR file for this: roughly two thirds of it is compiled DOM-addressing detail
+(`steps`/`guard`/`Query` trees) that's noise for a reader.
 
 Rebuild the IR whenever the corpus/manifest changes. The runtime bundle is
 embedded in the CLI, so re-emit it after upgrading `sightkick`.

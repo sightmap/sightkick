@@ -92,7 +92,6 @@ func BuildVerified(target string) (IR, []Diagnostic, error) {
 // false on the two corpus-failure paths below, mirroring build's early return
 // of a named-empty IR with no Compile call.
 type loaded struct {
-	skDir     string
 	manifest  *Manifest
 	corpus    *sm.Corpus
 	corpusDir string
@@ -119,19 +118,19 @@ func load(target string) (*loaded, []Diagnostic, error) {
 	if _, err := os.Stat(corpusDir); err != nil {
 		diags = append(diags, errf("build.corpus-missing", skDir, "corpus directory not found: %s", corpusDir))
 		emptyIR := IR{Version: 1, Name: m.Name, Views: []ViewRef{}, Tools: []Tool{}}
-		return &loaded{skDir: skDir, manifest: m, corpusDir: corpusDir, ir: emptyIR}, diags, nil
+		return &loaded{manifest: m, corpusDir: corpusDir, ir: emptyIR}, diags, nil
 	}
 
 	corpus, err := sm.Load(corpusDir)
 	if err != nil {
 		diags = append(diags, errf("build.corpus-load", corpusDir, "failed to load corpus: %v", err))
 		emptyIR := IR{Version: 1, Name: m.Name, Views: []ViewRef{}, Tools: []Tool{}}
-		return &loaded{skDir: skDir, manifest: m, corpusDir: corpusDir, ir: emptyIR}, diags, nil
+		return &loaded{manifest: m, corpusDir: corpusDir, ir: emptyIR}, diags, nil
 	}
 
 	ir, cdiags := Compile(m, corpus)
 	diags = append(diags, cdiags...)
-	return &loaded{skDir: skDir, manifest: m, corpus: corpus, corpusDir: corpusDir, ir: ir, compiled: true}, diags, nil
+	return &loaded{manifest: m, corpus: corpus, corpusDir: corpusDir, ir: ir, compiled: true}, diags, nil
 }
 
 func build(target string, verify bool) (IR, []Diagnostic, error) {

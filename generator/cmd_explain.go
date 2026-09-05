@@ -33,47 +33,46 @@ func runExplain(args []string) error {
 		fmt.Fprintln(os.Stderr, "parsing at the first positional argument).\n\nFlags:")
 		fset.PrintDefaults()
 	}
-	if len(args) >= 1 && (args[0] == "-h" || args[0] == "--help") {
-		fset.Usage()
-		return nil
-	}
-	if len(args) < 1 {
-		fset.Usage()
-		return errors.New("missing <app-dir>")
-	}
-	target := args[0]
-	if strings.HasPrefix(target, "-") {
-		fset.Usage()
-		return fmt.Errorf("first argument must be the app dir, got flag %q", target)
-	}
-	if err := fset.Parse(args[1:]); err == flag.ErrHelp {
+	target, err := parseTargetArgs(fset, args)
+	if err == flag.ErrHelp {
 		return nil
 	} else if err != nil {
 		return err
 	}
-	tools := fset.Args()
 
-	if len(tools) == 0 && len(journeys) == 0 && len(views) == 0 {
+	// Go's flag package stops parsing at the first positional, so a flag written
+	// after a tool name arrives here as a tool name. Say that, rather than
+	// letting Select report `no such tool "--json"`.
+	tools := fset.Args()
+	for _, t := range tools {
+		if strings.HasPrefix(t, "-") {
+			fset.Usage()
+			return fmt.Errorf("flag %q must come before the positional <tool> names", t)
+		}
+	}
+
+	sel := gen.Selector{Tools: tools, Journeys: journeys, Views: views}
+	if sel.Empty() {
 		fset.Usage()
 		return errors.New("nothing selected — pass one or more <tool> names, --journey NAME, or --view NAME")
 	}
 
-	full, ok, err := buildOutline(target, *asJSON)
+	full, ok, err := buildOutline(os.Stdout, target, *asJSON)
 	if !ok {
 		return err
 	}
 
-	selected, serr := full.Select(gen.Selector{Tools: tools, Journeys: journeys, Views: views})
+	selected, serr := full.Select(sel)
 	if serr != nil {
 		if *asJSON {
-			writeJSON(jsonFailure{Error: serr.Error()})
+			writeJSON(os.Stdout, jsonFailure{Error: serr.Error()})
 			return errPrinted
 		}
 		return serr
 	}
 
 	if *asJSON {
-		return writeJSON(selected)
+		return writeJSON(os.Stdout, selected)
 	}
 	renderExplain(os.Stdout, full, selected, time.Now())
 	return nil
