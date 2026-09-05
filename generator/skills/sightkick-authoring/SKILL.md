@@ -71,9 +71,12 @@ sets them (a conflict warns); `tools` and `journeys` accumulate. Most apps set
 - name: add_task           # required, unique
   description: Add a task. # shown in getTools(); a result-shape hint is appended automatically
   mode: live               # live (default) drives the DOM; api is opt-in reads-only
-  ensure_view: Home        # a corpus VIEW name — scopes component resolution to that
-                           #   view (+ globals) AND view-scopes the tool at runtime
-                           #   (it only registers on pages whose route matches)
+  ensure_view: Home        # OPTIONAL: a corpus VIEW name. Omit it and component
+                           #   names resolve against the WHOLE corpus (every view +
+                           #   globals). Set it to scope resolution to one view
+                           #   (+ globals) — disambiguating same-named components —
+                           #   AND to view-scope the tool at runtime (it then only
+                           #   registers on pages whose route matches).
   params:                  # become the tool's input schema; referenced as {{name}}
     - name: title
       type: string         # string | number | boolean | enum
@@ -88,8 +91,12 @@ sets them (a conflict warns); `tools` and `journeys` accumulate. Most apps set
 ```
 
 A `live` tool needs **at least one `step` or a `returns`**. `ensure_view` is
-optional but recommended — it both disambiguates component names and controls
-which page the tool appears on.
+genuinely **optional**: omit it and a tool resolves its component names against
+the whole corpus (every view's components plus globals). Set it when you want to
+**scope** resolution to a single view — to disambiguate a component name that
+recurs across views — and to **route-scope** the tool so it only registers on
+pages whose route matches. It is a scoping/routing hint, not a prerequisite for
+resolution: a component validly declared on a view resolves with or without it.
 
 ### Steps (each is a single-key mapping: the op)
 
@@ -275,10 +282,12 @@ sightkick build <APP_DIR> --verify           # also checks returns extractors ag
 
 The compiler is your validator. Common diagnostics and fixes:
 
-- **unresolved component / property / view** — the name isn't in the corpus (for
-  that view). `build` prints candidates; fix the query, or declare the
-  component/property in the corpus (sightmap-authoring). Remember property refs
-  resolve against the **row/target** component.
+- **unresolved component / property / view** — the name isn't in the corpus
+  (within the tool's scope: the whole corpus, or one view when `ensure_view` is
+  set). `build` prints candidates; fix the query, declare the component/property
+  in the corpus (sightmap-authoring), or drop/adjust `ensure_view` if it's
+  scoping the name out. Remember property refs resolve against the
+  **row/target** component.
 - **`returns has both value and list`** — pick one.
 - **`live tool needs at least one step or a returns`** — add a step or a read.
 - **`unrecognized step op`** / **`not a single-key mapping`** — each step is one
