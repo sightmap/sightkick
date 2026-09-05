@@ -196,7 +196,13 @@ func runBrowser(args []string) error {
 	}
 
 	// 4) Persist-inject runtime+IR so the tools register now and re-register on
-	//    every new document (surviving full navigations).
+	//    every new document (surviving full navigations). REPLACE, don't stack:
+	//    clear any injection this session already persisted first, so a rebuilt
+	//    runtime isn't clobbered by an older generation on the next reload (the
+	//    daemon re-fires all persisted scripts in order, so an older runtime
+	//    re-registering AFTER a newer one silently wins — a convincing false
+	//    negative when iterating on the runtime).
+	clearPersistedInjections(sm, appDir)
 	fmt.Fprintf(os.Stderr, "→ injecting runtime + IR (%d tool(s), persisted) …\n", len(ir.Tools))
 	if err := runSightmap(sm, appDir, []string{"browser", "inject", "--file", scriptPath, "--persist"}); err != nil {
 		return fmt.Errorf("sightmap browser inject: %w", err)
@@ -294,6 +300,38 @@ func runSightmap(sm, dir string, args []string) error {
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// clearPersistedInjections removes every script the session has persisted, so a
+// (re-)inject REPLACES the runtime+IR instead of stacking on top of it. Stacking
+// is a silent footgun: the daemon re-fires all persisted scripts in document
+// order on every reload, so an older runtime generation re-registers AFTER a
+// freshly-rebuilt one and clobbers it. `sightkick browser` owns the session's
+// injection, so clearing prior persisted scripts before adding the current one
+// is the right contract. Best-effort: if there's no session (or inject is
+// unsupported), --list errors and we simply do nothing.
+func clearPersistedInjections(sm, dir string) {
+	list := exec.Command(sm, "browser", "inject", "--list")
+	list.Dir = dir
+	out, err := list.Output()
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		// list format: "<id>  (N bytes, M tab(s))"; skip "No persisted scripts."
+		// and any other non-entry lines.
+		if line == "" || !strings.Contains(line, "byte") {
+			continue
+		}
+		id := strings.Fields(line)[0]
+		if id == "" {
+			continue
+		}
+		rm := exec.Command(sm, "browser", "inject", "--remove", id)
+		rm.Dir = dir
+		_ = rm.Run() // best-effort; ignore a lost race with another remover
+	}
 }
 
 // waitForTab polls `sightmap browser status` until it lists the started URL's
