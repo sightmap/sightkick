@@ -191,8 +191,8 @@ func TestSelect(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(sel.Tools) != 4 {
-			t.Errorf("got %d tools for view Cart, want 4", len(sel.Tools))
+		if len(sel.Tools) != 5 {
+			t.Errorf("got %d tools for view Cart, want 5", len(sel.Tools))
 		}
 	})
 }

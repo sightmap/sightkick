@@ -1,5 +1,5 @@
 sightkick explain · saucedemo · 2026-09-05
- 8 of 16 tool(s)
+ 8 of 17 tool(s)
 
  purchase  Log in, buy one item, and read the confirmation.
    log_in › open_item › add_current_item_to_cart › go_to_cart › go_to_checkout › fill_checkout_info › place_order › read_confirmation

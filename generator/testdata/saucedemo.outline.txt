@@ -1,6 +1,6 @@
 sightkick outline · saucedemo · 2026-09-05
 ────────────────────────────────────────────────────────────
- Tools     16
+ Tools     17
  Journeys  2
  Views     7
 ────────────────────────────────────────────────────────────
@@ -13,6 +13,7 @@ sightkick outline · saucedemo · 2026-09-05
    continue_shopping         Return from Cart to Inventory without checking out.
    go_to_checkout            Proceed from the cart to checkout.
    read_cart                 List the cart's current line items by name.
+   read_cart_detailed        List the cart's current line items by name and price — the same rows as read_cart, plus price, for a scenario that needs to assert on cost…
    remove_from_cart          Remove a line item from the cart by name.
  CheckoutInfo  /checkout-step-one.html
    fill_checkout_info        Fill the first checkout step and continue to the order review.
@@ -34,6 +35,6 @@ sightkick outline · saucedemo · 2026-09-05
    log_out                   Log out via the sidebar menu, back to Login.
    go_to_cart                Navigate to the cart from anywhere via the nav-bar cart link.
 ────────────────────────────────────────────────────────────
- 16 tools  ·  2 journeys  ·  7 views
+ 17 tools  ·  2 journeys  ·  7 views
 
  detail:  sightkick explain <dir> <tool>... | --journey NAME | --view NAME
