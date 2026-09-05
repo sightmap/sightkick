@@ -157,6 +157,13 @@ to try next without re-reading the whole manifest. A planner that reads the full
 any valid sequence itself, journey or no journey. Skipping journey authoring does not shrink what's
 plannable; it only removes a convenience for a different consumer.
 
+That said, a planner no longer reads the *whole* manifest either — see §6.1. It reads the outline
+(journeys + every tool's one-liner), then `explain`s a filtered subset. This changes the *cost* of
+resolution, not what's plannable — the paragraph above still stands unchanged. It does mean a
+journey's `description:` is no longer decoration: `sightkick outline` prints it verbatim as the
+one-line gloss a plan-time reader sees for that journey, so it is the thing an agent uses to decide
+"is this the flow I want" before reading a single tool's detail. Write it for that reader.
+
 ## 6. Scenario → plan
 
 Resolving a scenario is: read every tool's `description`/`params`/`ensure_view`/`returns`, then for
@@ -192,6 +199,37 @@ STRIPS-style planner would. Ask for something no journey covers and there's no f
 pipeline; an agent falls back to reading the manifest directly and reasoning per tool, which is a
 person doing the search a planner would otherwise do. That's the ceiling today, not an edge case —
 see §11 for what real planning over this manifest would additionally require.
+
+## 6.1 Plan-time discovery: `outline` → `explain`
+
+"Read every tool's `description`/`params`/`ensure_view`/`returns`" (§6's opening line) is a real
+cost, and until this pass it had exactly one artifact to pay it against: the compiled IR, which is
+mostly *not* that list. On `examples/saucedemo` (16 tools) the IR is 22 KB, and ~97% of it is
+`steps`/`guard`/compiled `Query` trees — real CSS locators and predicates, runtime DOM-addressing
+detail a plan-time reader has no use for. The raw `.sightkick/`+`.sightmap/` YAML is cheaper (15
+KB) but still all-or-nothing, and it has no offline equivalent of a journey at all: `sightkick
+build` consumes `Manifest.Journeys` into per-tool guidance and discards the rest, so "which journey
+does this scenario match" was not answerable from any artifact.
+
+`sightkick outline <app-dir>` is the fix: journeys (name, description, ordered tool names) plus
+every tool's one-line summary, grouped by view — 2 KB on saucedemo, about a tenth of the IR.
+`sightkick explain <app-dir> [--journey NAME] [--view NAME] [<tool>...]` fills in full plan-time
+detail (description, params, `ensure_view`, returns shape — never `guidance`, which is the journey
+adjacency `outline` already showed once, in a better form, and never a filtered tool's compiled
+query) for a selector that **unions** rather than intersects: `--journey purchase
+back_to_products` means "that path, plus one extra tool." Resolving `checkout.feature` end to end
+is `outline` (2 KB) + `explain --journey purchase` (2 KB) — under 4 KB against a 22 KB IR.
+
+The symmetry with §5 is the point: **`guidance` is the run-time consumer's breadcrumb; `outline`/
+`explain` are the plan-time consumer's map.** Neither replaces reading — both make what gets read
+proportional to what's needed. Both commands are read-only projections of the same manifest
+`build` compiles; neither adds a manifest field, and neither changes `build`'s own output (which
+stored plans hash — see §9).
+
+Aligned to sightmap's own CLI conventions rather than inventing new ones: tiering is by separate
+command (`stats` → `search` → `explain`), never a `--detail`/`--verbose` flag; `--json` is a
+boolean opt-in with a stable, published field shape, never a `--format` flag; an unresolvable name
+errors with a candidate list rather than silently returning nothing.
 
 ## 7. The output is runtime-agnostic
 
@@ -297,7 +335,8 @@ assertion that broke, not a stack trace three layers removed from it:
 
 An agent reads the manifest and produces a plan once. Every run after that is
 `node scripts/run-plan.mjs plan.json` — no LLM call, no token cost, until a hash moves and it's
-time to re-plan.
+time to re-plan. And that first read is bounded now too, not just amortized — see §6.1: an agent
+resolves most scenarios off `outline` + a filtered `explain`, not the full manifest.
 
 ## 10. Keeping it true
 
@@ -353,7 +392,8 @@ Roughly 30 minutes for a first tool, on an app you already have a running instan
 2. Write one tool in `.sightkick/tools.yaml` for the simplest real action on that view.
 3. `sightkick build .` — fix whatever it reports unresolved.
 4. Write one `.feature` file with a single scenario using that tool.
-5. Hand-resolve it into a one-step plan (or have an agent do it), `--stamp` it.
+5. Run `sightkick outline .` (see §6.1), then hand-resolve the scenario into a one-step plan (or
+   have an agent do it), `--stamp` it.
 6. `node scripts/run-plan.mjs plan.json` — green, with no agent in the loop.
 
 Everything past that is repetition: more views, more tools, more scenarios, following §3–§6.
@@ -369,7 +409,8 @@ Everything past that is repetition: more views, more tools, more scenarios, foll
 | `examples/saucedemo` — corpus, tools, journeys, 4 `.feature` files | Built, this pass |
 | Stored plan format (`*.plan.json`), scenario/IR hashing | Built, this pass — example-local, not yet a sightkick spec |
 | `scripts/run-plan.mjs` — replay without an agent, drift detection | Built, this pass — confirmed both directions of drift detection live |
-| Scenario → plan resolution | Demonstrated manually (§6); no automated resolver yet |
+| `sightkick outline`/`explain` — plan-time discovery (§6.1) | Built, this pass |
+| Scenario → plan resolution | Demonstrated manually (§6), with `outline`/`explain` as the discovery surface; no automated resolver yet |
 | Gap report (unresolvable scenario line → suggested new tool) | Not built |
 | Playwright emitter | Not built; mapping specified in §7 |
 | Real (STRIPS-style) planning over the manifest | Not built; 4 named prerequisites, §11 |

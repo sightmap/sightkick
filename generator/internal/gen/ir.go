@@ -165,5 +165,12 @@ type IR struct {
 	Name    string    `json:"name"`
 	Views   []ViewRef `json:"views"`
 	Tools   []Tool    `json:"tools"`
-	// Guidance (compiled from journeys) will be added in the guidance-graph slice.
+	// The journey graph deliberately stays out of the IR. Per-tool Guidance
+	// (Tool.Guidance above) is its run-time projection — what a one-tool-at-a-time
+	// consumer needs to decide what to try next; the whole-graph view (journey
+	// names, descriptions, ordered steps) belongs to the plan-time reader
+	// (sightkick outline/explain, see outline.go), which reads the Manifest
+	// directly rather than the IR. It also isn't free to add: stored plans hash
+	// `sightkick build`'s stdout (scripts/run-plan.mjs), so a new IR field
+	// stales every frozen plan.
 }

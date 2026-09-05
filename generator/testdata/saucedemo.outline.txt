@@ -1,0 +1,39 @@
+sightkick outline · saucedemo · 2026-09-05
+────────────────────────────────────────────────────────────
+ Tools     16
+ Journeys  2
+ Views     7
+────────────────────────────────────────────────────────────
+ purchase  Log in, buy one item, and read the confirmation.
+   log_in › open_item › add_current_item_to_cart › go_to_cart › go_to_checkout › fill_checkout_info › place_order › read_confirmation
+ locked_out  Confirm a locked-out login is reported, not a bare failure.
+   log_in › read_login_error
+────────────────────────────────────────────────────────────
+ Cart  /cart.html
+   continue_shopping         Return from Cart to Inventory without checking out.
+   go_to_checkout            Proceed from the cart to checkout.
+   read_cart                 List the cart's current line items by name.
+   remove_from_cart          Remove a line item from the cart by name.
+ CheckoutInfo  /checkout-step-one.html
+   fill_checkout_info        Fill the first checkout step and continue to the order review.
+   read_checkout_error       Read the checkout-info error banner, if any.
+ CheckoutOverview  /checkout-step-two.html
+   place_order               Submit the order from the review step.
+ Complete  /checkout-complete.html
+   read_confirmation         Read the confirmation heading ("Thank you for your order!").
+ Inventory  /inventory.html
+   open_item                 Open a product's detail page by name, from the Inventory list.
+   add_to_cart               Add a product to the cart by name, from the Inventory list.
+ Item  /inventory-item.html
+   back_to_products          Return from an item's detail page to Inventory.
+   add_current_item_to_cart  Add the currently-open item (Item detail page) to the cart.
+ Login  /
+   log_in                    Log in from the Login page. saucedemo's published test users are all valid usernames (standard_user, locked_out_user, problem_user,…
+   read_login_error          Read the login error banner, if any (e.g. after log_in with locked_out_user).
+ (any view)
+   log_out                   Log out via the sidebar menu, back to Login.
+   go_to_cart                Navigate to the cart from anywhere via the nav-bar cart link.
+────────────────────────────────────────────────────────────
+ 16 tools  ·  2 journeys  ·  7 views
+
+ detail:  sightkick explain <dir> <tool>... | --journey NAME | --view NAME

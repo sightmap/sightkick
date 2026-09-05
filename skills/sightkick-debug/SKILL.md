@@ -77,6 +77,11 @@ sightkick runtime -o /tmp/sightkick-runtime.js
 sightkick build <CORPUS_DIR> -o /tmp/x.ir.json
 ```
 
+To *read* the tool layer — what's in it, rather than injecting it — run `sightkick outline
+<CORPUS_DIR>` (journeys + every tool's one-liner) or `explain` for full detail on a subset. Never
+`cat` the IR file for this: it's ~90% compiled DOM-addressing detail (`steps`/`guard`/`Query`
+trees) that's noise for a reader.
+
 Rebuild the IR whenever the corpus/manifest changes. The runtime bundle is
 embedded in the CLI, so re-emit it after upgrading `sightkick`.
 
@@ -145,6 +150,9 @@ Confirm registration (works in both modes):
 sightmap browser eval "window.__t='RUN';document.modelContext.getTools().then(function(ts){window.__t=JSON.stringify(ts.map(function(x){return x.name}))});'go'"
 sleep 1; sightmap browser eval "window.__t"                    # -> ["tool_a","tool_b",...]
 ```
+
+That's the live, view-scoped names-only listing — the offline, whole-corpus equivalent is
+`sightkick outline <CORPUS_DIR>`, which works with no browser session at all.
 
 ## 4. Drive the tools
 

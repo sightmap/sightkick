@@ -272,12 +272,18 @@ journeys:
         reason: confirm the task you just added
 ```
 
+A journey's `description` isn't decoration — it's the one-line gloss `sightkick outline` prints
+for that journey (see "Plan time" below), the thing a plan-time reader uses to decide "is this the
+flow I want" before reading a single tool's detail. Write it for that reader: name the outcome, one
+sentence, no jargon a first-time reader of this app wouldn't already have.
+
 ## Build & fix
 
 ```sh
 sightkick build <APP_DIR> -o /tmp/x.ir.json  # <APP_DIR> holds .sightkick/ + .sightmap/
 sightkick build <APP_DIR> --verify           # also checks returns extractors against captured
                                              #   view snapshots; warns on fields empty on every row
+sightkick outline <APP_DIR>                  # read-back check: what a plan-time agent will see
 ```
 
 The compiler is your validator. Common diagnostics and fixes:
@@ -298,3 +304,25 @@ The compiler is your validator. Common diagnostics and fixes:
 For `--verify` you need a captured snapshot of the view (`sightmap capture` /
 `snapshot` in the sightmap-browser skill). Once `build` is clean, run the tools
 on a live page with the **sightkick-debug** skill.
+
+`build` proves the tool layer compiles; `outline` shows what an agent will actually see when it
+tries to use it. Read your new tool's one-liner in the output — if it doesn't identify what the
+tool does on its own, that's an authoring gap (a description that assumes context an agent
+resolving a scenario won't have), not an implementation gap `build` would ever catch.
+
+## Plan time
+
+Once the tool layer builds clean, a plan-time reader (an agent resolving a `.feature` scenario
+into a plan, or you checking what one would see) never needs the full IR or the raw YAML — see
+`docs/scenario-testing.md` §6/§6.1:
+
+```sh
+sightkick outline <APP_DIR>                                    # journeys + every tool's one-liner
+sightkick explain <APP_DIR> --journey add_and_review           # full detail for that journey's tools
+sightkick explain <APP_DIR> --view TaskList                    # or for a view's tools
+sightkick explain <APP_DIR> add_task                           # or for named tools directly
+```
+
+`outline` is the orientation pass (~2 KB on a 16-tool corpus, about a tenth of the IR); `explain`
+fills in description/params/`ensure_view`/returns for a selected subset. Neither carries `steps`,
+`guard`, or a compiled query — that's runtime DOM-addressing detail, not plan-time information.
