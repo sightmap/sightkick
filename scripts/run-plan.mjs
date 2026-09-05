@@ -57,7 +57,7 @@ function runTool(appDir, tool, params = {}) {
     stdout = err.stdout ?? "";
   }
   try {
-    return JSON.parse(stdout.trim().split("\n").pop());
+    return JSON.parse(stdout.trim());
   } catch {
     throw new Error(`sightkick call ${tool} did not print JSON:\n${stdout}`);
   }
