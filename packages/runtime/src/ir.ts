@@ -62,6 +62,13 @@ export interface Step {
   value?: string;
   /** keypress's key, e.g. "Enter" — targets document.activeElement, no query of its own. */
   key?: string;
+  /**
+   * Optional skip guard: the runtime skips the step when `when` interpolates to
+   * empty. Steps also auto-skip when any {{param}} they interpolate is absent
+   * from args (an omitted optional param), so `when` is only needed to gate on a
+   * param the step doesn't otherwise reference.
+   */
+  when?: string;
   timeoutMs?: number;
 }
 

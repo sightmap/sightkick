@@ -78,6 +78,12 @@ type StepBody struct {
 	View      string `yaml:"view"` // navigate target, or a wait_for's route postcondition
 	URL       string `yaml:"url"`  // goto target (URL template with {{param}} interpolation)
 	Key       string `yaml:"key"`  // keypress target key, e.g. "Enter", "Tab", "Escape"
+	// When is an optional guard: the runtime SKIPS this step when When
+	// interpolates to empty. Its main use is optional fields in a grouped tool
+	// (`when: "{{middleName}}"`). Note steps also AUTO-skip when a {{param}} they
+	// interpolate is an omitted optional param, so `when` is only needed for a
+	// step that gates on a param it doesn't otherwise reference.
+	When string `yaml:"when"`
 }
 
 // ValueRef is a returns.value reference: a compquery addressing the element, and

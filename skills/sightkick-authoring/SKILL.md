@@ -77,7 +77,7 @@ sets them (a conflict warns); `tools` and `journeys` accumulate. Most apps set
   params:                  # become the tool's input schema; referenced as {{name}}
     - name: title
       type: string         # string | number | boolean | enum
-      required: true
+      required: true       # false ⇒ optional: a step using {{title}} auto-skips when it's omitted
       description: The task title.
       # values: [A, B, C]  # required when type: enum
   guard:                   # optional idempotency guard — exactly one of present/absent
@@ -96,11 +96,15 @@ which page the tool appears on.
 | Step | Body | Does |
 |------|------|------|
 | `fill` | `query`, `value` | Type `value` (supports `{{param}}`) into the matched input. |
-| `click` | `query` | Click the matched element. |
+| `click` | `query` | Click the matched element, the way a user does — it scrolls the target into view and hit-tests to the topmost element at its centre, so it drives custom widgets whose handler sits on an inner child (e.g. a custom-dropdown option). |
 | `wait_for` | `query`, `timeout_ms` (default 5000) | Wait until the query matches — use after a mutating action to confirm the visible result. |
+| `keypress` | `key` | Dispatch one discrete key (e.g. `Enter`) at whatever a preceding fill/click left focused — no query of its own. For a gate a fill's own per-character keys can't stand in for. |
 | `navigate` | `view` | Client-navigate to a corpus **view** by name. |
 | `goto` | `url` | Navigate to a URL template (`{{param}}` interpolated). |
 
+Any step may also carry **`when: "{{param}}"`** — it is skipped when `when`
+interpolates to empty. And a step **auto-skips** when any `{{param}}` it
+interpolates is an *omitted optional* param (see [grouping](#grouping-optional-fields--custom-dropdowns)).
 Reads are **not** steps — declare them with `returns`. A tool that ends with a
 mutation should `wait_for` its own visible feedback before returning.
 
@@ -123,6 +127,51 @@ returns:
       title: title                   # scalar shorthand, or: title: { property: title }
       done: done
 ```
+
+## Grouping, optional fields & custom dropdowns
+
+**Group tools by meaning, not by field.** Prefer one tool per meaningful unit a
+user or schema would name — a passenger, a date of birth, a contact block — with
+**typed params** (`enum`/`number`/`string`) whose steps reference **named
+components**. Avoid a generic "set any field by its on-screen label" tool: it
+pushes label-guessing onto the agent, throws away the typed contract that is a
+tool's whole value over raw DOM access, and forces brittle `Component[label*=…]`
+matching that degrades into special-casing exactly when it hits a hard field. A
+grouped tool freely mixes step ops — `fill` for text inputs, click-to-open +
+click-the-option for custom dropdowns — since each field's interaction is authored
+explicitly (so "can't generalize across input types" never arises).
+
+**Optional fields → optional params + skippable steps.** Mark non-required params
+`required: false`; a step **auto-skips** when a `{{param}}` it interpolates is
+omitted (required params are guaranteed present by the input schema). *Omitted ≠
+empty string* — an explicit `""` is a real value and does not skip. Use an explicit
+`when: "{{param}}"` only for a step that gates on a param it doesn't otherwise
+reference. This also lets a grouped tool double as a **partial setter**:
+`set_passenger(firstName="Joel")` sets just that field.
+
+**Custom dropdowns are two clicks, not a special op.** A `<select>`-like custom
+widget (typically an ARIA `button[aria-haspopup=listbox]` + a `[role=option]`
+list) is driven by `click`-ing the trigger to open, then `click`-ing the option —
+the `click` step hits the option the way a user does. Map the trigger and the
+options as corpus components so steps can address `GenderSelect` then
+`GenderSelect Option[label="{{gender}}"]`. No keyboard, no bespoke `select_option`.
+
+**Encode order for dependent fields.** When one field changes another's options
+(e.g. country → state/phone), author the steps in order and `wait_for` the
+dependent control before setting it:
+
+```yaml
+steps:
+  - click: { query: 'CountrySelect' }
+  - click: { query: 'CountrySelect Option[label="{{country}}"]' }
+  - wait_for: { query: 'StateSelect' }        # the re-render has landed
+  - click: { query: 'StateSelect' }
+  - click: { query: 'StateSelect Option[label="{{state}}"]' }
+```
+
+**Reach for a generic `fill_field(field, value)` only** as an escape hatch for a
+large, flat, independent block of homogeneous **text** inputs where typing and
+ordering add nothing — and expect to special-case the structured fields anyway.
 
 ## Component queries (CSS-shaped, over corpus components)
 

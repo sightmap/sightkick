@@ -248,6 +248,29 @@
     const parts = step.query?.parts ?? [];
     return `query ${JSON.stringify(parts.map((p) => p.locators.join("|")))}`;
   }
+  function templateParamNames(s, out) {
+    if (!s) return;
+    for (const m of s.matchAll(/\{\{\s*([\w.]+)\s*\}\}/g)) out.add(m[1]);
+  }
+  function stepParams(step) {
+    const out = /* @__PURE__ */ new Set();
+    templateParamNames(step.value, out);
+    templateParamNames(step.url, out);
+    templateParamNames(step.key, out);
+    for (const part of step.query?.parts ?? []) {
+      for (const pred of part.preds ?? []) templateParamNames(pred.value, out);
+    }
+    return [...out];
+  }
+  function shouldSkipStep(step, args) {
+    if (step.when !== void 0) {
+      return interpolate(step.when, args).trim() === "";
+    }
+    for (const p of stepParams(step)) {
+      if (!(p in args) || args[p] === void 0) return true;
+    }
+    return false;
+  }
   function isActionable(el) {
     const h = el;
     if (typeof h.getBoundingClientRect !== "function") return false;
@@ -347,6 +370,10 @@
     }
     try {
       for (const step of tool.steps) {
+        if (shouldSkipStep(step, args)) {
+          opts.log(`skip ${step.op} step (optional field absent)`);
+          continue;
+        }
         await runStep(step, args, opts);
       }
     } catch (err) {
