@@ -1,0 +1,37 @@
+sightkick explain · saucedemo · 2026-09-05
+ 8 of 17 tool(s)
+
+ purchase  Log in, buy one item, and read the confirmation.
+   log_in › open_item › add_current_item_to_cart › go_to_cart › go_to_checkout › fill_checkout_info › place_order › read_confirmation
+ locked_out  Confirm a locked-out login is reported, not a bare failure.
+   log_in › read_login_error
+
+log_in  [Login  /]
+  Log in from the Login page. saucedemo's published test users are all valid usernames (standard_user, locked_out_user, problem_user, performance_glitch_user); the password for every one of them is secret_sauce. A bad login does not navigate — call read_login_error to read why, rather than treating the timed-out wait_for as a bug.
+    username  string     required
+    password  string     required
+
+go_to_cart  [any view]
+  Navigate to the cart from anywhere via the nav-bar cart link.
+
+go_to_checkout  [Cart  /cart.html]
+  Proceed from the cart to checkout. Fails as "no element" on an empty cart — that's the app's own guard, not a bug.
+
+open_item  [Inventory  /inventory.html]
+  Open a product's detail page by name, from the Inventory list.
+    name  string     required The product's title, e.g. "Sauce Labs Backpack".
+
+add_current_item_to_cart  [Item  /inventory-item.html]
+  Add the currently-open item (Item detail page) to the cart. Idempotent.
+
+fill_checkout_info  [CheckoutInfo  /checkout-step-one.html]
+  Fill the first checkout step and continue to the order review. Leaving any field empty is the required-field-missing fixture, checked here — call read_checkout_error rather than assuming the timed-out wait_for is a bug.
+    first_name   string     required
+    last_name    string     required
+    postal_code  string     required
+
+place_order  [CheckoutOverview  /checkout-step-two.html]
+  Submit the order from the review step.
+
+read_confirmation  [Complete  /checkout-complete.html]
+  Read the confirmation heading ("Thank you for your order!"). Returns `value` (string): The confirmation heading.

@@ -95,6 +95,8 @@ target page (a runtime install) versus what's always available (a running browse
 ```sh
 cd generator
 go run . build ../examples/todo
+go run . outline ../examples/todo             # cheaper: journeys + every tool's one-liner
+go run . explain ../examples/todo --json add_todo
 ```
 
 This compiles `examples/todo/.sightkick/` against

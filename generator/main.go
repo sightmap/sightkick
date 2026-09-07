@@ -16,12 +16,22 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `sightkick — compile a .sightkick/ tool layer + sightmap corpus into IR
 
 Usage:
+  sightkick outline <app-dir> [--json]
+  sightkick explain <app-dir> [--journey NAME] [--view NAME] [--json] [<tool>...]
   sightkick build <app-dir | .sightkick-dir> [-o out.json] [--verify]
   sightkick browser <app-dir> [--url URL] [--webmcp] [--extensions PATHS] [--profile DIR] [--cdp-port N] [--no-start]
   sightkick call <app-dir> <tool> [--param k=v ...] [--via webmcp|cli] [--timeout-ms N]
   sightkick runtime [-o out.js]
   sightkick skills install [--target DIR]
 
+  outline  read the tool layer at plan time, cheaply: journeys + every tool's
+           one-line summary, grouped by view (stdout, or --json). The
+           alternative to reading the compiled IR or the raw YAML corpus just
+           to resolve a Gherkin scenario into a plan — see
+           docs/scenario-testing.md §6.1.
+  explain  full plan-time detail (description, params, ensure_view, returns
+           shape) for the union of the named tools, journeys, and views. Run
+           'outline' first to find names; 'explain' fills in the rest.
   build    compile a corpus + manifest into IR (stdout, or -o out.json).
            --verify checks each tool's returns extractors against the view's
            captured snapshots and warns on fields that resolve empty on every row.
@@ -78,6 +88,20 @@ func main() {
 	}
 	if args[0] == "call" {
 		if err := runCall(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, "✗ "+err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+	if args[0] == "outline" {
+		if err := runOutline(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, "✗ "+err.Error())
+			os.Exit(1)
+		}
+		return
+	}
+	if args[0] == "explain" {
+		if err := runExplain(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, "✗ "+err.Error())
 			os.Exit(1)
 		}

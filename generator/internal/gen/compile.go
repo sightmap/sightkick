@@ -346,12 +346,15 @@ func (cc *compiler) allComponents(view *sm.ViewDef) []sm.ComponentDef {
 	return all
 }
 
+// candidateList renders up to 12 names, naming the count of any it drops so a
+// reader never mistakes a truncated list for the complete one (saucedemo has 16
+// tools; a silent cut hides four of them from every "no such tool" error).
 func candidateList(names []string) string {
-	if len(names) > 12 {
-		names = names[:12]
-	}
 	if len(names) == 0 {
 		return "(none)"
+	}
+	if len(names) > 12 {
+		return strings.Join(names[:12], ", ") + fmt.Sprintf(" (+%d more)", len(names)-12)
 	}
 	return strings.Join(names, ", ")
 }

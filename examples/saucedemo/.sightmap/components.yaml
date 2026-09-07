@@ -50,6 +50,9 @@ components:
         extract: text
   - name: ItemPrice
     selector: '[data-test="inventory-item-price"]'
+    properties:
+      - name: text
+        extract: text
   - name: AddToCartButton
     selector: '.btn_inventory'
     description: >
@@ -65,15 +68,22 @@ components:
     selector: '.cart_item'
     description: >
       A line item, on Cart and on the CheckoutOverview summary (identical
-      markup, confirmed live). Only name is readable.
+      markup, confirmed live). Name and price are readable; quantity is not
+      (see Quantity's own note).
     properties:
       - name: name
         extract: ItemName.text
+      - name: price
+        extract: ItemPrice.text
     children:
       - $ref: ItemName
       - $ref: ItemPrice
       - name: Quantity
         selector: '[data-test="item-quantity"]'
+        description: >
+          Declared for scope, no property extracted — saucedemo's cart always
+          shows 1 with no stepper to change it, so no tool has needed to read
+          it (confirmed live).
       - name: RemoveButton
         selector: '.cart_button'
         description: >

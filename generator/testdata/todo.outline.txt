@@ -1,0 +1,20 @@
+sightkick outline · todo · 2026-09-05
+────────────────────────────────────────────────────────────
+ Tools     4
+ Journeys  2
+ Views     1
+────────────────────────────────────────────────────────────
+ add_and_review  Add a todo, then review the list.
+   add_todo › list_todos
+ filter_and_review  Filter the list, then review it.
+   set_filter › list_todos
+────────────────────────────────────────────────────────────
+ TodoList  /
+   add_todo         Add a new todo item to the list.
+   list_todos       List the current todos and whether each is completed.
+   set_filter       Switch the todo list filter to All, Active, or Completed.
+   clear_completed  Remove all completed todos.
+────────────────────────────────────────────────────────────
+ 4 tools  ·  2 journeys  ·  1 view
+
+ detail:  sightkick explain <dir> <tool>... | --journey NAME | --view NAME
