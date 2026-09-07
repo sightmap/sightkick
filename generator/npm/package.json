@@ -1,6 +1,6 @@
 {
   "name": "@sightmap/sightkick",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "sightkick — compile a .sightkick/ tool layer + sightmap corpus into WebMCP tool IR, and install the sightkick agent skills (native binary, no Go toolchain required)",
   "license": "MIT",
   "homepage": "https://sightmap.org",
