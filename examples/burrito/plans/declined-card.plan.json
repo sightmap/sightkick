@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "app": "examples/burrito",
+  "scenario": {
+    "feature": "features/declined-card.feature",
+    "name": "A card ending 0000 is declined at Place Order",
+    "hash": "sha256:fa08da9ce2a7384965b6358dcaedeedfe60a33ef10145789af8ae675f2a4b226"
+  },
+  "steps": [
+    {
+      "gherkin": "Given I have a \"Classic Burrito\" in the cart at checkout (1/3: open item)",
+      "tool": "open_item",
+      "params": {
+        "name": "Classic Burrito"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "Given I have a \"Classic Burrito\" in the cart at checkout (2/3: add to cart)",
+      "tool": "add_item_to_cart",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "Given I have a \"Classic Burrito\" in the cart at checkout (3/3: go to checkout)",
+      "tool": "go_to_checkout",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "When I enter the delivery address \"123 Main St\", \"Denver\", \"CO\", \"80203\"",
+      "tool": "submit_delivery_address",
+      "params": {
+        "street": "123 Main St",
+        "city": "Denver",
+        "zip": "80203",
+        "state": "CO"
+      },
+      "expect": {
+        "value": {
+          "contains": "Payment"
+        }
+      }
+    },
+    {
+      "gherkin": "And I pay with card \"4242 4242 4242 0000\" expiring \"09/26\"",
+      "tool": "submit_payment_details",
+      "params": {
+        "card_number": "4242 4242 4242 0000",
+        "expiry": "09/26"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "Then I reach the review step",
+      "tool": "read_checkout_step",
+      "expect": {
+        "value": {
+          "equals": "Review"
+        }
+      }
+    },
+    {
+      "gherkin": "When I place the order",
+      "tool": "place_order",
+      "expect": {
+        "ok": false
+      }
+    },
+    {
+      "gherkin": "Then the payment is declined",
+      "tool": "read_errors",
+      "expect": {
+        "list": {
+          "contains": {
+            "error": "payment-declined"
+          }
+        }
+      }
+    },
+    {
+      "gherkin": "And I remain on the review step, not a confirmed order",
+      "tool": "read_checkout_step",
+      "expect": {
+        "value": {
+          "equals": "Review"
+        }
+      }
+    }
+  ],
+  "irHash": "sha256:d460ed6133608fc5596ea8bda29d45cc52841cae69aff56bd640a22072b97722",
+  "generatedAt": "2026-09-08T10:59:03.159Z"
+}

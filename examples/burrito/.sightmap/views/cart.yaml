@@ -1,0 +1,56 @@
+version: 1
+views:
+  - name: Cart
+    route: "/apps/burrito/cart/"
+    description: >
+      Cart review before checkout. Error scenario: empty-cart-checkout.
+    components:
+      - name: CartPage
+        selector: ".cart-page"
+        description: "Cart page container with item list and order summary"
+        children:
+          - name: CartItem
+            selector: ".cart-item"
+            description: "Individual line item in the cart"
+            properties:
+              - name: itemName
+                extract: CartItemName.text
+              - name: price
+                extract: CartItemPrice.text
+            children:
+              - name: CartItemName
+                selector: ".cart-item__name"
+                properties:
+                  - name: text
+                    extract: text
+              - name: CartItemPrice
+                selector: ".cart-item__price"
+                properties:
+                  - name: text
+                    extract: text
+              - name: QtyButton
+                selector: ".qty-btn"
+                description: "Quantity adjust button (decrement or increment)"
+                properties:
+                  - name: label
+                    extract: text
+              - name: RemoveButton
+                selector: ".cart-item__remove"
+                description: "Remove item from cart"
+          - name: CartSummary
+            selector: ".cart-summary"
+            description: "Order total summary section"
+            properties:
+              - name: total
+                extract: CartSummaryTotal.text
+            children:
+              - name: CartSummaryTotal
+                selector: ".cart-summary__row--total"
+                properties:
+                  - name: text
+                    extract: text
+              - name: CheckoutButton
+                selector: "button.checkout-btn"
+                description: "Button to proceed to checkout"
+
+url: http://localhost:5173/apps/burrito/cart/

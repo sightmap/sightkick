@@ -1,0 +1,94 @@
+version: 1
+
+tools:
+  # Rows are keyed on item + customizations, so two differently-customized
+  # burritos share an itemName — line_total (not readable as a separate
+  # quantity) is the only way to tell them apart.
+  - name: read_cart
+    description: List the cart's line items (name + line total).
+    ensure_view: Cart
+    returns:
+      description: The cart rows (item name + line total).
+      list:
+        rows: CartItem
+        fields:
+          item: itemName
+          line_total: price
+
+  - name: read_cart_total
+    description: Read the cart summary's total row.
+    ensure_view: Cart
+    returns:
+      description: 'The cart total row''s text, e.g. "Total: $11.83".'
+      value:
+        query: CartSummary
+        property: total
+
+  - name: increase_cart_quantity
+    description: Add one to a cart line's quantity via its "+" stepper.
+    ensure_view: Cart
+    params:
+      - name: item
+        type: string
+        required: true
+        description: All or part of the line item's name.
+    steps:
+      - click:
+          query: 'CartItem[itemName*="{{item}}" i] QtyButton[label="+"]'
+    returns:
+      description: The line's new total (price x quantity).
+      value:
+        query: 'CartItem[itemName*="{{item}}" i]'
+        property: price
+
+  # At quantity 1 this removes the row entirely (the app treats it as a
+  # removal, not an update) — use remove_cart_item when removal is the goal.
+  - name: decrease_cart_quantity
+    description: Subtract one from a cart line's quantity via its "−" stepper.
+    ensure_view: Cart
+    params:
+      - name: item
+        type: string
+        required: true
+        description: All or part of the line item's name.
+    steps:
+      - click:
+          query: 'CartItem[itemName*="{{item}}" i] QtyButton[label="−"]'
+    returns:
+      description: The line's new total (empty if the row was removed).
+      value:
+        query: 'CartItem[itemName*="{{item}}" i]'
+        property: price
+
+  - name: remove_cart_item
+    description: Remove a cart line outright, whatever its quantity.
+    ensure_view: Cart
+    params:
+      - name: item
+        type: string
+        required: true
+        description: All or part of the line item's name.
+    guard:
+      absent:
+        query: 'CartItem[itemName*="{{item}}" i]'
+    steps:
+      - click:
+          query: 'CartItem[itemName*="{{item}}" i] RemoveButton'
+    returns:
+      description: The cart rows remaining after the removal.
+      list:
+        rows: CartItem
+        fields:
+          item: itemName
+          line_total: price
+
+  # Fails as "no element" on an empty cart — CheckoutButton isn't rendered at
+  # all rather than showing an error.
+  - name: go_to_checkout
+    description: Proceed from the cart to checkout, landing on Delivery.
+    ensure_view: Cart
+    steps:
+      - click:
+          query: CheckoutButton
+      - wait_for:
+          view: Checkout

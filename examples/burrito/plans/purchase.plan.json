@@ -1,0 +1,146 @@
+{
+  "version": 1,
+  "app": "examples/burrito",
+  "scenario": {
+    "feature": "features/purchase.feature",
+    "name": "Order two steak burritos with a promo code",
+    "hash": "sha256:c8d39f2b83df9a900ec0cefd4fad366add31f75de27caf27f49f6fed28598f00"
+  },
+  "steps": [
+    {
+      "gherkin": "Given the menu lists five items",
+      "tool": "read_menu",
+      "expect": {
+        "list": {
+          "length": 5
+        }
+      }
+    },
+    {
+      "gherkin": "When I open \"Classic Burrito\"",
+      "tool": "open_item",
+      "params": {
+        "name": "Classic Burrito"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I customize \"protein\" as \"steak\"",
+      "tool": "customize_item",
+      "params": {
+        "group": "protein",
+        "option": "steak"
+      },
+      "expect": {
+        "value": {
+          "equals": "steak"
+        }
+      }
+    },
+    {
+      "gherkin": "And I increase the quantity to 2",
+      "tool": "increase_item_quantity",
+      "expect": {
+        "value": {
+          "contains": "Add 2 to Cart"
+        }
+      }
+    },
+    {
+      "gherkin": "And I add it to the cart",
+      "tool": "add_item_to_cart",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "Then the cart holds one line for \"Classic Burrito\" at \"$21.90\"",
+      "tool": "read_cart",
+      "expect": {
+        "list": {
+          "length": 1,
+          "contains": {
+            "item": "Classic Burrito",
+            "line_total": "$21.90"
+          }
+        }
+      }
+    },
+    {
+      "gherkin": "When I check out",
+      "tool": "go_to_checkout",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "And I enter the delivery address \"123 Main St\", \"Denver\", \"CO\", \"80203\"",
+      "tool": "submit_delivery_address",
+      "params": {
+        "street": "123 Main St",
+        "city": "Denver",
+        "zip": "80203",
+        "state": "CO"
+      },
+      "expect": {
+        "value": {
+          "contains": "Payment"
+        }
+      }
+    },
+    {
+      "gherkin": "And I pay with card \"4242 4242 4242 4242\" expiring \"09/26\"",
+      "tool": "submit_payment_details",
+      "params": {
+        "card_number": "4242 4242 4242 4242",
+        "expiry": "09/26"
+      },
+      "expect": {
+        "value": {
+          "contains": "Review"
+        }
+      }
+    },
+    {
+      "gherkin": "And I apply the promo code \"BURRITO20\"",
+      "tool": "apply_promo",
+      "params": {
+        "code": "BURRITO20"
+      },
+      "expect": {
+        "value": {
+          "contains": "$18.92"
+        }
+      }
+    },
+    {
+      "gherkin": "Then the order total is \"$18.92\"",
+      "tool": "read_order_total",
+      "expect": {
+        "value": {
+          "contains": "$18.92"
+        }
+      }
+    },
+    {
+      "gherkin": "When I place the order",
+      "tool": "place_order",
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "Then I get an order id",
+      "tool": "read_order_id",
+      "expect": {
+        "value": {
+          "contains": "ORD-"
+        }
+      }
+    }
+  ],
+  "irHash": "sha256:d460ed6133608fc5596ea8bda29d45cc52841cae69aff56bd640a22072b97722",
+  "generatedAt": "2026-09-08T10:59:03.100Z"
+}

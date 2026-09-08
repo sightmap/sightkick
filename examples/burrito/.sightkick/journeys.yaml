@@ -1,0 +1,60 @@
+version: 1
+
+journeys:
+  - name: purchase
+    description: Order one customized item end to end, from the menu to a confirmed order id.
+    steps:
+      - tool: read_menu
+        reason: see what's on offer and what it costs before choosing
+      - tool: open_item
+        reason: customizations only exist on an item's own detail page
+      - tool: read_item_customizations
+        reason: see each group's current selection before changing anything
+      - tool: customize_item
+        reason: set a group whose default isn't what you want (it self-skips if it already is)
+      - tool: increase_item_quantity
+        reason: quantity is set here, on the item, not in the cart
+      - tool: add_item_to_cart
+        reason: commit the item — this lands you on the cart, not back on the menu
+      - tool: read_cart
+        reason: confirm what landed, with its line total, before paying for it
+      - tool: go_to_checkout
+        reason: only reachable from the cart, and only when the cart is non-empty
+      - tool: submit_delivery_address
+        reason: the Delivery step gates the wizard; this advances it to Payment
+      - tool: submit_payment_details
+        reason: pass a real 16-digit card — the pre-filled masked one is rejected
+      - tool: apply_promo
+        reason: BURRITO20 is only applyable on the Review step, before ordering
+      - tool: read_order_total
+        reason: read the discounted total while it still exists — it doesn't survive to the confirmation
+      - tool: place_order
+        reason: submit from Review; a card ending 0000 is declined here, not earlier
+      - tool: read_order_id
+        reason: read the generated order id back as proof the order landed
+
+  - name: revise_cart
+    description: Change your mind in the cart — adjust quantities, drop a line, then check the total.
+    steps:
+      - tool: read_cart
+        reason: get the exact line names to address rows by
+      - tool: increase_cart_quantity
+        reason: bump a line; its returned line total is how you observe the new quantity
+      - tool: remove_cart_item
+        reason: drop a line outright — decreasing from quantity 1 also removes it, less explicitly
+      - tool: read_cart_total
+        reason: confirm the summary total moved with the edits
+      - tool: go_to_checkout
+        reason: proceed once the cart is what you want
+
+  - name: diagnose_error
+    description: Land on a known error fixture and report which error fired and why.
+    steps:
+      - tool: load_scenario
+        reason: the only way to reach some error states — it reloads, so do it first
+      - tool: read_errors
+        reason: name the error by its id before interpreting anything on screen
+      - tool: read_error_message
+        reason: read the user-facing wording the app actually shows
+      - tool: read_checkout_step
+        reason: locate which wizard step the failure surfaced on — the URL won't tell you
