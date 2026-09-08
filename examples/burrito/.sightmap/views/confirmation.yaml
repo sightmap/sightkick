@@ -1,0 +1,21 @@
+version: 1
+views:
+  - name: Confirmation
+    route: "/apps/burrito/confirmation/"
+    description: "Order confirmation screen after successful checkout"
+    components:
+      - name: ConfirmationView
+        selector: ".confirmation"
+        description: "Confirmation page container"
+        children:
+          - name: OrderIdDisplay
+            selector: ".confirmation__order-id"
+            description: "Displays the generated order ID"
+            properties:
+              - name: orderId
+                extract: text
+          - name: OrderAgainButton
+            selector: "button.confirmation__btn"
+            description: "Button to start a new order"
+
+url: http://localhost:5173/apps/burrito/confirmation/

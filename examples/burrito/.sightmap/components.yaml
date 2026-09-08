@@ -1,0 +1,83 @@
+version: 1
+# Global components — error-state banners that can appear on any view.
+# Load via ?scenario=<name>; e.g. ?scenario=something-went-wrong.
+# Scenarios: something-went-wrong, payment-declined, card-invalid,
+#   required-field-missing, item-out-of-stock, delivery-zone-unavailable,
+#   promo-invalid, empty-cart-checkout, menu-load-failed, session-expired.
+
+components:
+  - name: ErrorBanner
+    selector: "[data-error]"
+    description: "Any error banner or inline error, identified by its errorId."
+    properties:
+      - name: errorId
+        extract: attr=data-error
+      - name: message
+        extract: ErrorBannerMessage.text
+    children:
+      - name: ErrorBannerMessage
+        selector: ".error-banner__message"
+        properties:
+          - name: text
+            extract: text
+
+  - name: SomethingWentWrongBanner
+    selector: "[data-error='something-went-wrong']"
+    description: "Generic error boundary fallback"
+
+  - name: MenuLoadFailedBanner
+    selector: "[data-error='menu-load-failed']"
+    description: "Network/timeout failure loading the menu"
+
+  - name: ItemOutOfStockAlert
+    selector: "[data-error='item-out-of-stock']"
+    description: "Menu item marked unavailable"
+
+  - name: PaymentDeclinedBanner
+    selector: "[data-error='payment-declined']"
+    description: "Card issuer declined the transaction"
+
+  - name: CardInvalidAlert
+    selector: "[data-error='card-invalid']"
+    description: "Client-side card validation failure"
+
+  - name: RequiredFieldMissingAlert
+    selector: "[data-error='required-field-missing']"
+    description: "Required fields empty on form submit"
+
+  - name: DeliveryZoneUnavailableAlert
+    selector: "[data-error='delivery-zone-unavailable']"
+    description: "Delivery address outside service zone"
+
+  - name: PromoInvalidAlert
+    selector: "[data-error='promo-invalid']"
+    description: "Promo code rejected"
+
+  - name: EmptyCartBanner
+    selector: "[data-error='empty-cart-checkout']"
+    description: "Checkout attempted with empty cart"
+
+  - name: SessionExpiredBanner
+    selector: "[data-error='session-expired']"
+    description: "Cart/session expired on checkout"
+
+  - name: RetryButton
+    selector: "button.retry-btn"
+    description: "Retry action on recoverable errors"
+
+  - name: BurritoNav
+    selector: "nav.burrito-nav"
+    description: "Persistent top navigation bar present on every view"
+    children:
+      - name: NavLogoButton
+        selector: "button.burrito-nav__logo"
+        description: "Home/logo button — navigates to menu"
+        properties:
+          - name: label
+            extract: text
+      - name: CartNavButton
+        selector: "button.burrito-nav__cart"
+        description: "Cart shortcut button with item count badge"
+        properties:
+          - name: label
+            extract: text

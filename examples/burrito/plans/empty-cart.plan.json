@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "app": "examples/burrito",
+  "scenario": {
+    "feature": "features/empty-cart.feature",
+    "name": "The empty-cart fixture blocks checkout",
+    "hash": "sha256:566fa10561e5676e9f325afb1f43a8be0c46b8f4ecf9456b6a4da71dd0131ee6"
+  },
+  "steps": [
+    {
+      "gherkin": "Given I load the \"empty-cart-checkout\" fixture on the cart page",
+      "tool": "load_scenario",
+      "params": {
+        "scenario": "empty-cart-checkout",
+        "at": "cart/"
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "gherkin": "Then the cart is empty",
+      "tool": "read_cart",
+      "expect": {
+        "list": {
+          "length": 0
+        }
+      }
+    },
+    {
+      "gherkin": "And I see the \"empty-cart-checkout\" error",
+      "tool": "read_errors",
+      "expect": {
+        "list": {
+          "contains": {
+            "error": "empty-cart-checkout"
+          }
+        }
+      }
+    },
+    {
+      "gherkin": "When I try to check out",
+      "tool": "go_to_checkout",
+      "expect": {
+        "ok": false
+      }
+    },
+    {
+      "gherkin": "Then the empty-cart message is still shown",
+      "tool": "read_error_message",
+      "expect": {
+        "value": {
+          "contains": "Your cart is empty"
+        }
+      }
+    }
+  ],
+  "irHash": "sha256:d460ed6133608fc5596ea8bda29d45cc52841cae69aff56bd640a22072b97722",
+  "generatedAt": "2026-09-08T10:59:03.132Z"
+}

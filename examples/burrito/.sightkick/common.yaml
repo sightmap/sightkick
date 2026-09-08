@@ -1,0 +1,68 @@
+version: 1
+name: burrito
+
+tools:
+  - name: read_errors
+    description: List every error state currently rendered, by its errorId.
+    returns:
+      description: One row per rendered error state.
+      list:
+        rows: ErrorBanner
+        fields:
+          error: errorId
+          message: message
+
+  - name: read_error_message
+    description: Read the first error banner's message text.
+    returns:
+      description: The error banner's message.
+      value:
+        query: ErrorBanner
+        property: message
+
+  - name: go_to_cart
+    description: Go to the cart from any view via the nav bar's cart button.
+    steps:
+      - click:
+          query: CartNavButton
+      - wait_for:
+          view: Cart
+
+  - name: go_to_menu
+    description: Return to the menu from any view via the nav bar logo button.
+    steps:
+      - click:
+          query: NavLogoButton
+      - wait_for:
+          view: Menu
+
+  # A full page load: discards in-memory state, including the cart. Call
+  # first or not at all. `at` must match the page the fixture expects, since
+  # the app re-parses the URL on mount rather than trusting the fixture.
+  - name: load_scenario
+    description: Reload the app on a deterministic error-state fixture.
+    params:
+      - name: scenario
+        type: enum
+        required: true
+        description: The fixture id from scenarios.ts.
+        values:
+          - default
+          - something-went-wrong
+          - payment-declined
+          - card-invalid
+          - required-field-missing
+          - item-out-of-stock
+          - delivery-zone-unavailable
+          - promo-invalid
+          - empty-cart-checkout
+          - menu-load-failed
+          - session-expired
+      - name: at
+        type: enum
+        required: true
+        description: Which page to land on ("", "cart/", or "checkout/").
+        values: ["", "cart/", "checkout/"]
+    steps:
+      - goto:
+          url: "http://localhost:5173/apps/burrito/{{at}}?scenario={{scenario}}"

@@ -1,0 +1,115 @@
+version: 1
+views:
+  - name: Checkout
+    route: "/apps/burrito/checkout/"
+    description: >
+      Multi-step checkout: Delivery -> Payment -> Review.
+      Error scenarios: payment-declined, card-invalid, required-field-missing,
+      delivery-zone-unavailable, promo-invalid, session-expired.
+    components:
+      - name: CheckoutView
+        selector: ".checkout"
+        description: "Multi-step checkout container"
+        children:
+          - name: CheckoutBackButton
+            selector: "button.checkout__back"
+            description: "Back to cart button at top of checkout"
+          - name: CheckoutSteps
+            selector: ".checkout__steps"
+            description: "Step progress indicator showing Delivery/Payment/Review"
+            properties:
+              - name: activeStep
+                extract: ActiveStepLabel.text
+            children:
+              - name: ActiveStepLabel
+                selector: ".checkout__step--active .checkout__step-label"
+                description: "Label text of whichever step is currently active"
+                properties:
+                  - name: text
+                    extract: text
+          - name: StreetField
+            selector: "input[name='street']"
+            description: "Delivery street address input"
+            properties:
+              - name: value
+                extract: attr=value
+          - name: CityField
+            selector: "input[name='city']"
+            description: "Delivery city input"
+            properties:
+              - name: value
+                extract: attr=value
+          - name: StateField
+            selector: "input[name='state']"
+            description: "Delivery state input"
+            properties:
+              - name: value
+                extract: attr=value
+          - name: ZipField
+            selector: "input[name='zip']"
+            description: "Delivery zip code input"
+            properties:
+              - name: value
+                extract: attr=value
+          - name: CardNumberField
+            selector: "input[name='cardNumber']"
+            description: "Card number input"
+            properties:
+              - name: value
+                extract: attr=value
+          - name: CardExpiryField
+            selector: "input[name='cardExpiry']"
+            description: "Card expiry (MM/YY) input"
+            properties:
+              - name: value
+                extract: attr=value
+          - name: CardCvvField
+            selector: "input[name='cvv']"
+            description: "Card CVV input"
+            properties:
+              - name: value
+                extract: attr=value
+          - name: CardNameField
+            selector: "input[name='cardName']"
+            description: "Name on card input"
+            properties:
+              - name: value
+                extract: attr=value
+          - name: PromoField
+            selector: ".form-input--promo"
+            description: "Promo code input on the Review step"
+            properties:
+              - name: value
+                extract: attr=value
+          - name: PromoAppliedLabel
+            selector: ".promo-applied"
+            description: "Confirmation line shown once a promo code is accepted"
+          - name: FormField
+            selector: ".form-group .form-input"
+            description: "Generic fallback matching any checkout text input, regardless of field."
+          - name: ContinueButton
+            selector: "button.btn-primary:not(.btn-primary--lg)"
+            description: "Continue to next step button"
+          - name: BackStepButton
+            selector: "button.btn-secondary:not(.btn-secondary--sm)"
+            description: "Back to previous step button"
+          - name: ApplyPromoButton
+            selector: "button.btn-secondary--sm"
+            description: "Apply promo code button"
+          - name: ReviewTotals
+            selector: ".review-totals"
+            description: "Order totals breakdown on the Review step"
+            properties:
+              - name: total
+                extract: ReviewTotalsAmount.text
+            children:
+              - name: ReviewTotalsAmount
+                selector: ".review-totals__row--total"
+                properties:
+                  - name: text
+                    extract: text
+          - name: PlaceOrderButton
+            selector: "button.btn-primary--lg"
+            description: "Final 'Place Order' button on Review step"
+
+url: http://localhost:5173/apps/burrito/checkout/

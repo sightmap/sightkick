@@ -1,0 +1,49 @@
+version: 1
+views:
+  - name: ItemDetail
+    route: "/apps/burrito/item/"
+    description: >
+      Item detail page with customization options. Error scenario: item-out-of-stock.
+    components:
+      - name: ItemDetailView
+        selector: ".item-detail"
+        description: "Item detail page container"
+        children:
+          - name: BackToMenuButton
+            selector: "button.item-detail__back"
+            description: "Back navigation button to return to menu"
+          - name: CustomizationGroup
+            selector: ".customization-group"
+            description: "A group of customization radio/select options for the item"
+            properties:
+              - name: groupName
+                extract: CustomizationGroupLabel.text
+            children:
+              - name: CustomizationGroupLabel
+                selector: ".customization-group__label"
+                description: "The group's label text (e.g. 'Protein', 'Extras')"
+                properties:
+                  - name: text
+                    extract: text
+              - name: OptionButton
+                selector: ".option-btn"
+                description: "Individual option selection button within a customization group. Assert selection with classes*=selected -- a sibling SelectedOption component doesn't work here: sightmap assigns one owning component per DOM node, and a selected option's node is still owned by OptionButton, not a narrower selector."
+                properties:
+                  - name: label
+                    extract: text
+                  - name: classes
+                    extract: attr=class
+          - name: QtyButton
+            selector: ".item-detail__footer .qty-btn"
+            description: "Quantity adjust button on item detail footer"
+            properties:
+              - name: label
+                extract: text
+          - name: AddToCartButton
+            selector: "button.add-to-cart-btn"
+            description: "Button to add item with selected customizations to cart"
+            properties:
+              - name: label
+                extract: text
+
+url: http://localhost:5173/apps/burrito/item/

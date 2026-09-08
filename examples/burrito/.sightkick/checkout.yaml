@@ -1,0 +1,186 @@
+version: 1
+
+# Checkout is a three-step wizard on one route (the URL never changes), so
+# ensure_view: Checkout can't distinguish Delivery/Payment/Review — every
+# mutating tool here guards and waits on CheckoutSteps.activeStep instead.
+# Field values can't be read back: Preact sets `value` as a DOM property, not
+# an attribute, so `attr=value` always resolves empty.
+
+tools:
+  - name: read_checkout_step
+    description: Read which checkout step is active.
+    ensure_view: Checkout
+    returns:
+      description: The active step's label ("Delivery", "Payment", or "Review").
+      value:
+        query: CheckoutSteps
+        property: activeStep
+
+  # street/city/zip required; a zip starting "00" is out of the delivery
+  # zone. Fields are pre-filled from the saved address on the default
+  # fixture; passed values replace them.
+  - name: submit_delivery_address
+    description: Fill the delivery address and continue to Payment.
+    ensure_view: Checkout
+    params:
+      - name: street
+        type: string
+        required: true
+        description: Street address, e.g. "123 Main St".
+      - name: city
+        type: string
+        required: true
+        description: City, e.g. "Denver".
+      - name: zip
+        type: string
+        required: true
+        description: 5-digit zip. A zip starting "00" is out of the delivery zone.
+      - name: state
+        type: string
+        required: false
+        description: Two-letter state, e.g. "CO".
+    guard:
+      absent:
+        query: 'CheckoutSteps[activeStep*="Delivery" i]'
+    steps:
+      - fill:
+          query: StreetField
+          value: "{{street}}"
+      - fill:
+          query: CityField
+          value: "{{city}}"
+      - fill:
+          query: StateField
+          value: "{{state}}"
+      - fill:
+          query: ZipField
+          value: "{{zip}}"
+      - click:
+          query: ContinueButton
+      - wait_for:
+          query: 'CheckoutSteps[activeStep*="Payment" i]'
+    returns:
+      description: The step now active (expect "Payment").
+      value:
+        query: CheckoutSteps
+        property: activeStep
+
+  # card_number must be 16 digits: the field is pre-filled with a masked
+  # saved card (4 digits), which raises card-invalid on continue. A number
+  # ending 0000 passes this step and is declined later, at place_order.
+  - name: submit_payment_details
+    description: Fill the card details and continue to Review.
+    ensure_view: Checkout
+    params:
+      - name: card_number
+        type: string
+        required: true
+        description: 16 digits. 1-15 raises card-invalid; ending 0000 is declined at place_order.
+      - name: expiry
+        type: string
+        required: true
+        description: MM/YY, e.g. "09/26".
+      - name: cvv
+        type: string
+        required: false
+        description: 3-4 digits.
+      - name: name_on_card
+        type: string
+        required: false
+        description: Cardholder name.
+    guard:
+      absent:
+        query: 'CheckoutSteps[activeStep*="Payment" i]'
+    steps:
+      - fill:
+          query: CardNumberField
+          value: "{{card_number}}"
+      - fill:
+          query: CardExpiryField
+          value: "{{expiry}}"
+      - fill:
+          query: CardCvvField
+          value: "{{cvv}}"
+      - fill:
+          query: CardNameField
+          value: "{{name_on_card}}"
+      - click:
+          query: ContinueButton
+      - wait_for:
+          query: 'CheckoutSteps[activeStep*="Review" i]'
+    returns:
+      description: The step now active (expect "Review").
+      value:
+        query: CheckoutSteps
+        property: activeStep
+
+  # Idempotent: once applied, the promo input is replaced by a confirmation
+  # line, so a second call is skipped. Only available on Review. The
+  # discount does not survive to the confirmation page (a known app bug).
+  # ok:false means the code was rejected — call read_errors for promo-invalid.
+  - name: apply_promo
+    description: Apply a promo code on the Review step and read the new total.
+    ensure_view: Checkout
+    params:
+      - name: code
+        type: string
+        required: true
+        description: The promo code. BURRITO20 is the only one that works.
+    guard:
+      absent:
+        query: PromoField
+    steps:
+      - fill:
+          query: PromoField
+          value: "{{code}}"
+      - click:
+          query: ApplyPromoButton
+      - wait_for:
+          query: PromoAppliedLabel
+    returns:
+      description: 'The order total after the promo, e.g. "Total: $9.46".'
+      value:
+        query: ReviewTotals
+        property: total
+
+  - name: read_order_total
+    description: Read the Review step's total row.
+    ensure_view: Checkout
+    returns:
+      description: 'The Review total row''s text, e.g. "Total: $11.83".'
+      value:
+        query: ReviewTotals
+        property: total
+
+  - name: go_back_a_step
+    description: Step back in the checkout wizard.
+    ensure_view: Checkout
+    steps:
+      - click:
+          query: BackStepButton
+    returns:
+      description: The step now active.
+      value:
+        query: CheckoutSteps
+        property: activeStep
+
+  - name: go_back_to_cart
+    description: Leave checkout and return to the cart, keeping the cart intact.
+    ensure_view: Checkout
+    steps:
+      - click:
+          query: CheckoutBackButton
+      - wait_for:
+          view: Cart
+
+  # A card ending 0000 is declined here, not at the Payment step, and does
+  # not navigate. The total charged ignores any applied promo (a known app
+  # bug).
+  - name: place_order
+    description: Submit the order from the Review step.
+    ensure_view: Checkout
+    steps:
+      - click:
+          query: PlaceOrderButton
+      - wait_for:
+          view: Confirmation

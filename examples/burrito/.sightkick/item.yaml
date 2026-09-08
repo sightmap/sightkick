@@ -1,0 +1,99 @@
+version: 1
+
+tools:
+  # The item's own name/price aren't in the corpus (no property covers
+  # .item-detail__name / .item-detail__price) — read those from read_menu
+  # before opening the item.
+  - name: read_item
+    description: Read the add-to-cart button's label (quantity + extended price).
+    ensure_view: ItemDetail
+    returns:
+      description: The add-to-cart button's label, e.g. "Add 2 to Cart · $21.90".
+      value:
+        query: AddToCartButton
+        property: label
+
+  - name: read_item_customizations
+    description: List the open item's customization groups and selected options.
+    ensure_view: ItemDetail
+    returns:
+      description: One row per customization group.
+      list:
+        rows: CustomizationGroup
+        fields:
+          group: groupName
+
+  # Idempotent: skips and returns skipped:true if the option is already
+  # selected. The "guacamole (+$2)" surcharge is cosmetic and never reaches
+  # the cart or checkout totals (a known app bug).
+  - name: customize_item
+    description: Select one customization option on the open item.
+    ensure_view: ItemDetail
+    params:
+      - name: group
+        type: string
+        required: true
+        description: The customization group, e.g. "protein", "salsa", "shell".
+      - name: option
+        type: string
+        required: true
+        description: The option to select, e.g. "steak", "hot", "guacamole".
+    guard:
+      present:
+        query: 'CustomizationGroup[groupName*="{{group}}" i] OptionButton[label*="{{option}}" i][classes*="selected"]'
+    steps:
+      - click:
+          query: 'CustomizationGroup[groupName*="{{group}}" i] OptionButton[label*="{{option}}" i]'
+      - wait_for:
+          query: 'CustomizationGroup[groupName*="{{group}}" i] OptionButton[label*="{{option}}" i][classes*="selected"]'
+    returns:
+      description: The label of the now-selected option.
+      value:
+        query: 'CustomizationGroup[groupName*="{{group}}" i] OptionButton[label*="{{option}}" i][classes*="selected"]'
+        property: label
+
+  - name: increase_item_quantity
+    description: Click the "+" stepper on the open item.
+    ensure_view: ItemDetail
+    steps:
+      - click:
+          query: 'QtyButton[label="+"]'
+    returns:
+      description: The add-to-cart label after the change.
+      value:
+        query: AddToCartButton
+        property: label
+
+  # Disabled at quantity 1 (no-op). The label is U+2212 MINUS SIGN, not a
+  # hyphen.
+  - name: decrease_item_quantity
+    description: Click the "−" stepper on the open item.
+    ensure_view: ItemDetail
+    steps:
+      - click:
+          query: 'QtyButton[label="−"]'
+    returns:
+      description: The add-to-cart label after the change.
+      value:
+        query: AddToCartButton
+        property: label
+
+  # Navigates to the cart on success — no separate go-to-cart step needed
+  # afterwards. Fails as "no element" on an out-of-stock item.
+  - name: add_item_to_cart
+    description: Add the open item, with its customizations and quantity, to the cart.
+    ensure_view: ItemDetail
+    steps:
+      - click:
+          query: AddToCartButton
+      - wait_for:
+          view: Cart
+
+  - name: back_to_menu
+    description: Leave the item detail page without adding anything.
+    ensure_view: ItemDetail
+    steps:
+      - click:
+          query: BackToMenuButton
+      - wait_for:
+          view: Menu

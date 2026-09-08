@@ -1,0 +1,23 @@
+version: 1
+
+tools:
+  # Returns empty when not on the confirmation page — how you assert an
+  # order was NOT placed. Match on the "ORD-" prefix, never the whole
+  # string (the suffix is a timestamp).
+  - name: read_order_id
+    description: Read the confirmed order's id line.
+    ensure_view: Confirmation
+    returns:
+      description: The order id line, e.g. "Order #ORD-1757339284102".
+      value:
+        query: OrderIdDisplay
+        property: orderId
+
+  - name: order_again
+    description: Start a fresh order from the confirmation page.
+    ensure_view: Confirmation
+    steps:
+      - click:
+          query: OrderAgainButton
+      - wait_for:
+          view: Menu

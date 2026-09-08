@@ -1,0 +1,39 @@
+version: 1
+views:
+  - name: Menu
+    route: "/apps/burrito/"
+    description: "Main menu — grid of available burrito items. Error scenario: menu-load-failed."
+    components:
+      - name: MenuGrid
+        selector: ".menu-grid"
+        description: "Grid of available menu items"
+        children:
+          - name: MenuCard
+            selector: ".menu-card"
+            description: "Individual menu item card — click to go to ItemDetail"
+            properties:
+              - name: itemName
+                extract: MenuCardName.text
+              - name: price
+                extract: MenuCardPrice.text
+            children:
+              - name: MenuCardEmoji
+                selector: ".menu-card__emoji"
+                description: "Item image emoji"
+              - name: MenuCardName
+                selector: ".menu-card__name"
+                description: "Item display name"
+                properties:
+                  - name: text
+                    extract: text
+              - name: MenuCardPrice
+                selector: ".menu-card__price"
+                description: "Item price"
+                properties:
+                  - name: text
+                    extract: text
+              - name: MenuCardDesc
+                selector: ".menu-card__desc"
+                description: "Item description text"
+
+url: http://localhost:5173/apps/burrito/

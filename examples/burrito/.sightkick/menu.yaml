@@ -1,0 +1,27 @@
+version: 1
+
+tools:
+  - name: read_menu
+    description: List the menu items with their prices.
+    ensure_view: Menu
+    returns:
+      description: The menu rows (item name + price).
+      list:
+        rows: MenuCard
+        fields:
+          item: itemName
+          price: price
+
+  - name: open_item
+    description: Open a menu item's detail page by name.
+    ensure_view: Menu
+    params:
+      - name: name
+        type: string
+        required: true
+        description: All or part of the item's name, e.g. "Classic Burrito".
+    steps:
+      - click:
+          query: 'MenuCard[itemName*="{{name}}" i]'
+      - wait_for:
+          view: ItemDetail
