@@ -47,3 +47,25 @@ and `--via cli` (the default `--via webmcp` needs a sightmap release this enviro
 sightmap browser start --detach --headless --url https://www.saucedemo.com/
 go run . call ../examples/saucedemo log_in --param username=standard_user --param password=secret_sauce --via cli
 ```
+
+### The password-breach dialog
+
+saucedemo's published password (`secret_sauce`) is public enough to be in breach corpora Chrome's
+Safe Browsing checks against, so a fresh Chrome profile pops a "Change your password" dialog on
+every `log_in`. That's a native browser overlay, not a page element — it silently swallows clicks
+meant for the page underneath it, which looks exactly like a flaky tool failure (a `wait_for`
+timeout on the very next step) rather than what it is. No Chrome flag suppresses this; it has to be
+patched into the profile's own `Preferences` file.
+
+Run once, before driving the corpus live for the first time (or any time you want a clean profile):
+
+```sh
+./scripts/setup-saucedemo-profile.sh
+```
+
+Then point `sightmap browser start` at the profile it builds:
+
+```sh
+sightmap browser start --detach --url https://www.saucedemo.com/ --sightmap-dir examples/saucedemo/.sightmap \
+  --cdp-port 7892 --port 7891 --profile ~/.sightmap/profiles/sightkick-demo
+```
