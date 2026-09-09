@@ -349,11 +349,30 @@ export async function clickElement(el: Element): Promise<void> {
   target.click();
 }
 
-/** Resolve on the next animation frame (or a ~16ms timer where rAF is absent). */
+/**
+ * Resolve on the next animation frame — but NEVER hang if frames stop coming.
+ *
+ * clickElement's settle loop awaits this and relies on its own 300ms wall-clock
+ * deadline to fall back to node dispatch; that deadline is only checked BETWEEN
+ * frames, so a bare `requestAnimationFrame` await would hang the whole tool when
+ * rAF is STARVED — a backgrounded/throttled tab, or a wedged SPA renderer that
+ * has stopped painting (observed on jetblue: rAF fired 0x in 2s while a tool hung
+ * in the option click). We race rAF against a short timer so the loop keeps
+ * turning (and honors its deadline -> node-dispatch fallback) even when no frame
+ * ever fires. When rAF is healthy it wins the race (~16ms < the fallback), so the
+ * settle fast-path is unchanged; where rAF is absent (a test DOM) the timer is
+ * the only arm. Whichever fires first wins; the loser is a harmless no-op.
+ */
 function nextFrame(): Promise<void> {
   return new Promise((resolve) => {
-    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve());
-    else setTimeout(resolve, 16);
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(done);
+    setTimeout(done, 50);
   });
 }
 
