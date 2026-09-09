@@ -85,6 +85,34 @@ func TestCompPropResolution(t *testing.T) {
 	}
 }
 
+// TestRawTextExtract: `raw_text` (SEP-0013) compiles to its own extractor kind,
+// both directly and carried through a PATH.prop leaf (the JetBlue
+// SubFare.tier -> SubFareName.raw_text shape), so --via webmcp reads the node's
+// own literal text instead of the welded accessible name.
+func TestRawTextExtract(t *testing.T) {
+	c := oneViewCorpus(
+		sm.ComponentDef{Name: "SubFare", Selectors: []string{".tile"}, Properties: []sm.ComponentPropertyDef{
+			prop("direct", "raw_text"), // local raw_text
+			prop("tier", "Name.text"),  // PATH.prop -> child leaf whose extract is raw_text
+		}},
+		sm.ComponentDef{Name: "Name", ParentChain: []string{"SubFare"}, Selectors: []string{".tile h3"}, Properties: []sm.ComponentPropertyDef{prop("text", "raw_text")}},
+	)
+	ir, diags := Compile(listOverRow("SubFare", "direct", "tier"), c)
+	if HasErrors(diags) {
+		t.Fatalf("unexpected errors:\n%s", Format(diags))
+	}
+	got := ir.Tools[0].Returns.Fields
+	want := map[string]Extractor{
+		"direct": {Kind: "raw_text"},
+		"tier":   {Kind: "raw_text", Within: "h3"},
+	}
+	for name, w := range want {
+		if g := got[name].Extractor; g != w {
+			t.Errorf("field %q extractor = %+v, want %+v", name, g, w)
+		}
+	}
+}
+
 // TestExtractModeAliasRejected: the legacy inner_text/text_only aliases are
 // rejected (as an error, matching `sightmap validate`) now that `text` yields
 // rendered node text on both sides.

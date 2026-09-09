@@ -50,6 +50,11 @@ func (cc *compiler) resolveExtractorDepth(extract string, owner sm.ComponentDef,
 	switch s {
 	case "", "text":
 		return Extractor{Kind: "text"}
+	case "raw_text":
+		// The node's own literal text (direct text nodes), NOT the accessibility
+		// name and NOT innerText — SEP-0013. The runtime reads it the same way the
+		// sightmap lib populates node.RawText offline.
+		return Extractor{Kind: "raw_text"}
 	case "inner_text", "text_only":
 		// Rejected to match `sightmap validate`. `text` now yields rendered node
 		// text (incl. role-less nodes) on both sides, so it fully subsumes these.
