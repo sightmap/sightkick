@@ -55,19 +55,24 @@ redistribution inside our binary unambiguous.)
    CfT (Stable ≥150), which `browser start` auto-selects (newest wins), and there
    `document.modelContext` is the native surface.
 
-2. **The flag must be forced on the command line.** Enabling *WebMCP for testing*
-   in `chrome://flags` (persisted in the profile's `Local State`
-   `enabled_labs_experiments`) is **not applied** under the automation-launched
-   profile — the flag is a Blink runtime feature that must be passed explicitly:
-   `--enable-blink-features=ModelContext,ModelContextTesting`
-   (plus `--enable-features=DevToolsWebMCPSupport` for the DevTools panel).
-   `--webmcp` passes both; the feature names come from the CfT framework
-   (`blink/renderer/core/script_tools/model_context.cc`).
+2. **WebMCP must be on — and the managed CfT already has it on.** The native
+   surface is behind Chromium's `WebMCP` runtime feature. The Chrome for Testing
+   that `sightmap browser install` pulls enables it **by default** (Chromium's
+   field-trial testing config), so `document.modelContext` is native there with no
+   flag — which is exactly why the bogus flags this note used to list appeared to
+   work. Against **Google Chrome stable** the feature is **off**; turn it on with
+   `--enable-features=WebMCPTesting`, the command-line form of
+   `chrome://flags/#enable-webmcp-testing` and the switch upstream documents in
+   [`implementation-status.md`](https://github.com/webmachinelearning/webmcp/blob/main/implementation-status.md)
+   (`--webmcp` passes it for you). The names this note used to give —
+   `--enable-blink-features=ModelContext,ModelContextTesting` and
+   `--enable-features=DevToolsWebMCPSupport` — are not Chromium features, so Chrome
+   silently ignores them.
 
-Verified: on a modern CfT with those flags, `document.modelContext` is native, and
-after sightkick injects the runtime bundle + IR, `document.modelContext.getTools()`
-on the target site returns sightkick's tools — so the inspector reads them instead
-of throwing.
+Verified: on the managed CfT, `document.modelContext` is native, and after
+sightkick injects the runtime bundle + IR, `document.modelContext.getTools()` on
+the target site returns sightkick's tools — so the inspector reads them instead of
+throwing.
 
 ## Loading it by hand
 
@@ -77,8 +82,7 @@ control), run from the **sightkick repo root**:
 ```sh
 sightmap browser start --detach \
   --extensions ~/.sightmap/extension,"$PWD/vendor/webmcp-tool/unpacked" \
-  --chrome-flag=--enable-blink-features=ModelContext,ModelContextTesting \
-  --chrome-flag=--enable-features=DevToolsWebMCPSupport
+  --chrome-flag=--enable-features=WebMCPTesting
 ```
 
 Two extensions load together: the built-in **sightmap overlay**
