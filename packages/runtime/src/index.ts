@@ -6,6 +6,7 @@ export { runTool, routeMatches, type ToolResult, type RunOptions } from "./execu
 export { createClient, type SightkickClient } from "./client.js";
 export { ensureModelContext, isPolyfilled, type ModelContext, type RegisteredTool } from "./webmcp.js";
 export { installIrChannel } from "./channel.js";
+export { TOOL_EVENT, type ToolEventDetail, type ToolVia } from "./events.js";
 export * from "./ir.js";
 
 /**

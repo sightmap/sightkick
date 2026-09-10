@@ -2,6 +2,7 @@ import type { IR, Tool } from "./ir.js";
 import { routeMatches, runTool, type RunOptions, type ToolResult } from "./executor.js";
 import { ensureModelContext, isPolyfilled, type ModelContext } from "./webmcp.js";
 import { describeError } from "./errors.js";
+import { setEventContext } from "./events.js";
 
 export interface BootOptions {
   /** Override the current path (tests). Defaults to window.location.pathname. */
@@ -108,7 +109,7 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
             description: tool.description ?? "",
             inputSchema: tool.inputSchema,
             execute: async (args, options) =>
-              toEnvelope(await runTool(tool, args, { signal: options?.signal, currentPath: path })),
+              toEnvelope(await runTool(tool, args, { signal: options?.signal, currentPath: path, via: "modelContext" })),
           },
           { signal: controller.signal },
         ),
@@ -123,6 +124,9 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
     polyfilled: isPolyfilled(ctx),
     load(ir: IR) {
       this.ir = ir;
+      // Tool events name the tool layer and the surface they came from; only
+      // boot knows either, so hand them to the executor's emitter here.
+      setEventContext({ ir: ir.name, polyfilled: this.polyfilled });
       refresh();
       console.info(
         `[sightkick] loaded IR "${ir.name}" (${ir.tools.length} tools, ${this.mode}, ` +

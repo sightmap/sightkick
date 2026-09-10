@@ -188,7 +188,7 @@
       buttons
     });
     const hasPE = typeof PointerEvent !== "undefined";
-    const emit = (type, buttons, pointer) => {
+    const emit2 = (type, buttons, pointer) => {
       if (pointer && hasPE) {
         target.dispatchEvent(
           new PointerEvent(type, { ...init(buttons), pointerId: 1, pointerType: "mouse", isPrimary: true })
@@ -197,10 +197,10 @@
         target.dispatchEvent(new MouseEvent(type, init(buttons)));
       }
     };
-    emit("pointerdown", 1, true);
-    emit("mousedown", 1, false);
-    emit("pointerup", 0, true);
-    emit("mouseup", 0, false);
+    emit2("pointerdown", 1, true);
+    emit2("mousedown", 1, false);
+    emit2("pointerup", 0, true);
+    emit2("mouseup", 0, false);
     target.click();
   }
   function nextFrame() {
@@ -228,6 +228,65 @@
       const v = args[key];
       return v == null ? "" : String(v);
     });
+  }
+
+  // src/events.ts
+  var TOOL_EVENT = "sightkick:tool";
+  var MAX_ERROR = 200;
+  var pageContext = { ir: "", polyfilled: false };
+  function setEventContext(ctx) {
+    pageContext = ctx;
+  }
+  function clip(s, max) {
+    const t = s.trim();
+    return t.length > max ? t.slice(0, max) : t;
+  }
+  function emit(name, detail) {
+    if (typeof document === "undefined") return;
+    document.dispatchEvent(new CustomEvent(name, { detail }));
+  }
+  var now = () => typeof performance !== "undefined" ? performance.now() : Date.now();
+  function startToolEvent(tool, via, args, path) {
+    const base = {
+      tool,
+      callId: Math.random().toString(36).slice(2, 10),
+      via,
+      argKeys: Object.keys(args),
+      path,
+      polyfilled: pageContext.polyfilled,
+      ir: pageContext.ir
+    };
+    const started = now();
+    emit(TOOL_EVENT, { phase: "start", ...base });
+    return (result) => {
+      const detail = {
+        phase: "end",
+        ...base,
+        ok: !!result.ok,
+        skipped: !!result.skipped,
+        durationMs: Math.round(now() - started)
+      };
+      if (!result.ok && result.message) detail.error = clip(result.message, MAX_ERROR);
+      emit(TOOL_EVENT, detail);
+    };
+  }
+
+  // src/errors.ts
+  function describeError(e) {
+    if (e instanceof Error) return `${e.name}: ${e.message}`;
+    if (typeof e === "object" && e !== null) {
+      const anyE = e;
+      if (anyE.message != null || anyE.name != null) {
+        return `${String(anyE.name ?? "Error")}: ${String(anyE.message ?? "")}`.trim();
+      }
+      try {
+        const s = JSON.stringify(e);
+        if (s && s !== "{}") return s;
+      } catch {
+      }
+      return Object.prototype.toString.call(e);
+    }
+    return String(e);
   }
 
   // src/executor.ts
@@ -376,6 +435,17 @@
   }
   async function runTool(tool, args = {}, options = {}) {
     const opts = resolveOptions(options);
+    const endEvent = startToolEvent(tool.name, options.via ?? "call", args, opts.currentPath);
+    try {
+      const result = await execute(tool, args, opts);
+      endEvent(result);
+      return result;
+    } catch (err) {
+      endEvent({ ok: false, message: describeError(err) });
+      throw err;
+    }
+  }
+  async function execute(tool, args, opts) {
     if (tool.ensureView && !routeMatches(tool.ensureView.route, opts.currentPath)) {
       opts.log(`ensure_view: "${tool.name}" expects ${tool.ensureView.view} (${tool.ensureView.route}) but path is ${opts.currentPath}; proceeding best-effort`);
     }
@@ -458,24 +528,6 @@
     return !!ctx && ctx[POLYFILL_FLAG] === true;
   }
 
-  // src/errors.ts
-  function describeError(e) {
-    if (e instanceof Error) return `${e.name}: ${e.message}`;
-    if (typeof e === "object" && e !== null) {
-      const anyE = e;
-      if (anyE.message != null || anyE.name != null) {
-        return `${String(anyE.name ?? "Error")}: ${String(anyE.message ?? "")}`.trim();
-      }
-      try {
-        const s = JSON.stringify(e);
-        if (s && s !== "{}") return s;
-      } catch {
-      }
-      return Object.prototype.toString.call(e);
-    }
-    return String(e);
-  }
-
   // src/boot.ts
   function detectMode() {
     return typeof window !== "undefined" && window.__sightkick_host != null ? "injected" : "direct";
@@ -524,7 +576,7 @@
               name: tool.name,
               description: tool.description ?? "",
               inputSchema: tool.inputSchema,
-              execute: async (args, options) => toEnvelope(await runTool(tool, args, { signal: options?.signal, currentPath: path }))
+              execute: async (args, options) => toEnvelope(await runTool(tool, args, { signal: options?.signal, currentPath: path, via: "modelContext" }))
             },
             { signal: controller.signal }
           )
@@ -538,6 +590,7 @@
       polyfilled: isPolyfilled(ctx),
       load(ir) {
         this.ir = ir;
+        setEventContext({ ir: ir.name, polyfilled: this.polyfilled });
         refresh();
         console.info(
           `[sightkick] loaded IR "${ir.name}" (${ir.tools.length} tools, ${this.mode}, ${this.polyfilled ? "polyfilled" : "native"} modelContext)`
