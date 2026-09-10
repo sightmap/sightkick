@@ -118,8 +118,7 @@ To do it by hand instead (finer control, or a non-sightkick session), point
 ```sh
 sightmap browser start --detach --url <SITE_URL> --profile /tmp/sk-dbg \
   --extensions ~/.sightmap/extension,<INSPECTOR_DIR> \
-  --chrome-flag=--enable-blink-features=ModelContext,ModelContextTesting \
-  --chrome-flag=--enable-features=DevToolsWebMCPSupport
+  --chrome-flag=--enable-features=WebMCPTesting
 ```
 
 (All `--extensions` entries must be absolute; listing any `--extensions` replaces
