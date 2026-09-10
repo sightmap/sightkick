@@ -196,6 +196,14 @@ document.addEventListener('sightkick:tool', (e) => {
 });
 ```
 
+The optional **meta tools** (`meta:` in the tool layer — see the
+`sightkick-authoring` skill) publish a second event on the same channel,
+`sightkick:meta`, whose `detail` is `kind` (`"request_tool"` or
+`"agent_feedback"`) plus that tool's own fields — `name`, `description`,
+`example_call`, or `tool`, `rating`, `note`, each trimmed and length-capped —
+alongside `path` and `ir`. They emit no `sightkick:tool`: they run no steps, so
+there is no execution to measure.
+
 ## The two formats
 
 - **`.sightmap/` corpus** — the sightmap authority (views, components,

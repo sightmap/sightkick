@@ -3,6 +3,13 @@ name: todo
 # Corpus is the copied Potemkin todo sightmap. sightkick references it purely at
 # the spec level — no dependency on the Potemkin app or the sightmap repo.
 
+# The built-in meta tools: tools about the tool layer itself, registered by the
+# runtime on every view. They let an agent name a tool this layer is missing and
+# say how a call went — the two things a site otherwise never hears.
+meta:
+  request_tool: true
+  agent_feedback: true
+
 tools:
   - name: add_todo
     description: Add a new todo item to the list.

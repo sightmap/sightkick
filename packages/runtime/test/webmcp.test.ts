@@ -27,7 +27,14 @@ describe("WebMCP-native registration", () => {
     boot(ir);
     const client = createClient();
     const tools = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["add_todo", "clear_completed", "list_todos", "set_filter"]);
+    expect(tools.map((t) => t.name).sort()).toEqual([
+      "add_todo",
+      "agent_feedback", // the todo layer enables the meta tools
+      "clear_completed",
+      "list_todos",
+      "request_tool",
+      "set_filter",
+    ]);
     const add = tools.find((t) => t.name === "add_todo")!;
     expect(add.description).toMatch(/Add a new todo/);
     expect((add.inputSchema as any).required).toEqual(["text"]);
@@ -76,10 +83,15 @@ describe("WebMCP-native registration", () => {
 
     api.load(ir);
     expect(changes).toBeGreaterThanOrEqual(1); // one per registered tool
-    expect((await createClient().listTools()).length).toBe(4);
+    expect((await createClient().listTools()).length).toBe(6); // 4 app tools + 2 meta
 
-    // Reloading with an empty tool set unregisters everything (via AbortSignals).
+    // Reloading with an empty tool set unregisters every app tool (via
+    // AbortSignals); the meta tools are always on, so they come back.
     api.load({ ...ir, tools: [] });
+    expect((await createClient().listTools()).map((t) => t.name).sort()).toEqual(["agent_feedback", "request_tool"]);
+
+    // With no meta block either, nothing is left registered.
+    api.load({ ...ir, tools: [], meta: undefined });
     expect((await createClient().listTools()).length).toBe(0);
   });
 });

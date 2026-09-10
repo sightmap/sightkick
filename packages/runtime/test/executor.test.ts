@@ -78,10 +78,14 @@ describe("boot / console driver", () => {
   it("exposes tools and calls them by name", async () => {
     const api = boot(ir);
     expect(api.mode).toBe("direct");
+    // The todo layer switches the meta tools on, so they register alongside the
+    // four app tools.
     expect(api.tools().map((t) => t.name).sort()).toEqual([
       "add_todo",
+      "agent_feedback",
       "clear_completed",
       "list_todos",
+      "request_tool",
       "set_filter",
     ]);
     const res = await api.call("add_todo", { text: "via boot" }, fast);

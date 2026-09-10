@@ -1,8 +1,9 @@
 import type { IR, Tool } from "./ir.js";
 import { routeMatches, runTool, type RunOptions, type ToolResult } from "./executor.js";
-import { ensureModelContext, isPolyfilled, type ModelContext } from "./webmcp.js";
+import { ensureModelContext, isPolyfilled, type ModelContext, type WebMCPToolDef } from "./webmcp.js";
 import { describeError } from "./errors.js";
 import { setEventContext } from "./events.js";
+import { metaTools, withFeedbackNudge, type MetaTool } from "./meta.js";
 
 export interface BootOptions {
   /** Override the current path (tests). Defaults to window.location.pathname. */
@@ -80,40 +81,61 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
   const currentPath = () => opts.currentPath ?? (typeof window !== "undefined" ? window.location.pathname : "/");
   let registrations: AbortController[] = [];
   let registered: { name: string; description?: string }[] = [];
+  let metaByName = new Map<string, MetaTool>();
 
   const unregisterAll = () => {
     for (const c of registrations) c.abort();
     registrations = [];
     registered = [];
+    metaByName = new Map();
   };
 
   const refresh = () => {
     unregisterAll();
     const ir = api.ir;
     if (!ir || !ctx) return;
+    const mc = ctx; // narrowed once, for the closures below
     const path = currentPath();
+    const register = (def: WebMCPToolDef) => {
+      const controller = new AbortController();
+      registrations.push(controller);
+      registered.push({ name: def.name, description: def.description });
+      // registerTool is fire-and-forget, but a rejected native call must NOT
+      // become an "Uncaught (in promise) {}" — surface the real reason.
+      Promise.resolve(mc.registerTool(def, { signal: controller.signal })).catch((e) =>
+        console.warn(`[sightkick] registerTool "${def.name}" rejected: ${describeError(e)}`),
+      );
+    };
+
     for (const tool of ir.tools) {
       // View-scoped registration: a tool is offered only on its view. This is
       // how the tool set changes per page — each page load (or a host's per-page
       // injection) boots fresh and registers just that view's tools.
       if (tool.ensureView && !routeMatches(tool.ensureView.route, path)) continue;
-      const controller = new AbortController();
-      registrations.push(controller);
-      registered.push({ name: tool.name, description: tool.description });
-      // registerTool is fire-and-forget, but a rejected native call must NOT
-      // become an "Uncaught (in promise) {}" — surface the real reason.
-      Promise.resolve(
-        ctx.registerTool(
-          {
-            name: tool.name,
-            description: tool.description ?? "",
-            inputSchema: tool.inputSchema,
-            execute: async (args, options) =>
-              toEnvelope(await runTool(tool, args, { signal: options?.signal, currentPath: path, via: "modelContext" })),
-          },
-          { signal: controller.signal },
-        ),
-      ).catch((e) => console.warn(`[sightkick] registerTool "${tool.name}" rejected: ${describeError(e)}`));
+      register({
+        name: tool.name,
+        description: tool.description ?? "",
+        inputSchema: tool.inputSchema,
+        execute: async (args, options) =>
+          toEnvelope(
+            withFeedbackNudge(
+              await runTool(tool, args, { signal: options?.signal, currentPath: path, via: "modelContext" }),
+              ir.meta,
+            ),
+          ),
+      });
+    }
+
+    // Meta tools are not view-scoped: an agent hits the gap they cover on
+    // whatever page it happens to be on.
+    for (const mt of metaTools(ir.meta, { ir: ir.name, path: currentPath })) {
+      metaByName.set(mt.name, mt);
+      register({
+        name: mt.name,
+        description: mt.description,
+        inputSchema: mt.inputSchema,
+        execute: async (args) => toEnvelope(mt.run(args ?? {})),
+      });
     }
   };
 
@@ -138,9 +160,13 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
     },
     refresh,
     call(name, args = {}, options) {
-      const tool = findTool(this.ir, name);
+      const ir = this.ir;
+      const meta = metaByName.get(name);
+      // Meta tools are registered, so calling one by name has to work here too.
+      if (meta) return Promise.resolve(meta.run(args));
+      const tool = findTool(ir, name);
       if (!tool) return Promise.resolve({ ok: false, message: `unknown tool "${name}"` });
-      return runTool(tool, args, options);
+      return runTool(tool, args, options).then((r) => withFeedbackNudge(r, ir?.meta));
     },
   };
 

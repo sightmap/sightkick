@@ -833,6 +833,9 @@ func Compile(m *Manifest, c *sm.Corpus) (IR, []Diagnostic) {
 	if ir.Name == "" {
 		ir.Name = "sightkick"
 	}
+	if m.Meta != nil {
+		ir.Meta = &Meta{RequestTool: m.Meta.RequestTool, AgentFeedback: m.Meta.AgentFeedback}
+	}
 	for _, v := range c.Views {
 		ir.Views = append(ir.Views, ViewRef{Name: v.Name, Route: v.Route})
 	}

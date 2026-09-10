@@ -7,6 +7,7 @@ export { createClient, type SightkickClient } from "./client.js";
 export { ensureModelContext, isPolyfilled, type ModelContext, type RegisteredTool } from "./webmcp.js";
 export { installIrChannel } from "./channel.js";
 export { TOOL_EVENT, type ToolEventDetail, type ToolVia } from "./events.js";
+export { META_EVENT, metaTools, type MetaEventDetail, type MetaTool } from "./meta.js";
 export * from "./ir.js";
 
 /**

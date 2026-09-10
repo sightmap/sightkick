@@ -384,6 +384,96 @@ journeys:
 	}
 }
 
+// TestMeta: the optional `meta:` block compiles into the IR field the runtime
+// reads to register its built-in meta tools, and is absent when unset.
+func TestMeta(t *testing.T) {
+	ir, diags, err := Build(exampleDir)
+	if err != nil || HasErrors(diags) {
+		t.Fatalf("build failed: err=%v diags=%s", err, Format(diags))
+	}
+	if ir.Meta == nil || !ir.Meta.RequestTool || !ir.Meta.AgentFeedback {
+		t.Fatalf("todo meta = %+v, want both enabled", ir.Meta)
+	}
+	// Meta tools are registered by the runtime, never compiled into the tool list.
+	for _, tool := range ir.Tools {
+		if tool.Name == "request_tool" || tool.Name == "agent_feedback" {
+			t.Errorf("meta tool %q should not be compiled into ir.tools", tool.Name)
+		}
+	}
+
+	search, diags, err := Build(searchDir)
+	if err != nil || HasErrors(diags) {
+		t.Fatalf("build failed: err=%v diags=%s", err, Format(diags))
+	}
+	if search.Meta != nil {
+		t.Errorf("search meta = %+v, want nil (the key is unset)", search.Meta)
+	}
+}
+
+// TestMetaMergesAcrossFiles: the .sightkick/ directory is one manifest, so a
+// meta tool switched on in any file is on.
+func TestMetaMergesAcrossFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, ".sightmap", "views.yaml"), `version: 1
+views:
+  - name: Home
+    route: /
+    components:
+      - name: Field
+        selector: ".field"
+`)
+	writeFile(t, filepath.Join(dir, ".sightkick", "a.yaml"), `version: 1
+corpus: ../.sightmap
+meta:
+  request_tool: true
+tools:
+  - name: do_thing
+    ensure_view: Home
+    steps:
+      - click:
+          query: Field
+`)
+	writeFile(t, filepath.Join(dir, ".sightkick", "b.yaml"), `meta:
+  agent_feedback: true
+`)
+	ir, diags, err := Build(dir)
+	if err != nil || HasErrors(diags) {
+		t.Fatalf("build failed: err=%v diags=%s", err, Format(diags))
+	}
+	if ir.Meta == nil || !ir.Meta.RequestTool || !ir.Meta.AgentFeedback {
+		t.Errorf("merged meta = %+v, want both enabled", ir.Meta)
+	}
+}
+
+// TestMetaShadowReported: an authored tool named like a built-in meta tool is a
+// collision the runtime would resolve silently, so the build names it.
+func TestMetaShadowReported(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, ".sightmap", "views.yaml"), `version: 1
+views:
+  - name: Home
+    route: /
+    components:
+      - name: Field
+        selector: ".field"
+`)
+	writeFile(t, filepath.Join(dir, ".sightkick", "tools.yaml"), `version: 1
+corpus: ../.sightmap
+meta:
+  agent_feedback: true
+tools:
+  - name: agent_feedback
+    ensure_view: Home
+    steps:
+      - click:
+          query: Field
+`)
+	_, diags, _ := Build(dir)
+	if findDiag(diags, "manifest.meta-shadow") == nil {
+		t.Fatalf("expected manifest.meta-shadow, got:\n%s", Format(diags))
+	}
+}
+
 func findTool(t *testing.T, ir IR, name string) Tool {
 	t.Helper()
 	for _, tool := range ir.Tools {

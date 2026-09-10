@@ -528,6 +528,84 @@
     return !!ctx && ctx[POLYFILL_FLAG] === true;
   }
 
+  // src/meta.ts
+  var META_EVENT = "sightkick:meta";
+  var MAX_NAME = 64;
+  var MAX_DESCRIPTION = 500;
+  var MAX_EXAMPLE = 200;
+  var MAX_NOTE = 500;
+  var MAX_TOOL = 64;
+  var MAX_RATING = 32;
+  var str = (v, max) => typeof v === "string" ? clip(v, max) : "";
+  var FEEDBACK_SUGGESTION = {
+    tool: "agent_feedback",
+    reason: "report how this call went, so the site can fix the tool",
+    when: "now"
+  };
+  function withFeedbackNudge(result, meta) {
+    if (result.ok || !meta?.agentFeedback) return result;
+    return { ...result, guidance: [...result.guidance ?? [], FEEDBACK_SUGGESTION] };
+  }
+  function metaTools(meta, ctx) {
+    if (!meta) return [];
+    const publish = (detail) => {
+      emit(META_EVENT, { ...detail, path: ctx.path(), ir: ctx.ir });
+    };
+    const tools = [];
+    if (meta.requestTool) {
+      tools.push({
+        name: "request_tool",
+        description: "Ask the site for a tool it does not have yet. Use when the thing you need is not in the tool list.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "The tool you wish existed, named as you would call it (e.g. apply_coupon)." },
+            description: { type: "string", description: "What it should do, and what you were trying to accomplish when you reached for it." },
+            example_call: { type: "string", description: "An example call, with the arguments you would pass." }
+          },
+          required: ["name", "description"]
+        },
+        run(args) {
+          const example = str(args.example_call, MAX_EXAMPLE);
+          publish({
+            kind: "request_tool",
+            name: str(args.name, MAX_NAME),
+            description: str(args.description, MAX_DESCRIPTION),
+            ...example ? { example_call: example } : {}
+          });
+          return { ok: true, message: "Recorded. The site owner reviews tool requests." };
+        }
+      });
+    }
+    if (meta.agentFeedback) {
+      tools.push({
+        name: "agent_feedback",
+        description: "Tell the site how a tool call went, so its tools improve.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            tool: { type: "string", description: "The tool this is about." },
+            rating: { type: "string", enum: ["worked", "partly", "failed"], description: "How the call went." },
+            note: { type: "string", description: "What happened: what you expected, and what you got." }
+          },
+          required: ["rating"]
+        },
+        run(args) {
+          const tool = str(args.tool, MAX_TOOL);
+          const note = str(args.note, MAX_NOTE);
+          publish({
+            kind: "agent_feedback",
+            ...tool ? { tool } : {},
+            rating: str(args.rating, MAX_RATING),
+            ...note ? { note } : {}
+          });
+          return { ok: true, message: "Recorded." };
+        }
+      });
+    }
+    return tools;
+  }
+
   // src/boot.ts
   function detectMode() {
     return typeof window !== "undefined" && window.__sightkick_host != null ? "injected" : "direct";
@@ -555,32 +633,49 @@
     const currentPath = () => opts.currentPath ?? (typeof window !== "undefined" ? window.location.pathname : "/");
     let registrations = [];
     let registered = [];
+    let metaByName = /* @__PURE__ */ new Map();
     const unregisterAll = () => {
       for (const c of registrations) c.abort();
       registrations = [];
       registered = [];
+      metaByName = /* @__PURE__ */ new Map();
     };
     const refresh = () => {
       unregisterAll();
       const ir = api.ir;
       if (!ir || !ctx) return;
+      const mc = ctx;
       const path = currentPath();
-      for (const tool of ir.tools) {
-        if (tool.ensureView && !routeMatches(tool.ensureView.route, path)) continue;
+      const register = (def) => {
         const controller = new AbortController();
         registrations.push(controller);
-        registered.push({ name: tool.name, description: tool.description });
-        Promise.resolve(
-          ctx.registerTool(
-            {
-              name: tool.name,
-              description: tool.description ?? "",
-              inputSchema: tool.inputSchema,
-              execute: async (args, options) => toEnvelope(await runTool(tool, args, { signal: options?.signal, currentPath: path, via: "modelContext" }))
-            },
-            { signal: controller.signal }
+        registered.push({ name: def.name, description: def.description });
+        Promise.resolve(mc.registerTool(def, { signal: controller.signal })).catch(
+          (e) => console.warn(`[sightkick] registerTool "${def.name}" rejected: ${describeError(e)}`)
+        );
+      };
+      for (const tool of ir.tools) {
+        if (tool.ensureView && !routeMatches(tool.ensureView.route, path)) continue;
+        register({
+          name: tool.name,
+          description: tool.description ?? "",
+          inputSchema: tool.inputSchema,
+          execute: async (args, options) => toEnvelope(
+            withFeedbackNudge(
+              await runTool(tool, args, { signal: options?.signal, currentPath: path, via: "modelContext" }),
+              ir.meta
+            )
           )
-        ).catch((e) => console.warn(`[sightkick] registerTool "${tool.name}" rejected: ${describeError(e)}`));
+        });
+      }
+      for (const mt of metaTools(ir.meta, { ir: ir.name, path: currentPath })) {
+        metaByName.set(mt.name, mt);
+        register({
+          name: mt.name,
+          description: mt.description,
+          inputSchema: mt.inputSchema,
+          execute: async (args) => toEnvelope(mt.run(args ?? {}))
+        });
       }
     };
     const api = {
@@ -601,9 +696,12 @@
       },
       refresh,
       call(name, args = {}, options) {
-        const tool = findTool(this.ir, name);
+        const ir = this.ir;
+        const meta = metaByName.get(name);
+        if (meta) return Promise.resolve(meta.run(args));
+        const tool = findTool(ir, name);
         if (!tool) return Promise.resolve({ ok: false, message: `unknown tool "${name}"` });
-        return runTool(tool, args, options);
+        return runTool(tool, args, options).then((r) => withFeedbackNudge(r, ir?.meta));
       }
     };
     if (typeof window !== "undefined" && opts.currentPath === void 0) {

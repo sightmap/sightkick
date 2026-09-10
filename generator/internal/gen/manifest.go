@@ -172,11 +172,25 @@ type JourneyDef struct {
 	Steps       []JourneyStepDef `yaml:"steps"`
 }
 
+// MetaDef is the optional top-level `meta:` block: which built-in meta tools
+// the site offers agents. They are not authored tools — they have no corpus
+// references and drive no DOM — so they are a manifest-level switch rather than
+// entries under `tools:`.
+type MetaDef struct {
+	// RequestTool offers request_tool: an agent asks for a tool the layer
+	// doesn't have yet, which is the only signal a site gets about the gap
+	// between what it exposes and what agents come looking for.
+	RequestTool bool `yaml:"request_tool"`
+	// AgentFeedback offers agent_feedback: an agent reports how a call went.
+	AgentFeedback bool `yaml:"agent_feedback"`
+}
+
 // Manifest is the merged tool layer from a .sightkick/ directory.
 type Manifest struct {
 	Version  int          `yaml:"version"`
 	Name     string       `yaml:"name"`
 	Corpus   string       `yaml:"corpus"`
+	Meta     *MetaDef     `yaml:"meta"`
 	Tools    []ToolDef    `yaml:"tools"`
 	Journeys []JourneyDef `yaml:"journeys"`
 }
@@ -253,6 +267,15 @@ func LoadManifest(sightkickDir string) (*Manifest, []Diagnostic, error) {
 		}
 		setStr(f, "name", &m.Name, part.Name)
 		setStr(f, "corpus", &m.Corpus, part.Corpus)
+		if part.Meta != nil {
+			// Unlike the singular fields, meta merges by OR: the directory is one
+			// manifest, so switching a meta tool on anywhere in it switches it on.
+			if m.Meta == nil {
+				m.Meta = &MetaDef{}
+			}
+			m.Meta.RequestTool = m.Meta.RequestTool || part.Meta.RequestTool
+			m.Meta.AgentFeedback = m.Meta.AgentFeedback || part.Meta.AgentFeedback
+		}
 		m.Tools = append(m.Tools, part.Tools...)
 		m.Journeys = append(m.Journeys, part.Journeys...)
 	}
@@ -296,6 +319,20 @@ func LoadManifest(sightkickDir string) (*Manifest, []Diagnostic, error) {
 		}
 		if mode == "live" && len(t.Steps) == 0 && t.Returns == nil {
 			diags = append(diags, errf("manifest.tool-steps", t.Name, "live tool %q needs at least one step or a returns", t.Name))
+		}
+	}
+
+	// A meta tool the runtime registers itself would silently outrank an authored
+	// tool of the same name (or vice versa), so name the collision at build time.
+	if m.Meta != nil {
+		for _, mt := range []struct {
+			name string
+			on   bool
+		}{{"request_tool", m.Meta.RequestTool}, {"agent_feedback", m.Meta.AgentFeedback}} {
+			if mt.on && seen[mt.name] {
+				diags = append(diags, errf("manifest.meta-shadow", mt.name,
+					"tool %q collides with the built-in meta tool of that name; rename the tool or drop it from `meta:`", mt.name))
+			}
 		}
 	}
 

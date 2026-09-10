@@ -142,9 +142,21 @@ export interface ViewRef {
   route: string;
 }
 
+/**
+ * Which built-in meta tools this site offers — tools ABOUT the tool layer rather
+ * than about the app. The runtime registers them itself (they have no steps and
+ * touch no DOM), on every view: "the tool I need isn't here" is not a per-view
+ * fact. Absent when the manifest has no `meta:` block.
+ */
+export interface Meta {
+  requestTool: boolean;
+  agentFeedback: boolean;
+}
+
 export interface IR {
   version: number;
   name: string;
+  meta?: Meta;
   views: ViewRef[];
   tools: Tool[];
   // The journey graph deliberately stays out of the IR. Per-tool `guidance`
