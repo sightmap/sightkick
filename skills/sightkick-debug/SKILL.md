@@ -239,3 +239,16 @@ rm -rf /tmp/sk-dbg
 - **A stale daemon collides** — `sightmap browser stop` before `start`, and give
   `--detach` a beat for the content tab to open before page commands (poll
   `status` / `wait-for`).
+
+## Get listed
+
+Once the tools register on your **deployed** URL, submit the site to the
+Sightmap Atlas so other agents can find it:
+
+```sh
+curl -X POST https://sightmap.org/api/atlas/submit -H 'content-type: application/json' \
+  -d '{"url": "<DEPLOYED_URL>", "email": "<OWNER_EMAIL>", "owner": true, "sightkick": true}'
+```
+
+Or open <https://sightmap.org/atlas> in a WebMCP-capable session and call its
+`submit_site` tool. A maintainer reviews every listing before it appears.
