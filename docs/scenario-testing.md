@@ -278,8 +278,8 @@ module generation and the full execution contract.
 | `op: "waitFor"` on a `query` | Wait for a DOM match, including hidden elements |
 | `returns` | Shared extractors; preserve missing values, empty lists and named fields |
 
-The emitter preserves the default IR and exposes typed tools and view waits. Named
-component reads and a program execution/MCP host are separate planned additions.
+The emitter preserves the default IR and exposes typed tools and view waits. See
+[Playwright modules](playwright.md) for supported APIs and limitations.
 
 ## 8. The meaty details
 

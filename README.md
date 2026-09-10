@@ -194,6 +194,6 @@ rich returns all confirmed live. A deterministic eval harness
 Turning a corpus + tool layer into a database of scenario tests — Gherkin →
 plan → replay without an agent — is worked through end to end, on a real
 external site, in [`docs/scenario-testing.md`](docs/scenario-testing.md), which
-also states plainly what that pipeline doesn't do yet: automated scenario→plan resolution is still designed, not built. Typed Playwright
-module emission is now available; named component reads and a code-runner MCP remain
-follow-up work.
+also documents the pipeline's limitations. Automated scenario-to-plan resolution
+is not implemented. For typed Playwright module usage, see
+[`docs/playwright.md`](docs/playwright.md).

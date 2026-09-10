@@ -57,30 +57,11 @@ There is no persistent runtime injection or page-global helper. Post-navigation
 returns read the destination document; unlike a page-installed runtime the host
 executor survives unload. Timeout options must be finite and positive. A compiled
 step timeout takes precedence over the binding's default; there is no whole-program
-timeout or cancellation API in this phase.
+timeout or cancellation API.
 
-## Remaining code-surface work
-
-This is the tools/views foundation of the Stagehand-inspired code surface. The
-following two PR boundaries remain; neither API is advertised as implemented:
-
-1. **Named component reads.** Add an opt-in resolved component catalog alongside
-   the existing IR, reusing corpus loading, hierarchy resolution and property
-   compilation. Before implementation, review view-qualified and parent-qualified
-   identities (child names are not globally unique), repeated-component selection,
-   missing versus empty reads, and the typed `read()` result contract. A candidate
-   API is `views.Inventory.components.InventoryItem.read()` with explicit occurrence
-   or filtering, but this needs a design decision. Do not append a catalog to the
-   default JSON artifact and silently invalidate stored-plan hashes.
-2. **Program execution and MCP.** Build `sightkick run` around the generated module,
-   then expose the same execution contract as an MCP tool. Review browser ownership,
-   attachment and page selection, code/module input format, allowed imports and host
-   capabilities, stdout versus structured result, failure/partial-progress reporting,
-   bounded execution and cancellation, and Node distribution with the native CLI.
-   No execution sandbox is implied by this emitter; it is ordinary caller-owned
-   JavaScript. The runner must define its execution boundary explicitly.
-
-These additions consume the Sightmap spec; this phase changes no corpus semantics.
+The module exposes tools and view waits. Named component reads, a `sightkick run`
+command, and an MCP execution server are not supported. Run generated modules in
+your own JavaScript process; the emitter does not provide an execution sandbox.
 
 ## Development
 

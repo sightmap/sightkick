@@ -92,4 +92,4 @@ resolver. After changing it or shared runtime helpers, run `pnpm -r build` then
 `go generate ./playwrightbundle/...` from `generator/` and commit the generated
 copy. CI checks drift. `pnpm -r test` includes Chromium tests and needs
 `pnpm --filter @sightkick/playwright exec playwright install chromium` first.
-See `docs/playwright.md` for the emitted module contract and remaining phases.
+See `docs/playwright.md` for the emitted module contract.
