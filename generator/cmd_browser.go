@@ -182,8 +182,7 @@ func runBrowser(args []string) error {
 		}
 		if *webmcp {
 			startArgs = append(startArgs,
-				"--chrome-flag=--enable-blink-features=ModelContext,ModelContextTesting",
-				"--chrome-flag=--enable-features=DevToolsWebMCPSupport")
+				"--chrome-flag=--enable-features=WebMCPTesting")
 		}
 		for _, f := range chromeFlags {
 			startArgs = append(startArgs, "--chrome-flag="+f)

@@ -48,4 +48,28 @@ describe("clickElement", () => {
 
     expect(got).toContain("click");
   });
+
+  it("does not hang when requestAnimationFrame is starved (throttled/wedged renderer)", async () => {
+    const el = document.createElement("button");
+    document.body.appendChild(el);
+    const got: string[] = [];
+    el.addEventListener("click", () => got.push("click"));
+
+    // Simulate a renderer that has stopped painting: rAF still EXISTS but never
+    // invokes its callback. The settle loop's 300ms deadline is only checked
+    // between frames, so without nextFrame's timer fallback the `await nextFrame()`
+    // would never resolve and clickElement would hang forever (this test would
+    // time out). With the fallback the loop keeps turning, hits its deadline, and
+    // falls back to dispatching on the node. (sightkick-a381)
+    const origRaf = globalThis.requestAnimationFrame;
+    globalThis.requestAnimationFrame = (() => 0) as unknown as typeof requestAnimationFrame;
+    try {
+      // hit never resolves into el, so the loop must run to its wall-clock deadline.
+      await withHit(document.body, () => clickElement(el));
+    } finally {
+      globalThis.requestAnimationFrame = origRaf;
+    }
+
+    expect(got).toContain("click");
+  });
 });

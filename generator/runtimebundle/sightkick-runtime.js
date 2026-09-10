@@ -205,8 +205,14 @@
   }
   function nextFrame() {
     return new Promise((resolve) => {
-      if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve());
-      else setTimeout(resolve, 16);
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(done);
+      setTimeout(done, 50);
     });
   }
   function isInViewport(el) {
