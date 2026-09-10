@@ -8,7 +8,7 @@
  */
 
 export interface Extractor {
-  kind: "text" | "attr" | "exists";
+  kind: "text" | "raw_text" | "attr" | "exists";
   attr?: string;
   within?: string;
 }

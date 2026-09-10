@@ -78,6 +78,27 @@ function accessibleText(el: Element): string {
   return (el.textContent ?? "").trim();
 }
 
+/**
+ * The element's OWN literal text: the concatenation of its direct text-node
+ * children, whitespace-normalized. This is `extract: raw_text` (SEP-0013) — NOT
+ * innerText (layout-dependent) and NOT a subtree textContent (which would pull in
+ * descendant element text and <style>/<script> bleed); CSS pseudo content
+ * (::before/::after) is excluded because pseudo-elements are not child nodes. It
+ * mirrors the sightmap lib's offline node.RawText (probe own-text -> normalizeText),
+ * so a raw_text predicate authored against the corpus matches at runtime.
+ */
+function ownText(el: Element): string {
+  let s = "";
+  const kids = el.childNodes;
+  for (let i = 0; i < kids.length; i++) {
+    const n = kids[i];
+    if (n && n.nodeType === 3 /* TEXT_NODE */) s += (n as Text).data;
+  }
+  // Match the offline pipeline: probe truncates to 100 chars, then normalizeText
+  // collapses whitespace runs to a single space and trims the ends.
+  return s.slice(0, 100).replace(/\s+/g, " ").trim();
+}
+
 /** Pull a value off an element per an IR extractor. Returns a string, or "" / boolean-as-string. */
 export function extract(el: Element, ex: Extractor): string {
   // `within` is resolved with a plain querySelector rather than full sightmap
@@ -96,6 +117,10 @@ export function extract(el: Element, ex: Extractor): string {
   switch (ex.kind) {
     case "attr":
       return ex.attr ? (target.getAttribute(ex.attr) ?? "") : "";
+    case "raw_text":
+      // The node's own literal text — the deterministic escape when the
+      // accessible name welds in CSS/aria text (SEP-0013).
+      return ownText(target);
     case "text":
     default:
       // Mirror the lib's a11y-name semantics so predicates authored against

@@ -31,3 +31,43 @@ describe("accessibleText — input label association", () => {
     expect(text("#plain")).toBe("Promo code");
   });
 });
+
+// raw_text is the counterpart to text: the node's OWN literal text (direct text
+// nodes), the deterministic escape when the accessible name welds in CSS/aria
+// text. Mirrors the sightmap lib's offline node.RawText.
+describe("raw_text — the node's own literal text", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+  });
+  const raw = (el: Element) => extract(el, { kind: "raw_text" });
+  const txt = (el: Element) => extract(el, { kind: "text" });
+
+  it("returns only the element's own direct text nodes, excluding descendant text", () => {
+    // Analog of the JetBlue fare-tile h3 whose visible badge text welds onto the
+    // accessible name (there via a CSS ::after, here via a descendant span).
+    const h = document.createElement("h3");
+    h.appendChild(document.createTextNode(" Main "));
+    const badge = document.createElement("span");
+    badge.textContent = "Most popular";
+    h.appendChild(badge);
+    document.body.appendChild(h);
+    expect(raw(h)).toBe("Main"); // own text only, normalized
+    expect(txt(h)).toContain("Most popular"); // the name welds the badge in
+  });
+
+  it("normalizes whitespace runs and trims the ends", () => {
+    const el = document.createElement("div");
+    el.appendChild(document.createTextNode("  Main   Base \n "));
+    document.body.appendChild(el);
+    expect(raw(el)).toBe("Main Base");
+  });
+
+  it("omits (empty) when the node has no own text", () => {
+    const el = document.createElement("div");
+    const child = document.createElement("span");
+    child.textContent = "child";
+    el.appendChild(child);
+    document.body.appendChild(el);
+    expect(raw(el)).toBe("");
+  });
+});

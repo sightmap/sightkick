@@ -50,6 +50,15 @@
     if (typeof inner === "string" && inner.trim() !== "") return inner.trim();
     return (el.textContent ?? "").trim();
   }
+  function ownText(el) {
+    let s = "";
+    const kids = el.childNodes;
+    for (let i = 0; i < kids.length; i++) {
+      const n = kids[i];
+      if (n && n.nodeType === 3) s += n.data;
+    }
+    return s.slice(0, 100).replace(/\s+/g, " ").trim();
+  }
   function extract(el, ex) {
     const target = ex.within ? el.querySelector(ex.within) : el;
     if (ex.kind === "exists") {
@@ -59,6 +68,8 @@
     switch (ex.kind) {
       case "attr":
         return ex.attr ? target.getAttribute(ex.attr) ?? "" : "";
+      case "raw_text":
+        return ownText(target);
       case "text":
       default:
         return accessibleText(target);
