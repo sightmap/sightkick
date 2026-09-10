@@ -261,25 +261,25 @@ know about. Full compiled `add_to_cart`, from
 }
 ```
 
-Two consumers of exactly this artifact exist today: `document.modelContext` (WebMCP, when the
-runtime is installed on the page) and `sightkick call --via cli` (shells to `sightmap browser`
-commands — no runtime install needed, and it reaches portal-rendered elements a runtime's
-synthetic events can't). A Playwright emitter would be a third, straightforward but **not
-built** — the mapping is direct enough to show:
+Three consumers of this artifact exist today: `document.modelContext` (WebMCP, when the
+runtime is installed on the page), `sightkick call --via cli` (shells to `sightmap browser`
+commands), and the typed Playwright emitter. See [Playwright modules](playwright.md) for
+module generation and the full execution contract.
 
-| IR piece | Playwright |
+| IR piece | Playwright execution |
 |---|---|
-| a `locators` array (comma-joined CSS alternatives) | `page.locator(sel)` |
-| a `preds` entry with an `attr` extractor | folds into the same CSS selector: `[data-test="remove-{value}"]` |
-| a `preds` entry with a `text` extractor | `.filter({ hasText: value })` — can't fold into CSS |
-| `guard.kind: "present"` | `if (await locator.count()) return;` before running `steps` |
-| `op: "click"` / `"fill"` | `.click()` / `.fill(value)` |
-| `op: "waitFor"` on a `view` | `page.waitForURL(routePattern)` |
-| `op: "waitFor"` on a `query` | `.waitFor()` on the same resolved locator |
+| `Query.parts`, predicates, and occurrence index | Shared runtime DOM resolver, preserving selector order, scoped accessible-name/attribute/existence predicates and indices |
+| `guard.kind: "present"` / `"absent"` | Check match count before steps; return current state with `skipped: true` when satisfied |
+| `op: "click"` | Trusted click on the first visible match, falling back to the first match |
+| `op: "fill"` | Clear, type characters, and open combobox controls with ArrowDown |
+| `op: "keypress"` | Trusted keyboard press against the focused control |
+| `op: "goto"` | Await navigation; subsequent operations resolve against the new document |
+| `op: "waitFor"` on a `view` | Wait for pathname using the shared route matcher; hydration is separate |
+| `op: "waitFor"` on a `query` | Wait for a DOM match, including hidden elements |
+| `returns` | Shared extractors; preserve missing values, empty lists and named fields |
 
-Nothing here is exotic Playwright — the emitter is a straightforward code-gen pass over the IR.
-It's listed as future work (§13) because writing and testing it is real effort, not because the
-mapping is unclear.
+The emitter preserves the default IR and exposes typed tools and view waits. See
+[Playwright modules](playwright.md) for supported APIs and limitations.
 
 ## 8. The meaty details
 
@@ -412,6 +412,6 @@ Everything past that is repetition: more views, more tools, more scenarios, foll
 | `sightkick outline`/`explain` — plan-time discovery (§6.1) | Built, this pass |
 | Scenario → plan resolution | Demonstrated manually (§6), with `outline`/`explain` as the discovery surface; no automated resolver yet |
 | Gap report (unresolvable scenario line → suggested new tool) | Not built |
-| Playwright emitter | Not built; mapping specified in §7 |
+| Playwright emitter | Built: typed tools/views module; see [usage](playwright.md) |
 | Real (STRIPS-style) planning over the manifest | Not built; 4 named prerequisites, §11 |
 | Subtext session → journey mining | Not built; direction only, §11 |

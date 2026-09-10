@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"sightkick/generator/internal/gen"
 )
@@ -18,7 +19,7 @@ func usage() {
 Usage:
   sightkick outline <app-dir> [--json]
   sightkick explain <app-dir> [--journey NAME] [--view NAME] [--json] [<tool>...]
-  sightkick build <app-dir | .sightkick-dir> [-o out.json] [--verify]
+  sightkick build <app-dir | .sightkick-dir> [-o out.json] [--verify] [--target json|playwright]
   sightkick browser <app-dir> [--url URL] [--webmcp] [--extensions PATHS] [--profile DIR] [--cdp-port N] [--no-start]
   sightkick call <app-dir> <tool> [--param k=v ...] [--via webmcp|cli] [--timeout-ms N]
   sightkick runtime [-o out.js]
@@ -33,6 +34,8 @@ Usage:
            shape) for the union of the named tools, journeys, and views. Run
            'outline' first to find names; 'explain' fills in the rest.
   build    compile a corpus + manifest into IR (stdout, or -o out.json).
+           --target playwright -o app.mjs emits a typed Playwright module
+           with app.d.mts declarations (see docs/playwright.md).
            --verify checks each tool's returns extractors against the view's
            captured snapshots and warns on fields that resolve empty on every row.
   browser  build the IR, start a sightmap browser session (auto-URL from the
@@ -112,6 +115,7 @@ func main() {
 	}
 
 	var target, out string
+	outputTarget := "json"
 	var verify bool
 	rest := args[1:]
 	for i := 0; i < len(rest); i++ {
@@ -123,6 +127,13 @@ func main() {
 				i++
 				out = rest[i]
 			}
+		case "--target":
+			if i+1 >= len(rest) {
+				fmt.Fprintln(os.Stderr, "missing --target value")
+				os.Exit(2)
+			}
+			i++
+			outputTarget = rest[i]
 		case "--verify":
 			verify = true
 		default:
@@ -153,6 +164,29 @@ func main() {
 		os.Exit(1)
 	}
 
+	if outputTarget != "json" && outputTarget != "playwright" {
+		fmt.Fprintln(os.Stderr, "unknown --target: "+outputTarget)
+		os.Exit(2)
+	}
+	if outputTarget == "playwright" {
+		if !strings.HasSuffix(out, ".mjs") {
+			fmt.Fprintln(os.Stderr, "--target playwright requires -o <module.mjs>")
+			os.Exit(2)
+		}
+		js, types, err := gen.EmitPlaywright(ir)
+		if err == nil {
+			err = os.WriteFile(out, []byte(js), 0o644)
+		}
+		if err == nil {
+			err = os.WriteFile(strings.TrimSuffix(out, ".mjs")+".d.mts", []byte(types), 0o644)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "✗ "+err.Error())
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "✓ wrote Playwright module and declarations to %s\n", out)
+		return
+	}
 	data, err := json.MarshalIndent(ir, "", "  ")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "✗ "+err.Error())

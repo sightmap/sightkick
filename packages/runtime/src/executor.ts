@@ -110,7 +110,7 @@ function stepParams(step: Step): string[] {
  * input schema). Omitted (undefined) is distinct from an explicit empty string,
  * which is a real value and does not skip.
  */
-function shouldSkipStep(step: Step, args: Record<string, unknown>): boolean {
+export function shouldSkipStep(step: Step, args: Record<string, unknown>): boolean {
   if (step.when !== undefined) {
     return interpolate(step.when, args).trim() === "";
   }

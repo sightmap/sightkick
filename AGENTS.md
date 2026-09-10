@@ -84,3 +84,12 @@ Chrome-for-Testing flags and their rationale live in
   broad `config.yaml` rule, so `git add -f` new example configs.
 - Don't hand-edit the generated embedded skills under `generator/skills/` — edit
   the canonical copy in `skills/` and regenerate.
+
+## Playwright emitter
+
+`packages/playwright` bundles a host executor that shares the runtime DOM query
+resolver. After changing it or shared runtime helpers, run `pnpm -r build` then
+`go generate ./playwrightbundle/...` from `generator/` and commit the generated
+copy. CI checks drift. `pnpm -r test` includes Chromium tests and needs
+`pnpm --filter @sightkick/playwright exec playwright install chromium` first.
+See `docs/playwright.md` for the emitted module contract.
