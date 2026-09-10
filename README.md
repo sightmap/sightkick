@@ -14,9 +14,8 @@ executing it. [WebMCP](https://github.com/webmachinelearning/webmcp)
 (`document.modelContext`, when the runtime is installed on a page) and the CLI
 (`sightkick call --via cli`, shelling to real `sightmap browser` commands, no
 runtime install needed) are two independent, already-working consumers of that
-same artifact — see **Runtimes** below. A Playwright emitter is a
-straightforward third consumer, not yet built; the mapping is specified in
-`docs/scenario-testing.md`.
+same artifact — see **Runtimes** below. The typed Playwright emitter is a third consumer; see
+[`docs/playwright.md`](docs/playwright.md) for module generation and execution.
 
 **Coordination model.** A *tool* is anything doable at a single point in time
 (same "page", no navigation crossing) — it may bundle several simultaneous
@@ -84,7 +83,7 @@ The compiled IR has exactly one shape; three things can execute it:
 |---|---|---|
 | WebMCP (`document.modelContext`) | The runtime bundle installed on the page, registering IR tools as native WebMCP tools | Built |
 | CLI (`sightkick call --via cli`) | Shells to real `sightmap browser click`/`fill`/`wait-for` commands — no runtime install, reaches portal-rendered elements a runtime's synthetic clicks can't | Built |
-| Playwright | Would emit `page.locator()`/`.click()`/`.fill()` from the same resolved locators/extractors | Not built — mapping specified in [`docs/scenario-testing.md`](docs/scenario-testing.md#7-the-output-is-runtime-agnostic) |
+| Playwright | `sightkick build --target playwright -o app.mjs` emits typed tools/views bound to a caller-owned Page | Built — [usage and execution contract](docs/playwright.md) |
 
 `sightkick call`'s own `--via` flag switches between the first two today. Neither is more
 "canonical" than the other — they're peers over the same IR, chosen by what's available on the
@@ -195,5 +194,6 @@ rich returns all confirmed live. A deterministic eval harness
 Turning a corpus + tool layer into a database of scenario tests — Gherkin →
 plan → replay without an agent — is worked through end to end, on a real
 external site, in [`docs/scenario-testing.md`](docs/scenario-testing.md), which
-also states plainly what that pipeline doesn't do yet: scenario→plan resolution
-and a Playwright emitter are both designed, not built.
+also states plainly what that pipeline doesn't do yet: automated scenario→plan resolution is still designed, not built. Typed Playwright
+module emission is now available; named component reads and a code-runner MCP remain
+follow-up work.
