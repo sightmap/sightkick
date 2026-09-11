@@ -95,15 +95,19 @@ function renderPred(p: Pred): string {
  * representative one); the raw Step is untouched and remains the resubmit shape.
  */
 function renderTarget(step: Step): string {
+  // Prefer the generator's semantic corpus label (component-query / view / key)
+  // over reconstructing raw locators from the compiled query (sites-6a1a). The
+  // fallbacks below keep older IRs (no `target`) rendering as before.
+  if (step.target) return step.target;
   const parts = step.query?.parts;
   if (parts && parts.length) {
     return parts
       .map((p) => (p.locators[0] ?? "*") + (p.preds ?? []).map(renderPred).join(""))
       .join(" ");
   }
+  if (step.view) return step.view;
   if (step.route) return `route ${step.route}`;
   if (step.url) return step.url;
-  if (step.view) return `view ${step.view}`;
   if (step.key) return `key ${step.key}`;
   return step.op;
 }
