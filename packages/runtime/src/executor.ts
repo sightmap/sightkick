@@ -1,4 +1,4 @@
-import type { Field, Guard, Return, Step, Suggestion, Tool } from "./ir.js";
+import type { Field, Guard, IR, Pred, Return, Step, Suggestion, Tool } from "./ir.js";
 import { clickElement, extract, interpolate, resolveQuery, typeInto } from "./dom.js";
 
 export interface ToolResult {
@@ -78,10 +78,34 @@ function guardHolds(guard: Guard, args: Record<string, unknown>): boolean {
   return guard.kind === "present" ? matches > 0 : matches === 0;
 }
 
-/** Human-readable target for error messages. */
-function describeTarget(step: Step): string {
-  const parts = step.query?.parts ?? [];
-  return `query ${JSON.stringify(parts.map((p) => p.locators.join("|")))}`;
+/** Render one predicate as its authored discriminator, e.g. `[label*="flights only" i]`. */
+function renderPred(p: Pred): string {
+  const prop = p.property ?? "";
+  const ci = p.ci ? " i" : "";
+  return `[${prop}${p.op}"${p.value}"${ci}]`;
+}
+
+/**
+ * A compact, legible rendering of a step's target: the descendant chain of
+ * selectors, each carrying its predicate discriminators. This is the readable
+ * form used in error messages AND in the resumable status projection (sites-be76)
+ * — it deliberately keeps the predicate values (`label*="flights only"`), which
+ * are the semantic handle an author wrote, rather than dumping the raw locator
+ * JSON. Locator noise stays minimal by showing the first locator per part (the
+ * representative one); the raw Step is untouched and remains the resubmit shape.
+ */
+function renderTarget(step: Step): string {
+  const parts = step.query?.parts;
+  if (parts && parts.length) {
+    return parts
+      .map((p) => (p.locators[0] ?? "*") + (p.preds ?? []).map(renderPred).join(""))
+      .join(" ");
+  }
+  if (step.route) return `route ${step.route}`;
+  if (step.url) return step.url;
+  if (step.view) return `view ${step.view}`;
+  if (step.key) return `key ${step.key}`;
+  return step.op;
 }
 
 /** Collect the {{param}} names a template string references into `out`. */
@@ -169,13 +193,13 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
     }
     case "fill": {
       const el = target();
-      if (!el) throw new Error(`fill: no element for ${describeTarget(step)}`);
+      if (!el) throw new Error(`fill: no element for ${renderTarget(step)}`);
       typeInto(el, interpolate(step.value ?? "", args));
       return;
     }
     case "click": {
       const el = target();
-      if (!el) throw new Error(`click: no element for ${describeTarget(step)}`);
+      if (!el) throw new Error(`click: no element for ${renderTarget(step)}`);
       await clickElement(el);
       return;
     }
@@ -208,8 +232,7 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
         if (opts.signal?.aborted) throw new Error("aborted");
         if (satisfied()) return;
         if (Date.now() >= deadline) {
-          const what = step.query ? describeTarget(step) : `route ${step.route}`;
-          throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5000}ms for ${what}`);
+          throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5000}ms for ${renderTarget(step)}`);
         }
         await sleep(opts.pollMs);
       }
@@ -282,4 +305,154 @@ export async function runTool(tool: Tool, args: Record<string, unknown> = {}, op
   // the reliable channel (more so than proactively re-reading getTools()).
   if (tool.guidance && tool.guidance.length) result.guidance = tool.guidance;
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// L1 resumable executor (spike — sites-10b3)
+//
+// Runs an arbitrary action list with the SAME atomic step machinery as runTool,
+// but swaps the outcome envelope: instead of throwing/hanging at the first action
+// that doesn't cleanly resolve, it returns a structured status — how far we got,
+// what interrupted us, and the untried tail — so the caller (an agent) can
+// observe, handle the exception, and RESUME by re-submitting `remaining`.
+//
+// Continuation stays shallow on purpose: `remaining` is just the tail of the
+// action list the caller already holds (beginning with the interrupted action),
+// not a captured stack. Consumes compiled Steps (the runtime's firewall shape);
+// the human-facing {op, query-string} grammar is a generator/CLI graft for later.
+// ---------------------------------------------------------------------------
+
+export interface ActionStatus {
+  /** Count of actions that fully completed (or auto-skipped) before stopping. */
+  completedThrough: number;
+  /** Size of the submitted action list. */
+  total: number;
+  /** True when every action completed. */
+  done: boolean;
+  /** Present when an action didn't cleanly resolve (timeout / no-match / abort). */
+  interrupt?: {
+    /** 0-based index of the action we stopped on. */
+    at: number;
+    /** Human-readable summary of that action. */
+    action: string;
+    /** Why it didn't resolve (the underlying step error). */
+    reason: string;
+    /** Cheap state snapshot to orient recovery; enriched (view/components) later. */
+    observed: { path: string };
+  };
+  /** The untried tail, beginning with the interrupted action. Re-submit to resume. */
+  remaining: Step[];
+  /**
+   * A readable, index-aligned projection of `remaining` (op + target label). It is
+   * the legend that makes the raw tail intelligible: an agent reads THIS to decide
+   * what to do, then either resubmits `remaining` verbatim (opaque continuation) or
+   * edits a step and resubmits (escape hatch) — one tail, two modes. `remaining`
+   * stays the untouched compiled Steps so a blind resume is always exact.
+   */
+  remainingView: ActionView[];
+}
+
+/** A readable one-action projection: its op and compact target label. */
+export interface ActionView {
+  op: string;
+  /** Compact target (selectors + predicate discriminators), not raw locator JSON. */
+  target: string;
+  /** The step's when-guard, if any — surfaced so a conditionally-skipped action reads clearly. */
+  when?: string;
+}
+
+function projectAction(step: Step): ActionView {
+  const view: ActionView = { op: step.op, target: renderTarget(step) };
+  if (step.when !== undefined) view.when = step.when;
+  return view;
+}
+
+function describeAction(step: Step): string {
+  const target = renderTarget(step);
+  return target && target !== step.op ? `${step.op} ${target}` : step.op;
+}
+
+/**
+ * A reusable action fragment: one authored step of a tool, projected for agent
+ * composition (sites-7eba). An agent building an execActions list treats tool
+ * steps as a PARTS BIN; this index lets it pluck (say) a fill by the param it
+ * fills — `uses` includes "firstName" — and address it by a stable id, instead of
+ * scanning ir.tools[].steps and string-matching interpolation values.
+ */
+export interface Fragment {
+  /** Stable within the loaded IR: `<tool>.<stepIndex>`. */
+  id: string;
+  /** Owning tool (provenance). */
+  tool: string;
+  /** 0-based index of the step within its tool. */
+  index: number;
+  /** The action op (fill/click/waitFor/navigate/goto/keypress). */
+  op: string;
+  /** Readable action phrase: op + target (selectors + predicate discriminators). */
+  label: string;
+  /** Param names the fragment interpolates — pluck fragments by these. */
+  uses: string[];
+}
+
+/** Every param a fragment interpolates, including its when-guard (sorted, deduped). */
+function fragmentUses(step: Step): string[] {
+  const out = new Set<string>(stepParams(step));
+  templateParamNames(step.when, out);
+  return [...out].sort();
+}
+
+/**
+ * Project a loaded IR into a flat fragment index: one entry per tool step, in
+ * tool-then-step order. Pure over the IR (no DOM, no execution), so a caller can
+ * build it once and compose action lists from it.
+ */
+export function projectFragments(ir: IR): Fragment[] {
+  const out: Fragment[] = [];
+  for (const tool of ir.tools) {
+    tool.steps.forEach((step, index) => {
+      out.push({
+        id: `${tool.name}.${index}`,
+        tool: tool.name,
+        index,
+        op: step.op,
+        label: describeAction(step),
+        uses: fragmentUses(step),
+      });
+    });
+  }
+  return out;
+}
+
+export async function execActions(
+  actions: Step[],
+  args: Record<string, unknown> = {},
+  options: RunOptions = {},
+): Promise<ActionStatus> {
+  const opts = resolveOptions(options);
+  const livePath = () => (typeof window !== "undefined" ? window.location.pathname : opts.currentPath);
+  for (let i = 0; i < actions.length; i++) {
+    const step = actions[i]!;
+    if (shouldSkipStep(step, args)) {
+      opts.log(`skip ${step.op} action (optional field absent)`);
+      continue;
+    }
+    try {
+      await runStep(step, args, opts);
+    } catch (err) {
+      return {
+        completedThrough: i,
+        total: actions.length,
+        done: false,
+        interrupt: {
+          at: i,
+          action: describeAction(step),
+          reason: (err as Error).message,
+          observed: { path: livePath() },
+        },
+        remaining: actions.slice(i),
+        remainingView: actions.slice(i).map(projectAction),
+      };
+    }
+  }
+  return { completedThrough: actions.length, total: actions.length, done: true, remaining: [], remainingView: [] };
 }
