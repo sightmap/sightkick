@@ -528,9 +528,9 @@ func (cc *compiler) compileSignalWait(name string, timeout int, toolName string)
 		// Mirror compileQuery's single-part, predicate-free output: a signal ref is
 		// a bare component name, so its selectors ARE the whole query.
 		q := &Query{Parts: []PathPart{{Locators: target.Component.Selectors}}}
-		return Step{Op: "waitFor", Query: q, TimeoutMs: timeout}, true
+		return Step{Op: "waitFor", Query: q, TimeoutMs: timeout, Target: target.Component.Name}, true
 	case sm.SignalRefView:
-		return Step{Op: "waitFor", View: target.View.Name, Route: target.View.Route, TimeoutMs: timeout}, true
+		return Step{Op: "waitFor", View: target.View.Name, Route: target.View.Route, TimeoutMs: timeout, Target: target.View.Name}, true
 	default:
 		// Signal exists but its ref doesn't resolve (or is ambiguous). Corpus
 		// Validate flags this as signal-ref-unresolved/-ambiguous; surface it here
@@ -539,6 +539,23 @@ func (cc *compiler) compileSignalWait(name string, timeout int, toolName string)
 			"tool %q references signal %q, whose ref resolves to neither a component nor a view", toolName, sig)
 		return Step{}, false
 	}
+}
+
+// gotoTarget renders a goto step's semantic label: the destination view's name
+// when the URL resolves to a corpus view, else the raw URL (a deep link that no
+// view models). Keeps a fragment reading `goto Results` rather than dumping the
+// full templated URL, while staying correct when there's genuinely no view.
+func (cc *compiler) gotoTarget(rawURL string) string {
+	// Strip the query so a {{param}} template in it can't trip url.Parse; the view
+	// match is by path anyway.
+	path := rawURL
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		path = path[:i]
+	}
+	if v := cc.c.ViewForURL(path); v != nil {
+		return v.Name
+	}
+	return rawURL
 }
 
 func (cc *compiler) compileStep(
@@ -553,7 +570,7 @@ func (cc *compiler) compileStep(
 			cc.errf("compile.nav", toolName, "%s navigates to unknown view %q", toolName, body.View)
 			return Step{}, false
 		}
-		return Step{Op: "navigate", View: v.Name, Route: v.Route}, true
+		return Step{Op: "navigate", View: v.Name, Route: v.Route, Target: v.Name}, true
 
 	case "goto":
 		if body.URL == "" {
@@ -561,7 +578,7 @@ func (cc *compiler) compileStep(
 			return Step{}, false
 		}
 		cc.validateTemplate(body.URL, known, toolName)
-		return Step{Op: "goto", URL: body.URL}, true
+		return Step{Op: "goto", URL: body.URL, Target: cc.gotoTarget(body.URL)}, true
 
 	case "fill":
 		q, _, ok := cc.compileQuery(body.Query, comps, all, names, known, toolName)
@@ -569,14 +586,14 @@ func (cc *compiler) compileStep(
 			return Step{}, false
 		}
 		cc.validateTemplate(body.Value, known, toolName)
-		return Step{Op: "fill", Query: q, Value: body.Value}, true
+		return Step{Op: "fill", Query: q, Value: body.Value, Target: strings.TrimSpace(body.Query)}, true
 
 	case "click":
 		q, _, ok := cc.compileQuery(body.Query, comps, all, names, known, toolName)
 		if !ok {
 			return Step{}, false
 		}
-		return Step{Op: "click", Query: q}, true
+		return Step{Op: "click", Query: q, Target: strings.TrimSpace(body.Query)}, true
 
 	case "wait_for":
 		timeout := body.TimeoutMs
@@ -605,13 +622,13 @@ func (cc *compiler) compileStep(
 				cc.errf("compile.wait-for-view", toolName, "%s wait_for names unknown view %q", toolName, body.View)
 				return Step{}, false
 			}
-			return Step{Op: "waitFor", View: v.Name, Route: v.Route, TimeoutMs: timeout}, true
+			return Step{Op: "waitFor", View: v.Name, Route: v.Route, TimeoutMs: timeout, Target: v.Name}, true
 		default: // hasQuery
 			q, _, ok := cc.compileQuery(body.Query, comps, all, names, known, toolName)
 			if !ok {
 				return Step{}, false
 			}
-			return Step{Op: "waitFor", Query: q, TimeoutMs: timeout}, true
+			return Step{Op: "waitFor", Query: q, TimeoutMs: timeout, Target: strings.TrimSpace(body.Query)}, true
 		}
 
 	case "keypress":
@@ -619,7 +636,7 @@ func (cc *compiler) compileStep(
 			cc.errf("compile.keypress", toolName, "tool %q has a keypress step with no key", toolName)
 			return Step{}, false
 		}
-		return Step{Op: "keypress", Key: body.Key}, true
+		return Step{Op: "keypress", Key: body.Key, Target: body.Key}, true
 
 	default:
 		cc.errf("compile.step", toolName, "tool %q has an unrecognized step op %q", toolName, op)

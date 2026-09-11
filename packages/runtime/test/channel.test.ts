@@ -32,7 +32,11 @@ describe("IR DOM channel (document_start injection handover)", () => {
     expect(api.ir?.name).toBe("search");
     expect(api.mode).toBe("injected");
     const client = createClient(api.modelContext!);
-    expect((await client.listTools()).map((t) => t.name)).toEqual(["search"]);
+    // Filter the always-on meta tools (sites-b573) to assert the view-scoped set.
+    const viewTools = (await client.listTools())
+      .map((t) => t.name)
+      .filter((n) => n !== "exec_actions" && n !== "get_fragments");
+    expect(viewTools).toEqual(["search"]);
 
     // Payload is consumed so a second reader can't double-load.
     expect(document.documentElement.getAttribute(IR_ATTR)).toBeNull();

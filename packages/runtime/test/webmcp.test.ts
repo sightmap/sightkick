@@ -8,6 +8,10 @@ import { mountTodo } from "../demo/todo-app.js";
 
 const ir = todoIr as unknown as IR;
 
+// The always-on fallback tools (sites-b573) register on every view; filter them
+// out where a test asserts the view-scoped tool set.
+const notMeta = (n: string) => n !== "exec_actions" && n !== "get_fragments";
+
 beforeEach(() => {
   document.body.innerHTML = "";
   mountTodo(document.body);
@@ -27,7 +31,14 @@ describe("WebMCP-native registration", () => {
     boot(ir);
     const client = createClient();
     const tools = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["add_todo", "clear_completed", "list_todos", "set_filter"]);
+    // The always-on meta tools (sites-b573) register alongside; filter them to
+    // assert the view-scoped set.
+    expect(tools.map((t) => t.name).filter(notMeta).sort()).toEqual([
+      "add_todo",
+      "clear_completed",
+      "list_todos",
+      "set_filter",
+    ]);
     const add = tools.find((t) => t.name === "add_todo")!;
     expect(add.description).toMatch(/Add a new todo/);
     expect((add.inputSchema as any).required).toEqual(["text"]);
@@ -76,10 +87,12 @@ describe("WebMCP-native registration", () => {
 
     api.load(ir);
     expect(changes).toBeGreaterThanOrEqual(1); // one per registered tool
-    expect((await createClient().listTools()).length).toBe(4);
+    const viewNames = async () => (await createClient().listTools()).map((t) => t.name).filter(notMeta);
+    expect((await viewNames()).length).toBe(4);
 
-    // Reloading with an empty tool set unregisters everything (via AbortSignals).
+    // Reloading with an empty tool set unregisters the view-scoped tools (via
+    // AbortSignals). The always-on meta tools persist, so filter them out.
     api.load({ ...ir, tools: [] });
-    expect((await createClient().listTools()).length).toBe(0);
+    expect((await viewNames()).length).toBe(0);
   });
 });

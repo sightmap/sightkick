@@ -5,11 +5,18 @@ import {
   routeMatches,
   runTool,
   type ActionStatus,
+  type ActionView,
   type Fragment,
   type RunOptions,
   type ToolResult,
 } from "./executor.js";
-import { ensureModelContext, isPolyfilled, type ModelContext } from "./webmcp.js";
+import {
+  ensureModelContext,
+  isPolyfilled,
+  type ModelContext,
+  type ToolResultEnvelope,
+  type WebMCPToolDef,
+} from "./webmcp.js";
 import { describeError } from "./errors.js";
 
 export interface BootOptions {
@@ -83,6 +90,67 @@ function toEnvelope(result: ToolResult) {
   return { content: [{ type: "text" as const, text: JSON.stringify(result) }], isError: !result.ok };
 }
 
+/** Wrap an arbitrary meta-tool payload in the WebMCP text envelope. */
+function metaEnvelope(payload: unknown, isError = false): ToolResultEnvelope {
+  return { content: [{ type: "text", text: JSON.stringify(payload) }], isError };
+}
+
+/**
+ * Resolve a fragment id (`<tool>.<index>`, as projectFragments emits) to its
+ * compiled Step against `ir`. tool names carry no dots, so the last dot splits
+ * name from index.
+ */
+function fragmentStep(ir: IR | null, ref: string): Step | undefined {
+  if (!ir) return undefined;
+  const dot = ref.lastIndexOf(".");
+  if (dot < 0) return undefined;
+  const idx = Number(ref.slice(dot + 1));
+  if (!Number.isInteger(idx) || idx < 0) return undefined;
+  const tool = ir.tools.find((t) => t.name === ref.slice(0, dot));
+  return tool?.steps[idx];
+}
+
+function resolveFragmentRefs(ir: IR | null, refs: string[]): { steps: Step[]; unknown: string[] } {
+  const steps: Step[] = [];
+  const unknown: string[] = [];
+  for (const ref of refs) {
+    const step = fragmentStep(ir, ref);
+    if (step) steps.push(step);
+    else unknown.push(ref);
+  }
+  return { steps, unknown };
+}
+
+/** The exec_actions tool's result: an ActionStatus with its tail re-expressed as fragment refs. */
+interface ExecActionsResult {
+  done: boolean;
+  completedThrough: number;
+  total: number;
+  interrupt?: ActionStatus["interrupt"];
+  /** Fragment refs still to run, beginning with the interrupted one — re-submit to resume. */
+  remaining: string[];
+  /** Readable, index-aligned projection of `remaining` (op + semantic target). */
+  remainingView: ActionView[];
+}
+
+/**
+ * Project an execActions ActionStatus back into the fragment-ref grammar the tool
+ * speaks: the untried Step tail becomes the untried REF tail (the refs are
+ * index-aligned with the steps, and completedThrough is the stop index), so an
+ * agent resumes by re-calling exec_actions with `remaining` rather than ever
+ * handling raw compiled steps.
+ */
+function projectExecStatus(status: ActionStatus, refs: string[]): ExecActionsResult {
+  return {
+    done: status.done,
+    completedThrough: status.completedThrough,
+    total: status.total,
+    interrupt: status.interrupt,
+    remaining: refs.slice(status.completedThrough),
+    remainingView: status.remainingView,
+  };
+}
+
 // SPA route changes don't fire an event, so patch history once to emit one. This
 // lets an injected runtime notice client-side navigations on sites we don't
 // control, without the site cooperating.
@@ -147,6 +215,104 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
     }
   };
 
+  // The current view's fragment base set: fragments of tools offered on this view
+  // (same ensure_view rule as tool registration), plus view-agnostic tools. This
+  // is deliberately just the base set; the 1-hop guidance horizon + distance
+  // tiering is sites-90dc.
+  const currentFragments = (): Fragment[] => {
+    const ir = api.ir;
+    if (!ir) return [];
+    const path = currentPath();
+    return projectFragments(ir).filter((f) => {
+      const tool = ir.tools.find((t) => t.name === f.tool);
+      return !tool?.ensureView || routeMatches(tool.ensureView.route, path);
+    });
+  };
+
+  // Always-on meta tools (sites-b573): the universal fallback surface. exec_actions
+  // runs an agent-composed list of fragment refs resumably; get_fragments lists the
+  // refs available here. Registered once and NOT torn down by refresh()'s per-view
+  // churn, so they persist across SPA navigations.
+  const metaControllers: AbortController[] = [];
+  let metaRegistered = false;
+  const registerMetaTool = (def: WebMCPToolDef) => {
+    const controller = new AbortController();
+    metaControllers.push(controller);
+    Promise.resolve(ctx!.registerTool(def, { signal: controller.signal })).catch((e) =>
+      console.warn(`[sightkick] registerTool "${def.name}" rejected: ${describeError(e)}`),
+    );
+  };
+  // Register the always-on meta tools exactly once PER DOCUMENT, not per boot
+  // instance. On an SPA like JetBlue the injected bundle boots in several
+  // execution contexts (isolated worlds), and Angular's Zone re-wraps
+  // document.modelContext per access, so a window/ctx-property flag can't dedup
+  // across them — only the shared native registry can. So we skip any meta tool
+  // already present in `ctx.getTools()`. (The per-instance `metaRegistered` flag
+  // still short-circuits a repeat call within one context.)
+  const registerMetaTools = async () => {
+    if (metaRegistered || !ctx) return;
+    metaRegistered = true;
+    let present = new Set<string>();
+    try {
+      present = new Set((await ctx.getTools()).map((t) => t.name));
+    } catch {
+      /* getTools may reject on a transitional surface; fall back to registering */
+    }
+    if (!present.has("exec_actions")) {
+      registerMetaTool({
+        name: "exec_actions",
+      description:
+        "Run an ordered list of action fragments resumably. Pass fragment ids (from get_fragments) " +
+        "in `refs` and any parameter values in `args`. Returns how far it got; if an action is " +
+        "interrupted (e.g. an unexpected modal, a missing field), it STOPS instead of hanging and " +
+        "returns the reason plus the remaining fragment refs. Handle the interruption (dismiss the " +
+        "modal, call another tool), then call exec_actions again with the returned `remaining` refs " +
+        "to resume where it left off.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          refs: {
+            type: "array",
+            items: { type: "string" },
+            description: "Fragment ids to run in order, e.g. [\"set_contact.0\", \"set_contact.1\"].",
+          },
+          args: {
+            type: "object",
+            description: "Parameter values the fragments interpolate (see each fragment's `uses`).",
+          },
+        },
+        required: ["refs"],
+      },
+      execute: async (rawArgs, options) => {
+        const refs = Array.isArray(rawArgs?.refs) ? (rawArgs.refs as unknown[]).map(String) : [];
+        const callArgs = (rawArgs?.args as Record<string, unknown>) ?? {};
+        if (!api.ir) return metaEnvelope({ error: "no IR loaded" }, true);
+        if (!refs.length) return metaEnvelope({ error: "exec_actions needs a non-empty `refs` array" }, true);
+        const { steps, unknown } = resolveFragmentRefs(api.ir, refs);
+        if (unknown.length) {
+          return metaEnvelope(
+            { error: `unknown fragment ref(s): ${unknown.join(", ")}`, hint: "call get_fragments for valid ids" },
+            true,
+          );
+        }
+        const status = await execActionList(steps, callArgs, { signal: options?.signal, currentPath: currentPath() });
+        return metaEnvelope(projectExecStatus(status, refs), !status.done);
+      },
+      });
+    }
+    if (!present.has("get_fragments")) {
+      registerMetaTool({
+        name: "get_fragments",
+      description:
+        "List the action fragments available on the current view. Each is a pluckable step " +
+        "{id, tool, op, label, uses}: `label` reads in component/view vocabulary, `uses` names the " +
+        "parameters it needs. Compose an ordered list of `id`s and pass them to exec_actions.",
+      inputSchema: { type: "object", properties: {} },
+      execute: async () => metaEnvelope({ fragments: currentFragments() }),
+      });
+    }
+  };
+
   const api: SightkickGlobal = {
     mode: detectMode(),
     ir: null,
@@ -155,6 +321,7 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
     load(ir: IR) {
       this.ir = ir;
       refresh();
+      registerMetaTools();
       console.info(
         `[sightkick] loaded IR "${ir.name}" (${ir.tools.length} tools, ${this.mode}, ` +
           `${this.polyfilled ? "polyfilled" : "native"} modelContext)`,

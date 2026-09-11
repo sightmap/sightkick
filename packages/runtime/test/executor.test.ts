@@ -294,6 +294,38 @@ describe("fragment index (projectFragments / fragments())", () => {
     expect(frags[1]).toMatchObject({ id: "set_contact.1", op: "click", uses: [] });
   });
 
+  it("prefers the generator's semantic target (corpus vocabulary) over raw locators (sites-6a1a)", () => {
+    const semanticIr: IR = {
+      version: 1,
+      name: "t",
+      views: [],
+      tools: [
+        {
+          name: "set_contact",
+          mode: "live",
+          inputSchema: { type: "object", properties: {} },
+          steps: [
+            {
+              op: "fill",
+              // Same compiled query as above, but the generator now carries the
+              // source compquery as `target`.
+              query: { parts: [{ locators: ["input.jtpsdk-x9"] }] },
+              value: "{{firstName}}",
+              target: 'FormField[label*="First" i] FieldInput',
+            },
+            { op: "navigate", view: "Checkout", route: "/booking/checkout", target: "Checkout" },
+          ],
+        },
+      ],
+    };
+    const frags = projectFragments(semanticIr);
+    // Reads in component vocabulary, not the raw selector.
+    expect(frags[0]!.label).toBe('fill FormField[label*="First" i] FieldInput');
+    expect(frags[0]!.label).not.toContain("jtpsdk");
+    // navigate shows the destination view name, not the raw route path.
+    expect(frags[1]!.label).toBe("navigate Checkout");
+  });
+
   it("SightkickGlobal.fragments() is empty before load and populated after", () => {
     const api = boot(undefined, { currentPath: "/" });
     expect(api.fragments()).toEqual([]);

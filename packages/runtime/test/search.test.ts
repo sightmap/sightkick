@@ -8,6 +8,10 @@ import searchIr from "../../../generator/internal/gen/testdata/search.ir.json";
 
 const ir = searchIr as unknown as IR;
 
+// The always-on fallback tools (sites-b573) register on every view; filter them
+// out where a test asserts the view-scoped tool set.
+const notMeta = (n: string) => n !== "exec_actions" && n !== "get_fragments";
+
 const pages: Record<string, (nav: (url: string) => void) => void> = {
   "/": (nav) => {
     document.body.innerHTML = `<input id="q" /><button id="go" type="button">Search</button>`;
@@ -61,9 +65,10 @@ describe("cross-view guided flow (generator -> runtime)", () => {
   it("registers only the current view's tools, and guides across the navigation", async () => {
     nav("/");
 
-    // Search page: view-scoped registration exposes only `search`.
+    // Search page: view-scoped registration exposes only `search` (plus the
+    // always-on meta tools, filtered out here to test view-scoping).
     let page = loadPage();
-    expect((await page.client.listTools()).map((t) => t.name)).toEqual(["search"]);
+    expect((await page.client.listTools()).map((t) => t.name).filter(notMeta)).toEqual(["search"]);
 
     // Running search fills the box, clicks the real button (which navigates),
     // and its result carries after_navigation guidance toward the results view.
@@ -76,7 +81,7 @@ describe("cross-view guided flow (generator -> runtime)", () => {
 
     // Results page (fresh boot): now only the results-view tools are offered.
     page = loadPage();
-    expect((await page.client.listTools()).map((t) => t.name).sort()).toEqual([
+    expect((await page.client.listTools()).map((t) => t.name).filter(notMeta).sort()).toEqual([
       "book",
       "list_results",
       "select_flight",
@@ -106,12 +111,12 @@ describe("SPA route change re-registers view-scoped tools (no reload)", () => {
   it("swaps the tool set on pushState", async () => {
     const api = boot(ir); // live window.location + nav hook (no fixed currentPath)
     const client = createClient(api.modelContext!);
-    expect((await client.listTools()).map((t) => t.name)).toEqual(["search"]);
+    expect((await client.listTools()).map((t) => t.name).filter(notMeta)).toEqual(["search"]);
 
     // Client-side navigation: the patched pushState fires the nav hook, which
     // re-evaluates view-scoped registration for the new path.
     history.pushState({}, "", "/results");
-    expect((await client.listTools()).map((t) => t.name).sort()).toEqual([
+    expect((await client.listTools()).map((t) => t.name).filter(notMeta).sort()).toEqual([
       "book",
       "list_results",
       "select_flight",
