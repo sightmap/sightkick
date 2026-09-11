@@ -49,7 +49,10 @@ cd generator && go generate ./runtimebundle/... # copies it to generator/runtime
 ```
 
 CI's runtime job rebuilds the bundle and fails on any drift from the committed
-copy.
+copy. You rarely run those two commands by hand: `pnpm regen:runtime` chains
+them, and a `pre-commit` hook (installed automatically — see below) resyncs the
+bundle whenever a commit touches `packages/runtime/src/**`, so the drift can't be
+committed in the first place.
 
 The **WebMCP inspector** is embedded the same way so `sightkick browser --webmcp`
 can auto-load it. Its canonical copy at `vendor/webmcp-tool/unpacked/` is vendored
@@ -63,6 +66,23 @@ cd generator && go generate ./webmcpinspector/... # sync the embedded copy
 
 Commit both the `vendor/` and `generator/webmcpinspector/` copies; CI fails on
 drift. Don't hand-edit either.
+
+### Regenerating the embedded copies
+
+Three committed artifacts are generated, not hand-written — the runtime bundle,
+the skills (`generator/skills/`), and the WebMCP inspector
+(`generator/webmcpinspector/`) — and CI has a drift check for each. `pnpm regen`
+rebuilds all three; the per-artifact `pnpm regen:runtime`, `pnpm regen:skills`,
+and `pnpm regen:inspector` do one at a time.
+
+The runtime bundle is the one that drifts most (its source changes on most
+runtime PRs), so its resync is also enforced by a Git `pre-commit` hook in
+`.githooks/`. `pnpm install` runs the `prepare` script, which points
+`core.hooksPath` at that directory; the hook fires only when a commit stages
+`packages/runtime/src/**`, rebuilds the bundle, re-embeds it, and re-stages the
+result. It's a convenience backstop, not the enforcement boundary — CI's drift
+checks remain the source of truth (so fork contributors and anyone who skips the
+hook are still caught).
 
 ## Running the tools on a live page
 
