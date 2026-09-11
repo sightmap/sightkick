@@ -33,6 +33,14 @@ const flowIr: IR = {
       inputSchema: { type: "object", properties: {} },
       steps: [{ op: "click", query: q("#x"), target: "Submit" }],
     },
+    {
+      name: "opener",
+      mode: "live",
+      // Offered on "/"; guides to checkout_only one navigation away, so its
+      // fragments should surface on "/" at distance 1 (sites-90dc horizon).
+      steps: [{ op: "click", query: q("#open"), target: "Open" }],
+      guidance: [{ tool: "checkout_only", when: "after_navigation", view: "Checkout" }],
+    },
   ],
 };
 
@@ -65,16 +73,22 @@ describe("meta tools (exec_actions / get_fragments)", () => {
     expect(names).toContain("flow");
   });
 
-  it("get_fragments returns the current view's base set (ensure_view filtered)", async () => {
+  it("get_fragments returns the current view's base set (distance 0) plus the 1-hop horizon (distance 1)", async () => {
     const api = boot(flowIr, { currentPath: "/" });
     await settle();
     const { payload } = await exec(api.modelContext as MC, "get_fragments");
-    const tools = new Set(payload.fragments.map((f: { tool: string }) => f.tool));
-    expect(tools.has("flow")).toBe(true);
-    // checkout_only is scoped to /checkout, so it's absent on "/".
-    expect(tools.has("checkout_only")).toBe(false);
+    const byTool = new Map<string, { distance: number }>(
+      payload.fragments.map((f: { tool: string; distance: number }) => [f.tool, f]),
+    );
+    // Base (view-agnostic tools) at distance 0.
+    expect(byTool.get("flow")).toMatchObject({ distance: 0 });
+    expect(byTool.get("opener")).toMatchObject({ distance: 0 });
+    // checkout_only is /checkout-scoped, but `opener` guides to it — so it shows
+    // up on "/" at distance 1, not hard-cut.
+    expect(byTool.get("checkout_only")).toMatchObject({ distance: 1 });
     // Fragments are pluckable refs with semantic labels.
-    expect(payload.fragments[0]).toMatchObject({ id: "flow.0", tool: "flow", op: "waitFor", label: "waitFor A" });
+    const flowFrag = payload.fragments.find((f: { id: string }) => f.id === "flow.0");
+    expect(flowFrag).toMatchObject({ id: "flow.0", tool: "flow", op: "waitFor", label: "waitFor A" });
   });
 
   it("get_fragments includes a tool's fragments when on its view", async () => {

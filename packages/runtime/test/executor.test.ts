@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // IR firewall end-to-end.
 import todoIr from "../../../generator/internal/gen/testdata/todo.ir.json";
 import { boot } from "../src/index.js";
-import { execActions, projectFragments, runTool } from "../src/executor.js";
+import { execActions, projectFragments, runTool, scopedFragments } from "../src/executor.js";
 import type { IR, Query, Step, Tool } from "../src/ir.js";
 import { mountTodo } from "../demo/todo-app.js";
 
@@ -333,6 +333,76 @@ describe("fragment index (projectFragments / fragments())", () => {
     const frags = api.fragments();
     expect(frags).toHaveLength(2);
     expect(frags.every((f) => f.id.startsWith(f.tool + "."))).toBe(true);
+  });
+});
+
+// sites-90dc: contextual scope for get_fragments — the current view's base set
+// plus a 1-hop guidance horizon, each tagged with distance (0 here, 1 one nav
+// away). Not the whole corpus, but not a hard cut at the current view either.
+describe("scopedFragments (contextual base + 1-hop horizon)", () => {
+  const step = (sel: string): Step => ({ op: "click", query: { parts: [{ locators: [sel] }] }, target: sel });
+  const ir: IR = {
+    version: 1,
+    name: "t",
+    views: [
+      { name: "A", route: "/a" },
+      { name: "B", route: "/b" },
+      { name: "C", route: "/c" },
+    ],
+    tools: [
+      {
+        name: "a_tool",
+        mode: "live",
+        inputSchema: { type: "object", properties: {} },
+        ensureView: { view: "A", route: "/a" },
+        steps: [step("#a")],
+        guidance: [{ tool: "b_tool", when: "after_navigation", view: "B" }],
+      },
+      {
+        name: "b_tool",
+        mode: "live",
+        inputSchema: { type: "object", properties: {} },
+        ensureView: { view: "B", route: "/b" },
+        steps: [step("#b")],
+        guidance: [{ tool: "c_tool", when: "after_navigation", view: "C" }],
+      },
+      {
+        name: "c_tool",
+        mode: "live",
+        inputSchema: { type: "object", properties: {} },
+        ensureView: { view: "C", route: "/c" },
+        steps: [step("#c")],
+      },
+      {
+        name: "global",
+        mode: "live",
+        inputSchema: { type: "object", properties: {} },
+        steps: [step("#g")], // no ensure_view → offered on every view
+      },
+    ],
+  };
+
+  it("returns the current view's tools at distance 0 and the 1-hop horizon at distance 1", () => {
+    const frags = scopedFragments(ir, "/a");
+    const byId = new Map(frags.map((f) => [f.id, f]));
+    // Base: a_tool (view A) + the view-agnostic global.
+    expect(byId.get("a_tool.0")).toMatchObject({ distance: 0, view: "A" });
+    expect(byId.get("global.0")).toMatchObject({ distance: 0 });
+    expect(byId.get("global.0")!.view).toBeUndefined();
+    // Horizon: b_tool is one nav away (a_tool guides to it), tagged distance 1.
+    expect(byId.get("b_tool.0")).toMatchObject({ distance: 1, view: "B" });
+    // c_tool is TWO hops away (via b_tool) — excluded at one hop.
+    expect(byId.has("c_tool.0")).toBe(false);
+  });
+
+  it("a tool in the base is not also emitted in the horizon", () => {
+    // On /b, b_tool is base; nothing should double it even though a_tool would
+    // guide to it (a_tool isn't in the /b base, so it doesn't contribute here).
+    const frags = scopedFragments(ir, "/b");
+    expect(frags.filter((f) => f.tool === "b_tool")).toHaveLength(1);
+    expect(frags.find((f) => f.tool === "b_tool")!.distance).toBe(0);
+    // b_tool's guidance puts c_tool on the horizon here.
+    expect(frags.find((f) => f.tool === "c_tool")).toMatchObject({ distance: 1, view: "C" });
   });
 });
 
