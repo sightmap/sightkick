@@ -1,0 +1,37 @@
+#!/bin/sh
+# Auto-installed via the root package.json "prepare" script, which points
+# core.hooksPath at this directory on `pnpm install`.
+#
+# Keeps the committed, embedded runtime bundle
+# (generator/runtimebundle/sightkick-runtime.js) in sync whenever runtime source
+# (packages/runtime/src/**) is part of a commit. That embedded copy is a build
+# artifact of the esbuild output; if it drifts from the source, CI's "Embedded
+# runtime bundle in sync" check fails after the fact. This resyncs it up front so
+# the drift can never be committed. Git runs hooks with the working tree root as
+# the cwd, so the relative paths below are correct.
+
+set -e
+
+# Nothing to do unless runtime source is staged in this commit.
+if ! git diff --cached --name-only | grep -q '^packages/runtime/src/'; then
+  exit 0
+fi
+
+fail() {
+  echo "pre-commit: $1" >&2
+  echo "pre-commit: fix it or run 'pnpm regen:runtime' manually, then re-commit." >&2
+  exit 1
+}
+
+command -v pnpm >/dev/null 2>&1 || fail "pnpm not found (needed to rebuild the runtime bundle)"
+command -v go >/dev/null 2>&1 || fail "go not found (needed to re-embed the runtime bundle)"
+
+echo "pre-commit: runtime source changed — resyncing embedded bundle…"
+pnpm --filter @sightkick/runtime build >/dev/null || fail "runtime build failed"
+(cd generator && go generate ./runtimebundle/... >/dev/null) || fail "go generate ./runtimebundle/... failed"
+
+# Re-stage the bundle only if the resync actually changed it (vs. the index).
+if ! git diff --quiet -- generator/runtimebundle/sightkick-runtime.js; then
+  git add generator/runtimebundle/sightkick-runtime.js
+  echo "pre-commit: re-staged generator/runtimebundle/sightkick-runtime.js"
+fi

@@ -8,9 +8,14 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
+    "regen": "pnpm regen:runtime && pnpm regen:skills && pnpm regen:inspector",
+    "regen:runtime": "pnpm --filter @sightkick/runtime build && cd generator && go generate ./runtimebundle/...",
+    "regen:skills": "cd generator && go generate ./skills/...",
+    "regen:inspector": "cd generator && go generate ./webmcpinspector/...",
     "changeset": "npx --yes @changesets/cli@^2.29.7",
     "version-packages": "npx --yes @changesets/cli@^2.29.7 version",
-    "vendor-inspector": "node scripts/vendor-webmcp-inspector.mjs"
+    "vendor-inspector": "node scripts/vendor-webmcp-inspector.mjs",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
