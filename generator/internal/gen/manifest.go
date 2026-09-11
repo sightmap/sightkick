@@ -65,19 +65,31 @@ func (f *FieldDef) UnmarshalYAML(value *yaml.Node) error {
 // dependent control once Enter is pressed, confirmed live in Fullstory's
 // metric-condition form (see fullstory's .sightkick tool layer).
 //
-// wait_for takes exactly one of query or view: `query` waits for a DOM match
-// (the existing form); `view` waits for the current route to match a named
+// wait_for takes exactly one of query, view, or signal: `query` waits for a DOM
+// match (the existing form); `view` waits for the current route to match a named
 // corpus view instead, for the "the click navigated, but has the destination
 // actually rendered yet" gap a route match alone can't close (see Step.View's
-// doc in ir.go). A tool that ends by navigating away should almost always end
-// in a wait_for, not stop at the click.
+// doc in ir.go); `signal` names a corpus signal (SEP-0007 state signal) and is
+// desugared here into whichever of those two waits its ref resolves to — a
+// component ref becomes a present-wait, a view ref a route-wait. A tool that
+// ends by navigating away should almost always end in a wait_for, not stop at
+// the click.
+//
+// then is a post-condition on ANY action step: after the step runs, the compiler
+// appends a wait for the named signal, so the step's completion means "that
+// named signal now holds" rather than merely "the action dispatched." It is the
+// authoring surface for signal-shaped completion predicates; the appended wait
+// inherits the step's When so an optional step and its post-condition skip
+// together.
 type StepBody struct {
 	Query     string `yaml:"query"`
 	Value     string `yaml:"value"`
 	TimeoutMs int    `yaml:"timeout_ms"`
-	View      string `yaml:"view"` // navigate target, or a wait_for's route postcondition
-	URL       string `yaml:"url"`  // goto target (URL template with {{param}} interpolation)
-	Key       string `yaml:"key"`  // keypress target key, e.g. "Enter", "Tab", "Escape"
+	View      string `yaml:"view"`   // navigate target, or a wait_for's route postcondition
+	Signal    string `yaml:"signal"` // wait_for target: a named corpus signal (SEP-0007 state signal)
+	Then      string `yaml:"then"`   // post-condition: after this step, wait until this named signal holds
+	URL       string `yaml:"url"`    // goto target (URL template with {{param}} interpolation)
+	Key       string `yaml:"key"`    // keypress target key, e.g. "Enter", "Tab", "Escape"
 	// When is an optional guard: the runtime SKIPS this step when When
 	// interpolates to empty. Its main use is optional fields in a grouped tool
 	// (`when: "{{middleName}}"`). Note steps also AUTO-skip when a {{param}} they

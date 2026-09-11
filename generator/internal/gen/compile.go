@@ -490,6 +490,57 @@ func inputSchema(params []ParamDef) InputSchema {
 	return schema
 }
 
+// defaultWaitTimeoutMs is the wait budget for a wait_for (or a desugared signal
+// post-condition) that doesn't set timeout_ms.
+const defaultWaitTimeoutMs = 5000
+
+// signalNames returns the corpus's declared signal names, sorted, for candidate
+// hints in an unknown-signal diagnostic.
+func (cc *compiler) signalNames() []string {
+	names := make([]string, 0, len(cc.c.Signals))
+	for i := range cc.c.Signals {
+		names = append(names, cc.c.Signals[i].Name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// compileSignalWait desugars a named corpus signal into a concrete waitFor step:
+// a component ref becomes a present-wait on that component's selectors, a view
+// ref a route-wait on the view. The signal resolves against the WHOLE corpus
+// (Corpus.ResolveSignal), so a post-condition may name a signal whose subject
+// lives in the destination view, not just the tool's ensure_view scope — which
+// is exactly the common case (click continue -> wait for the next view's marker).
+func (cc *compiler) compileSignalWait(name string, timeout int, toolName string) (Step, bool) {
+	sig := strings.TrimSpace(name)
+	if sig == "" {
+		cc.errf("compile.signal-missing", toolName, "tool %q references an empty signal name", toolName)
+		return Step{}, false
+	}
+	if cc.c.SignalByName(sig) == nil {
+		cc.errf("compile.signal-unknown", toolName,
+			"tool %q references unknown signal %q. Available: %s", toolName, sig, candidateList(cc.signalNames()))
+		return Step{}, false
+	}
+	target := cc.c.ResolveSignal(sig)
+	switch target.Kind {
+	case sm.SignalRefComponent:
+		// Mirror compileQuery's single-part, predicate-free output: a signal ref is
+		// a bare component name, so its selectors ARE the whole query.
+		q := &Query{Parts: []PathPart{{Locators: target.Component.Selectors}}}
+		return Step{Op: "waitFor", Query: q, TimeoutMs: timeout}, true
+	case sm.SignalRefView:
+		return Step{Op: "waitFor", View: target.View.Name, Route: target.View.Route, TimeoutMs: timeout}, true
+	default:
+		// Signal exists but its ref doesn't resolve (or is ambiguous). Corpus
+		// Validate flags this as signal-ref-unresolved/-ambiguous; surface it here
+		// too so a build that skips validate still fails loudly.
+		cc.errf("compile.signal-unresolved", toolName,
+			"tool %q references signal %q, whose ref resolves to neither a component nor a view", toolName, sig)
+		return Step{}, false
+	}
+}
+
 func (cc *compiler) compileStep(
 	op string, body StepBody,
 	comps map[string]sm.ComponentDef, all []sm.ComponentDef, names []string,
@@ -530,13 +581,24 @@ func (cc *compiler) compileStep(
 	case "wait_for":
 		timeout := body.TimeoutMs
 		if timeout == 0 {
-			timeout = 5000
+			timeout = defaultWaitTimeoutMs
 		}
-		hasQuery, hasView := strings.TrimSpace(body.Query) != "", strings.TrimSpace(body.View) != ""
-		switch {
-		case hasQuery && hasView:
-			cc.errf("compile.wait-for-shape", toolName, "tool %q wait_for has both query and view; use exactly one", toolName)
+		hasQuery := strings.TrimSpace(body.Query) != ""
+		hasView := strings.TrimSpace(body.View) != ""
+		hasSignal := strings.TrimSpace(body.Signal) != ""
+		n := 0
+		for _, has := range []bool{hasQuery, hasView, hasSignal} {
+			if has {
+				n++
+			}
+		}
+		if n != 1 {
+			cc.errf("compile.wait-for-shape", toolName, "tool %q wait_for needs exactly one of query, view, or signal", toolName)
 			return Step{}, false
+		}
+		switch {
+		case hasSignal:
+			return cc.compileSignalWait(body.Signal, timeout, toolName)
 		case hasView:
 			v := cc.c.ViewByName(body.View)
 			if v == nil {
@@ -544,15 +606,12 @@ func (cc *compiler) compileStep(
 				return Step{}, false
 			}
 			return Step{Op: "waitFor", View: v.Name, Route: v.Route, TimeoutMs: timeout}, true
-		case hasQuery:
+		default: // hasQuery
 			q, _, ok := cc.compileQuery(body.Query, comps, all, names, known, toolName)
 			if !ok {
 				return Step{}, false
 			}
 			return Step{Op: "waitFor", Query: q, TimeoutMs: timeout}, true
-		default:
-			cc.errf("compile.wait-for-shape", toolName, "tool %q wait_for has neither query nor view", toolName)
-			return Step{}, false
 		}
 
 	case "keypress":
@@ -693,6 +752,15 @@ func (cc *compiler) compileTool(t ToolDef) Tool {
 				s.When = body.When
 			}
 			tool.Steps = append(tool.Steps, s)
+			// Desugar a step's `then:` post-condition into a trailing signal wait, so
+			// the step completes only once the named signal holds. It inherits the
+			// step's When, so an optional step and its post-condition skip together.
+			if then := strings.TrimSpace(body.Then); then != "" {
+				if ws, ok := cc.compileSignalWait(then, defaultWaitTimeoutMs, t.Name); ok {
+					ws.When = s.When
+					tool.Steps = append(tool.Steps, ws)
+				}
+			}
 		}
 	}
 	if tool.Steps == nil {
