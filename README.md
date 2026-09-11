@@ -160,6 +160,50 @@ rationale live in [`vendor/webmcp-tool/NOTES.md`](vendor/webmcp-tool/NOTES.md).
   effectively unsupported in reference clients — which is why tools never cross a
   navigation.
 
+## Events
+
+Every tool call — an agent's through `document.modelContext` (native or
+polyfilled), or one through `window.__sightkick.call` — dispatches a
+`sightkick:tool` **CustomEvent** on `document`: one `phase: "start"` as the call
+begins, one `phase: "end"` when it finishes, sharing a `callId`.
+
+| `detail` field | Phase | What |
+|---|---|---|
+| `phase` | both | `"start"` or `"end"`. |
+| `tool` | both | The tool name. |
+| `callId` | both | Random per call; pairs a start with its end. |
+| `via` | both | `"modelContext"` (the WebMCP surface) or `"call"` (the console/host API). |
+| `argKeys` | both | The argument **names** the caller passed. |
+| `path` | both | The path the call ran against. |
+| `polyfilled` | both | Whether `document.modelContext` is sightkick's polyfill or the browser's own. |
+| `ir` | both | The loaded IR's name. |
+| `ok` | end | Whether the tool succeeded. |
+| `skipped` | end | The idempotency guard held, so the steps never ran. |
+| `durationMs` | end | Wall-clock duration of the call. |
+| `error` | end | The failure message, truncated to 200 chars (only when `ok` is false). |
+
+Argument **values** and result **values** never appear in an event — only
+argument key names — so a tool call carrying what a user typed (a name, an
+address, a card) can't leak through a page's telemetry.
+
+sightkick ships **no analytics adapters** and calls no endpoint of its own. It
+dispatches the event; forwarding it is the page's business:
+
+```js
+document.addEventListener('sightkick:tool', (e) => {
+  const d = e.detail;
+  if (d.phase === 'end') analytics.track('sightkick_tool', d);  // whatever the page already uses
+});
+```
+
+The optional **meta tools** (`meta:` in the tool layer — see the
+`sightkick-authoring` skill) publish a second event on the same channel,
+`sightkick:meta`, whose `detail` is `kind` (`"request_tool"` or
+`"agent_feedback"`) plus that tool's own fields — `name`, `description`,
+`example_call`, or `tool`, `rating`, `note`, each trimmed and length-capped —
+alongside `path` and `ir`. They emit no `sightkick:tool`: they run no steps, so
+there is no execution to measure.
+
 ## The two formats
 
 - **`.sightmap/` corpus** — the sightmap authority (views, components,

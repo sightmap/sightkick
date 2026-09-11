@@ -1,5 +1,7 @@
 import type { Field, Guard, Return, Step, Suggestion, Tool } from "./ir.js";
 import { clickElement, extract, interpolate, resolveQuery, typeInto } from "./dom.js";
+import { startToolEvent, type ToolVia } from "./events.js";
+import { describeError } from "./errors.js";
 
 export interface ToolResult {
   ok: boolean;
@@ -23,6 +25,8 @@ export interface RunOptions {
   log?: (msg: string) => void;
   /** Cancels an in-flight tool (e.g. an agent's stop button). */
   signal?: AbortSignal;
+  /** How the caller reached this tool; reported on the sightkick:tool event. */
+  via?: ToolVia;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -249,7 +253,22 @@ function computeReturn(ret: Return, args: Record<string, unknown>): ToolResult {
  */
 export async function runTool(tool: Tool, args: Record<string, unknown> = {}, options: RunOptions = {}): Promise<ToolResult> {
   const opts = resolveOptions(options);
+  // Both call paths (the WebMCP execute wrapper and window.__sightkick.call)
+  // funnel through here, so one span covers every tool execution.
+  const endEvent = startToolEvent(tool.name, options.via ?? "call", args, opts.currentPath);
+  try {
+    const result = await execute(tool, args, opts);
+    endEvent(result);
+    return result;
+  } catch (err) {
+    // Steps already turn their failures into ok:false, so a throw is a bug —
+    // but a subscriber still gets an end for the start it saw, not a hung span.
+    endEvent({ ok: false, message: describeError(err) });
+    throw err;
+  }
+}
 
+async function execute(tool: Tool, args: Record<string, unknown>, opts: ResolvedOptions): Promise<ToolResult> {
   if (tool.ensureView && !routeMatches(tool.ensureView.route, opts.currentPath)) {
     opts.log(`ensure_view: "${tool.name}" expects ${tool.ensureView.view} (${tool.ensureView.route}) but path is ${opts.currentPath}; proceeding best-effort`);
   }

@@ -57,13 +57,15 @@ version: 1                 # optional (defaults to 1); set it once
 name: myapp                # optional — the IR name; defaults to the app dir's name
 corpus: ../.sightmap       # optional — path to the corpus, relative to .sightkick/;
                            #   defaults to the sibling ../.sightmap
+meta: { ... }              # optional — the built-in meta tools (see below)
 tools: [ ... ]             # the tools (at least one across the whole directory)
 journeys: [ ... ]          # optional
 ```
 
 The singular fields (`version`/`name`/`corpus`) are taken from whichever file
-sets them (a conflict warns); `tools` and `journeys` accumulate. Most apps set
-`version`/`name` in the first file and never touch `corpus`.
+sets them (a conflict warns); `tools` and `journeys` accumulate, and `meta`
+merges by OR (switched on in any file = on). Most apps set `version`/`name` in
+the first file and never touch `corpus`.
 
 ## Tools
 
@@ -212,6 +214,32 @@ journeys:
 Each journey needs **≥2 steps** to produce guidance edges. A tool shared across
 journeys accumulates the union of its successors. Journeys never navigate or run
 anything — they only shape the breadcrumbs in results.
+
+## Meta tools (optional)
+
+```yaml
+meta:
+  request_tool: true       # "the tool I need isn't here"
+  agent_feedback: true     # "here's how that call went"
+```
+
+Two built-in tools the **runtime** registers when you switch them on. You don't
+author them: they reference no components, run no steps, and change nothing on
+the page. They are offered on **every view** (a missing tool is not a per-view
+fact) and each records what the agent says as a `sightkick:meta` DOM event the
+page can forward wherever it already sends things (README → Events).
+
+- **`request_tool(name, description, example_call?)`** — an agent asks for a tool
+  this layer doesn't have yet. It is the only signal you get about the gap
+  between what you expose and what agents arrive looking for; read the requests
+  and let them pick your next tools.
+- **`agent_feedback(tool?, rating, note?)`** — `worked` / `partly` / `failed`,
+  plus a note. With it enabled, a **failed** tool result also carries a guidance
+  breadcrumb pointing at it, so the agent is asked while the failure is fresh.
+
+Both are off unless `meta:` says otherwise. An authored tool named
+`request_tool` or `agent_feedback` collides with the built-in of that name and
+is reported at build time — rename it or drop it from `meta:`.
 
 ## Worked example (a task-list app)
 

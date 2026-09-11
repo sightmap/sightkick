@@ -1,6 +1,10 @@
 {
   "version": 1,
   "name": "todo",
+  "meta": {
+    "requestTool": true,
+    "agentFeedback": true
+  },
   "views": [
     {
       "name": "TodoList",

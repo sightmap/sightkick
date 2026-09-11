@@ -159,10 +159,20 @@ type ViewRef struct {
 	Route string `json:"route"`
 }
 
+// Meta switches on sightkick's built-in meta tools — tools ABOUT the tool layer
+// rather than about the app, which the runtime registers itself (they have no
+// compiled steps, and the generator never emits them into Tools). They are
+// offered on every view: "the tool I need isn't here" is not a per-view fact.
+type Meta struct {
+	RequestTool   bool `json:"requestTool"`
+	AgentFeedback bool `json:"agentFeedback"`
+}
+
 // IR is the whole compiled artifact.
 type IR struct {
 	Version int       `json:"version"`
 	Name    string    `json:"name"`
+	Meta    *Meta     `json:"meta,omitempty"`
 	Views   []ViewRef `json:"views"`
 	Tools   []Tool    `json:"tools"`
 	// The journey graph deliberately stays out of the IR. Per-tool Guidance
