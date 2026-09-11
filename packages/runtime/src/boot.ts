@@ -4,6 +4,7 @@ import {
   projectFragments,
   routeMatches,
   runTool,
+  scopedFragments,
   type ActionStatus,
   type ActionView,
   type Fragment,
@@ -215,18 +216,13 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
     }
   };
 
-  // The current view's fragment base set: fragments of tools offered on this view
-  // (same ensure_view rule as tool registration), plus view-agnostic tools. This
-  // is deliberately just the base set; the 1-hop guidance horizon + distance
-  // tiering is sites-90dc.
+  // The fragments to offer for the current view: the base set (tools offered
+  // here) plus a 1-hop guidance horizon (the immediate next step), each tagged
+  // with its distance (sites-90dc).
   const currentFragments = (): Fragment[] => {
     const ir = api.ir;
     if (!ir) return [];
-    const path = currentPath();
-    return projectFragments(ir).filter((f) => {
-      const tool = ir.tools.find((t) => t.name === f.tool);
-      return !tool?.ensureView || routeMatches(tool.ensureView.route, path);
-    });
+    return scopedFragments(ir, currentPath());
   };
 
   // Always-on meta tools (sites-b573): the universal fallback surface. exec_actions

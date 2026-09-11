@@ -396,6 +396,14 @@ export interface Fragment {
   label: string;
   /** Param names the fragment interpolates — pluck fragments by these. */
   uses: string[];
+  /** Owning tool's view (its ensure_view), if any. State-independent provenance. */
+  view?: string;
+  /**
+   * Distance from the current view, set only by scopedFragments: 0 = a tool
+   * offered on the current view, 1 = a tool one navigation away (reached via the
+   * current view's tools' guidance). Absent in the raw projectFragments index.
+   */
+  distance?: number;
 }
 
 /** Every param a fragment interpolates, including its when-guard (sorted, deduped). */
@@ -421,9 +429,52 @@ export function projectFragments(ir: IR): Fragment[] {
         op: step.op,
         label: describeAction(step),
         uses: fragmentUses(step),
+        ...(tool.ensureView ? { view: tool.ensureView.view } : {}),
       });
     });
   }
+  return out;
+}
+
+/**
+ * The fragments an agent should see for the current path: the base set (tools
+ * offered on this view) plus a 1-hop horizon (tools one navigation away, reached
+ * via the base tools' guidance), each tagged with its `distance` (0 or 1). This
+ * is get_fragments' contextual scope (sites-90dc): don't dump the whole corpus,
+ * but don't hard-cut at the current view either — surface the immediate next step
+ * so an agent can pre-compose across a navigation.
+ *
+ * Reachability rides the per-tool guidance graph only (Suggestion[]); we stop at
+ * one hop deliberately — deeper is journey territory. State is the route/view.
+ */
+export function scopedFragments(ir: IR, path: string): Fragment[] {
+  const byTool = new Map<string, Fragment[]>();
+  for (const f of projectFragments(ir)) {
+    const list = byTool.get(f.tool);
+    if (list) list.push(f);
+    else byTool.set(f.tool, [f]);
+  }
+
+  // Base: tools offered on the current view (same ensure_view rule as tool
+  // registration; a view-agnostic tool is offered everywhere).
+  const base = ir.tools.filter((t) => !t.ensureView || routeMatches(t.ensureView.route, path));
+  const baseNames = new Set(base.map((t) => t.name));
+
+  // 1-hop horizon: tools the base tools' guidance points at that aren't already
+  // in the base. Deduped across suggestions.
+  const horizonNames = new Set<string>();
+  for (const t of base) {
+    for (const s of t.guidance ?? []) {
+      if (!baseNames.has(s.tool)) horizonNames.add(s.tool);
+    }
+  }
+
+  const out: Fragment[] = [];
+  const emit = (name: string, distance: number) => {
+    for (const f of byTool.get(name) ?? []) out.push({ ...f, distance });
+  };
+  for (const name of baseNames) emit(name, 0);
+  for (const name of horizonNames) emit(name, 1);
   return out;
 }
 
