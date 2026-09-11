@@ -4,8 +4,8 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // IR firewall end-to-end.
 import todoIr from "../../../generator/internal/gen/testdata/todo.ir.json";
 import { boot } from "../src/index.js";
-import { runTool } from "../src/executor.js";
-import type { IR, Tool } from "../src/ir.js";
+import { execActions, projectFragments, runTool } from "../src/executor.js";
+import type { IR, Query, Step, Tool } from "../src/ir.js";
 import { mountTodo } from "../demo/todo-app.js";
 
 const ir = todoIr as unknown as IR;
@@ -153,6 +153,154 @@ describe("keypress step", () => {
     const res = await runTool(pressTool, {}, fast);
     expect(res.ok).toBe(false);
     expect(res.message).toMatch(/keypress: no key/);
+  });
+});
+
+describe("L1 resumable executor (execActions)", () => {
+  const q = (sel: string): Query => ({ parts: [{ locators: [sel] }] });
+
+  beforeEach(() => {
+    history.replaceState({}, "", "/cart");
+    document.body.innerHTML = `
+      <button id="continue">Continue to checkout</button>
+      <button id="second">Second</button>
+    `;
+  });
+
+  it("stops at the first unresolved action, returns observed state + the untried tail, then resumes", async () => {
+    let secondClicks = 0;
+    document.querySelector("#second")!.addEventListener("click", () => {
+      secondClicks++;
+    });
+
+    // click (ok) -> waitFor a route that never comes (a modal is blocking) ->
+    // click. Mirrors a18d: the interposed modal wedges the middle wait.
+    const actions: Step[] = [
+      { op: "click", query: q("#continue") },
+      { op: "waitFor", route: "/checkout", timeoutMs: 50 },
+      { op: "click", query: q("#second") },
+    ];
+
+    const first = await execActions(actions, {}, fast);
+    expect(first.done).toBe(false);
+    expect(first.completedThrough).toBe(1); // only the first click completed
+    expect(first.interrupt?.at).toBe(1);
+    expect(first.interrupt?.reason).toMatch(/timed out.*route \/checkout/);
+    expect(first.interrupt?.observed.path).toBe("/cart");
+    // The tail begins with the interrupted action, so a resume retries it.
+    expect(first.remaining).toHaveLength(2);
+    expect(first.remaining[0]).toBe(actions[1]);
+    expect(secondClicks).toBe(0); // the action after the wait never ran
+
+    // Handle the interrupt (dismiss modal -> navigation), then resume with the tail.
+    history.pushState({}, "", "/checkout");
+    const resumed = await execActions(first.remaining, {}, fast);
+    expect(resumed.done).toBe(true);
+    expect(resumed.completedThrough).toBe(2);
+    expect(resumed.remaining).toEqual([]);
+    expect(secondClicks).toBe(1);
+  });
+
+  it("runs a clean list straight through to done", async () => {
+    const actions: Step[] = [
+      { op: "click", query: q("#continue") },
+      { op: "click", query: q("#second") },
+    ];
+    const res = await execActions(actions, {}, fast);
+    expect(res.done).toBe(true);
+    expect(res.completedThrough).toBe(2);
+    expect(res.interrupt).toBeUndefined();
+    expect(res.remaining).toEqual([]);
+    expect(res.remainingView).toEqual([]);
+  });
+
+  // sites-be76: the tail/interrupt is projected to a readable {op, target} form —
+  // the legend that makes the raw compiled tail intelligible without parsing
+  // locator JSON. It KEEPS the predicate discriminators (the author's semantic
+  // handle), and stays index-aligned with the raw `remaining` used for resume.
+  it("projects a readable, predicate-preserving view of the tail, aligned with remaining", async () => {
+    const dismiss: Step = {
+      op: "click",
+      query: {
+        parts: [
+          { locators: [".jtpsdk-popup-modal"] },
+          {
+            locators: [".jtpsdk-popup-modal button"],
+            preds: [{ property: "label", extractor: { kind: "raw_text" }, op: "*=", value: "flights only", ci: true }],
+          },
+        ],
+      },
+    };
+    const actions: Step[] = [
+      { op: "click", query: q("#continue") },
+      { op: "waitFor", query: q("#never-appears"), timeoutMs: 50 }, // no match -> interrupt
+      dismiss,
+    ];
+
+    const res = await execActions(actions, {}, fast);
+    expect(res.done).toBe(false);
+    expect(res.interrupt?.at).toBe(1);
+    // The interrupt summary is readable, not a locator-array dump.
+    expect(res.interrupt?.action).toBe("waitFor #never-appears");
+    // remainingView parallels remaining 1:1 and renders predicates compactly.
+    expect(res.remainingView).toHaveLength(res.remaining.length);
+    expect(res.remainingView[0]).toEqual({ op: "waitFor", target: "#never-appears" });
+    expect(res.remainingView[1]).toEqual({
+      op: "click",
+      target: '.jtpsdk-popup-modal .jtpsdk-popup-modal button[label*="flights only" i]',
+    });
+  });
+});
+
+// sites-7eba: fragment provenance index. Tool steps are a parts bin an agent
+// composes execActions from; projectFragments makes each step pluckable by a
+// stable id and by the params it uses, without string-matching interpolations.
+describe("fragment index (projectFragments / fragments())", () => {
+  const contactIr: IR = {
+    version: 1,
+    name: "t",
+    views: [],
+    tools: [
+      {
+        name: "set_contact",
+        mode: "live",
+        inputSchema: { type: "object", properties: {} },
+        steps: [
+          {
+            op: "fill",
+            query: {
+              parts: [
+                {
+                  locators: ["input.first"],
+                  preds: [{ property: "label", extractor: { kind: "raw_text" }, op: "=", value: "First name" }],
+                },
+              ],
+            },
+            value: "{{firstName}}",
+          },
+          { op: "click", query: { parts: [{ locators: ["button.save"] }] } },
+        ],
+      },
+    ],
+  };
+
+  it("projects each tool step to a pluckable {id, tool, op, label, uses}", () => {
+    const frags = projectFragments(contactIr);
+    expect(frags).toHaveLength(2);
+    // Pluck by the param it fills, not by matching value === '{{firstName}}'.
+    expect(frags[0]).toMatchObject({ id: "set_contact.0", tool: "set_contact", index: 0, op: "fill", uses: ["firstName"] });
+    // The label keeps the authored predicate discriminator, so it reads clearly.
+    expect(frags[0]!.label).toContain('[label="First name"]');
+    expect(frags[1]).toMatchObject({ id: "set_contact.1", op: "click", uses: [] });
+  });
+
+  it("SightkickGlobal.fragments() is empty before load and populated after", () => {
+    const api = boot(undefined, { currentPath: "/" });
+    expect(api.fragments()).toEqual([]);
+    api.load(contactIr);
+    const frags = api.fragments();
+    expect(frags).toHaveLength(2);
+    expect(frags.every((f) => f.id.startsWith(f.tool + "."))).toBe(true);
   });
 });
 
