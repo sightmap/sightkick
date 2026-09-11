@@ -268,61 +268,14 @@ export function typeInto(el: Element, value: string): void {
 }
 
 /**
- * Simulate a user click faithfully enough for pointer-driven UI libraries.
- *
- * A bare el.click() dispatches only a `click` event; interaction libraries like
- * React Aria's usePress bind to pointerdown/pointerup and ignore a lone click,
- * so pickers/menus never open. We dispatch the full pointer+mouse sequence
- * (which works from main-world JS even though isTrusted is false — usePress reads
- * the events, not the trust flag) and finish with el.click() for plain onclick
- * handlers. usePress de-dups the trailing click after a press it already handled,
- * so this doesn't double-fire. (Behaviors gated on real user activation — native
- * <select> popups, showPopover(), clipboard, file/opener dialogs — still require
- * a host-driven trusted click; no main-world path can forge that.)
+ * Dispatch the full press sequence — pointerdown/mousedown/pointerup/mouseup then
+ * a real click — on `target`, at `clientX`/`clientY`. This is the shared effector
+ * for both click paths; it works from main-world JS (isTrusted is false, but
+ * interaction libraries read the events, not the trust flag), and the trailing
+ * .click() covers plain onclick handlers while usePress de-dups it after a press
+ * it already handled, so it doesn't double-fire.
  */
-export async function clickElement(el: Element): Promise<void> {
-  const t = el as HTMLElement;
-  // Click the element a USER's click would hit. A real click hit-tests at
-  // coordinates and lands on the TOPMOST element there, which for a custom
-  // element is often an inner child (e.g. <jb-select-option> > div.body) where
-  // the handler lives; an event dispatched on the resolved node bubbles UP and
-  // never reaches that child, so the click silently no-ops. So bring the node
-  // on-screen (coordinate hit-testing only works in the viewport), then dispatch
-  // at document.elementFromPoint(center). Coordinate-based, so it also reaches
-  // portal-rendered menu items rendered outside the app's own subtree.
-  //
-  // Settle race: a JUST-opened flyout/menu is still laying out for a few frames —
-  // getBoundingClientRect already reports the intended (post-scroll) position, but
-  // elementFromPoint returns the PRE-settle paint (a *different* option). An
-  // immediate hit-test would target the wrong node and no-op (below-fold dropdown
-  // options: State, DOB Month/Day/Year, phone country). So retry across animation
-  // frames — recomputing the centre each frame — until elementFromPoint resolves
-  // into the target's own subtree; fall back to the node if a short budget expires
-  // (an occluded/undecided point, dispatched on the node as before). In-viewport
-  // targets resolve on frame 1, so the fast path stays instant.
-  if (typeof t.scrollIntoView === "function" && !isInViewport(t)) {
-    t.scrollIntoView({ block: "center", inline: "center" });
-  }
-  const canHitTest = typeof document !== "undefined" && typeof document.elementFromPoint === "function";
-  let clientX = 0;
-  let clientY = 0;
-  let target: HTMLElement = t;
-  const deadline = Date.now() + 300;
-  for (;;) {
-    const r = t.getBoundingClientRect?.();
-    clientX = r ? Math.round(r.left + r.width / 2) : 0;
-    clientY = r ? Math.round(r.top + r.height / 2) : 0;
-    const hit = canHitTest ? document.elementFromPoint(clientX, clientY) : null;
-    if (hit && (hit === t || t.contains(hit))) {
-      target = hit as HTMLElement;
-      break;
-    }
-    if (!canHitTest || Date.now() >= deadline) {
-      target = t;
-      break;
-    }
-    await nextFrame();
-  }
+function dispatchPointerClick(target: HTMLElement, clientX: number, clientY: number): void {
   const init = (buttons: number): MouseEventInit => ({
     bubbles: true,
     cancelable: true,
@@ -347,6 +300,112 @@ export async function clickElement(el: Element): Promise<void> {
   emit("pointerup", 0, true);
   emit("mouseup", 0, false);
   target.click();
+}
+
+/**
+ * The deepest descendant of `root` whose box contains (x, y), by each node's OWN
+ * getBoundingClientRect. This is the offscreen-safe replacement for
+ * document.elementFromPoint: elementFromPoint returns null for a point outside
+ * the viewport (the sites-02d5 far-scroll failure), but an element's own rect is
+ * valid wherever it sits. Dispatching on this leaf lets the event bubble UP
+ * through every inner node, so a handler bound to an inner child fires even
+ * though we resolved the outer element — e.g. a custom option whose click handler
+ * lives on `<jb-select-option> > div.body`, confirmed live on jetblue: a click on
+ * the outer <jb-select-option> does nothing, one on its inner div.body commits.
+ */
+function deepestElementAt(root: HTMLElement, x: number, y: number): HTMLElement {
+  let node = root;
+  for (;;) {
+    let next: HTMLElement | null = null;
+    const kids = node.children;
+    // Last match wins: later siblings paint on top, so prefer the topmost.
+    for (let i = 0; i < kids.length; i++) {
+      const child = kids[i] as HTMLElement;
+      const r = child.getBoundingClientRect?.();
+      if (r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) next = child;
+    }
+    if (!next) return node;
+    node = next;
+  }
+}
+
+/**
+ * Simulate a user click faithfully enough for pointer-driven UI libraries
+ * (React Aria's usePress binds to pointerdown/pointerup and ignores a lone
+ * click). Two problems it must handle at once, both seen on jetblue's selects:
+ * a handler on an INNER child (dispatching on the outer resolved node bubbles
+ * past it and no-ops), and an OFFSCREEN target (a far-scrolled option).
+ *
+ * So we bring the node on-screen (some libraries hit-test their own pointerup and
+ * read an off-screen release as a cancelled press), then descend the element's
+ * OWN subtree to the deepest node at its centre and dispatch there — the event
+ * bubbles up to whichever inner node holds the handler. We do NOT use
+ * document.elementFromPoint (offscreen -> null -> the click is dropped, which was
+ * sites-02d5); deepestElementAt uses own-rects and works wherever the node sits.
+ * The elementFromPoint variant is preserved as clickElementAtPoint for the narrow
+ * "hit whatever paints on top at this point" case.
+ *
+ * (Behaviors gated on real user activation — native <select> popups,
+ * showPopover(), clipboard, file/opener dialogs — still require a host-driven
+ * trusted click; no main-world path can forge that.)
+ */
+export async function clickElement(el: Element): Promise<void> {
+  const t = el as HTMLElement;
+  if (typeof t.scrollIntoView === "function" && !isInViewport(t)) {
+    t.scrollIntoView({ block: "center", inline: "center" });
+    // Let the scroll paint so a usePress pointerup hit-test lands on the
+    // now-onscreen element. Bounded even when rAF is starved (see nextFrame).
+    await nextFrame();
+  }
+  const r = t.getBoundingClientRect?.();
+  const clientX = r ? Math.round(r.left + r.width / 2) : 0;
+  const clientY = r ? Math.round(r.top + r.height / 2) : 0;
+  dispatchPointerClick(deepestElementAt(t, clientX, clientY), clientX, clientY);
+}
+
+/**
+ * PRECISE, COORDINATE-TARGETED click — currently UNUSED; preserved (not deleted)
+ * for the narrow cases the default clickElement can't serve, and wired in only
+ * when one actually appears (gate it per-call, e.g. an IR step flag — do NOT make
+ * it the default; that is exactly what sites-02d5 undid).
+ *
+ * It hit-tests document.elementFromPoint at the element's centre and dispatches
+ * on the TOPMOST node there, retrying across animation frames until that node
+ * resolves into the target's own subtree (or a 300ms budget expires, falling back
+ * to the node). Reach for it when a click must land on an inner CHILD that
+ * carries the handler — a custom element whose listener is on
+ * `<jb-select-option> > div.body`, where an event on the outer node would bubble
+ * PAST it — or on a portal-rendered item reachable only by coordinate. The
+ * tradeoff is the sites-02d5 failure mode: for an offscreen/mid-scroll target the
+ * point resolves to null or a wrong node, so it no-ops. That is why it is not the
+ * default and must be opted into deliberately.
+ */
+export async function clickElementAtPoint(el: Element): Promise<void> {
+  const t = el as HTMLElement;
+  if (typeof t.scrollIntoView === "function" && !isInViewport(t)) {
+    t.scrollIntoView({ block: "center", inline: "center" });
+  }
+  const canHitTest = typeof document !== "undefined" && typeof document.elementFromPoint === "function";
+  let clientX = 0;
+  let clientY = 0;
+  let target: HTMLElement = t;
+  const deadline = Date.now() + 300;
+  for (;;) {
+    const r = t.getBoundingClientRect?.();
+    clientX = r ? Math.round(r.left + r.width / 2) : 0;
+    clientY = r ? Math.round(r.top + r.height / 2) : 0;
+    const hit = canHitTest ? document.elementFromPoint(clientX, clientY) : null;
+    if (hit && (hit === t || t.contains(hit))) {
+      target = hit as HTMLElement;
+      break;
+    }
+    if (!canHitTest || Date.now() >= deadline) {
+      target = t;
+      break;
+    }
+    await nextFrame();
+  }
+  dispatchPointerClick(target, clientX, clientY);
 }
 
 /**

@@ -153,31 +153,7 @@
       target.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowDown", bubbles: true }));
     }
   }
-  async function clickElement(el) {
-    const t = el;
-    if (typeof t.scrollIntoView === "function" && !isInViewport(t)) {
-      t.scrollIntoView({ block: "center", inline: "center" });
-    }
-    const canHitTest = typeof document !== "undefined" && typeof document.elementFromPoint === "function";
-    let clientX = 0;
-    let clientY = 0;
-    let target = t;
-    const deadline = Date.now() + 300;
-    for (; ; ) {
-      const r = t.getBoundingClientRect?.();
-      clientX = r ? Math.round(r.left + r.width / 2) : 0;
-      clientY = r ? Math.round(r.top + r.height / 2) : 0;
-      const hit = canHitTest ? document.elementFromPoint(clientX, clientY) : null;
-      if (hit && (hit === t || t.contains(hit))) {
-        target = hit;
-        break;
-      }
-      if (!canHitTest || Date.now() >= deadline) {
-        target = t;
-        break;
-      }
-      await nextFrame();
-    }
+  function dispatchPointerClick(target, clientX, clientY) {
     const init = (buttons) => ({
       bubbles: true,
       cancelable: true,
@@ -202,6 +178,31 @@
     emit("pointerup", 0, true);
     emit("mouseup", 0, false);
     target.click();
+  }
+  function deepestElementAt(root, x, y) {
+    let node = root;
+    for (; ; ) {
+      let next = null;
+      const kids = node.children;
+      for (let i = 0; i < kids.length; i++) {
+        const child = kids[i];
+        const r = child.getBoundingClientRect?.();
+        if (r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) next = child;
+      }
+      if (!next) return node;
+      node = next;
+    }
+  }
+  async function clickElement(el) {
+    const t = el;
+    if (typeof t.scrollIntoView === "function" && !isInViewport(t)) {
+      t.scrollIntoView({ block: "center", inline: "center" });
+      await nextFrame();
+    }
+    const r = t.getBoundingClientRect?.();
+    const clientX = r ? Math.round(r.left + r.width / 2) : 0;
+    const clientY = r ? Math.round(r.top + r.height / 2) : 0;
+    dispatchPointerClick(deepestElementAt(t, clientX, clientY), clientX, clientY);
   }
   function nextFrame() {
     return new Promise((resolve) => {
