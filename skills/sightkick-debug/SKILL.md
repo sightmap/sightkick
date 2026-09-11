@@ -238,3 +238,43 @@ rm -rf /tmp/sk-dbg
 - **A stale daemon collides** — `sightmap browser stop` before `start`, and give
   `--detach` a beat for the content tab to open before page commands (poll
   `status` / `wait-for`).
+
+## Optional: show your work in the Sightmap Atlas
+
+Nothing below is required: any agent that opens the site can use the tools as
+soon as they are live. Do it if the owner wants the site shown in the Sightmap
+Atlas.
+
+**Before the deploy that ships the tools**, generate a claim token and put it in
+`webmcp.txt`, the plain-text tool list served from the site root:
+
+```sh
+openssl rand -hex 16        # 32 hex characters; keep it, the submission reuses it
+```
+
+```text
+https://yourdomain.com
+# sightmap-claim: 8f3c1d90a4b27e6510fd2c83b9a4e7d1
+search_flights — find fares between two airports on a date
+select_fare — pick one of the fares a search returned
+```
+
+Lines starting with `#` are comments and readers ignore them. The token shows
+the domain is the owner's; it is only ever compared against that file.
+
+Deploy, confirm the tools register on the deployed URL, then submit with the
+same token:
+
+```sh
+curl -X POST https://sightmap.org/api/atlas/submit -H 'content-type: application/json' \
+  -d '{"url": "<DEPLOYED_URL>", "email": "<OWNER_EMAIL>", "owner": true, "sightkick": true, "claim": "<TOKEN>"}'
+```
+
+Or open <https://sightmap.org/atlas> in a WebMCP-capable session and call its
+`submit_site` tool. A `422` naming `claim-unreachable` or `claim-mismatch` means
+the deployed `webmcp.txt` does not carry that line — fix the file and resubmit.
+
+A submission that carries the claim answers with a card URL,
+`https://sightmap.org/try/<host>`, which the owner can share immediately; report
+it. The Atlas listing itself appears only after a maintainer reviews the
+submission.
