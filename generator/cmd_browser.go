@@ -111,15 +111,20 @@ func runBrowser(args []string) error {
 		return err
 	}
 
-	// 2) Compose the combined runtime+IR script (the bundle auto-boots and sets
-	//    window.__sightkick; then we load the IR to register its view-scoped
-	//    tools). Written to a stable temp path so a re-inject overwrites it and
-	//    it works whether sightmap persists the content or the path.
+	// 2) Compose the combined runtime+IR script. Set window.__sightkick_ir BEFORE
+	//    the bundle so the entry point loads it as part of boot (boot reads
+	//    window.__sightkick_ir if the host set one before the bundle ran). We must
+	//    NOT append window.__sightkick.load(ir) after the bundle: boot is now
+	//    readiness-gated (sites-67f3), so on a persisted document_start re-injection
+	//    window.__sightkick doesn't exist yet when the trailing line would run — the
+	//    IR would silently never load. Written to a stable temp path so a re-inject
+	//    overwrites it and it works whether sightmap persists the content or the path.
 	var b strings.Builder
-	b.Write(runtimebundle.JS)
-	b.WriteString("\n;try{window.__sightkick.load(")
+	b.WriteString("window.__sightkick_ir=")
 	b.Write(irJSON)
-	b.WriteString(");}catch(e){console.warn('[sightkick] IR load failed',e);}\n")
+	b.WriteString(";\n")
+	b.Write(runtimebundle.JS)
+	b.WriteString("\n")
 	scriptPath := filepath.Join(os.TempDir(), "sightkick-inject.js")
 	if err := os.WriteFile(scriptPath, []byte(b.String()), 0o644); err != nil {
 		return fmt.Errorf("write inject script: %w", err)
