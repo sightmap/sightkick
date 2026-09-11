@@ -1,7 +1,5 @@
-github.com/sightmap/sightmap/go v0.29.0 h1:vnAREwkvfdygIzrUZvVR59PQsiZ6MMYSXCM+t8AQw1E=
-github.com/sightmap/sightmap/go v0.29.0/go.mod h1:qjZ325Jae5+Pr0BKr9E+T60DL0YFwuqTlXiwzijp//M=
-github.com/sightmap/sightmap/go v0.31.3-0.20260910214719-f6ac005ba83a h1:/3pOSuQyF0RwSrqBmKThENrCuQTyXyMeMkPLKBhT580=
-github.com/sightmap/sightmap/go v0.31.3-0.20260910214719-f6ac005ba83a/go.mod h1:qjZ325Jae5+Pr0BKr9E+T60DL0YFwuqTlXiwzijp//M=
+github.com/sightmap/sightmap/go v0.32.0 h1:bhG3qDNSvu++cA+DWKoscsC++ybBKNrcSDoeP1+xeRk=
+github.com/sightmap/sightmap/go v0.32.0/go.mod h1:qjZ325Jae5+Pr0BKr9E+T60DL0YFwuqTlXiwzijp//M=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
