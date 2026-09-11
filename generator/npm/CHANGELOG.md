@@ -1,5 +1,37 @@
 # @sightmap/sightkick
 
+## 0.7.0
+
+### Minor Changes
+
+- 2c10d22: Support the `raw_text` extract mode (SEP-0013).
+
+  The generator now compiles `extract: raw_text` to a first-class extractor kind — previously it fell through to a bogus raw-CSS fallback (`within: "raw_text"`), so `--via webmcp` silently failed. The runtime reads `raw_text` as the node's **own literal text** (the concatenation of its direct text-node children, whitespace-normalized) — never the accessibility name and never `innerText`. This mirrors the sightmap lib's offline `node.RawText`, so a `raw_text` predicate matches identically offline and at runtime.
+
+  Verified live on jetblue.com: `select_fare` now resolves `SubFare[tier="Main"]` — a fare-tile heading whose accessibility name welds in a CSS `::after` "Most popular" badge — and commits the leg (was a silent timeout).
+
+### Patch Changes
+
+- 5112839: Fix the runtime click hanging forever when `requestAnimationFrame` is starved.
+
+  `clickElement`'s hit-test settle loop (added to commit below-the-fold dropdown options) awaited the next animation frame, and its 300ms wall-clock deadline was only checked _between_ frames. So when rAF stops firing — a backgrounded/throttled tab, or a wedged SPA renderer that has stopped painting — the `await` never resolved and the whole tool promise hung indefinitely (every other step is bounded, so this was the sole unbounded path).
+
+  `nextFrame()` now races rAF against a short timer, so the settle loop keeps turning and honors its deadline (falling back to node dispatch) even when no frame ever fires. When rAF is healthy it still wins the race, so the settle fast-path is unchanged.
+
+  Surfaced driving jetblue checkout: `set_passenger` hung in the Title option click while `requestAnimationFrame` fired 0× in 2s.
+
+- 5112839: Fix `sightkick browser --webmcp` naming Chrome flags that aren't real. It forced
+  `--enable-blink-features=ModelContext,ModelContextTesting` and
+  `--enable-features=DevToolsWebMCPSupport`; neither is a Chromium feature, so Chrome
+  silently ignores them. The path still reached native WebMCP in practice because the
+  managed Chrome for Testing enables the feature by default — which is exactly why the
+  bogus flags went unnoticed. `--webmcp` now passes the real switch,
+  `--enable-features=WebMCPTesting` (the command-line form of
+  `chrome://flags/#enable-webmcp-testing`): correct on its own, and required if the
+  session runs against Google Chrome stable rather than the managed CfT. The
+  `sightkick-debug` skill and the vendored inspector `NOTES.md` are corrected to
+  match. See sightmap/sightmap#413.
+
 ## 0.6.0
 
 ### Minor Changes
