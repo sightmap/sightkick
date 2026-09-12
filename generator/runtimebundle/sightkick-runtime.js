@@ -689,7 +689,16 @@
   }
 
   // src/index.ts
-  if (typeof window !== "undefined") {
+  function isBootableDocument() {
+    try {
+      if (window.top !== window.self) return false;
+    } catch {
+      return false;
+    }
+    const proto = window.location.protocol;
+    return proto === "http:" || proto === "https:";
+  }
+  if (typeof window !== "undefined" && isBootableDocument()) {
     whenBootable(() => {
       const api = boot(window.__sightkick_ir);
       window.__sightkick = api;
