@@ -615,6 +615,53 @@
     );
   }
 
+  // src/autoboot.ts
+  function hasModelContext(doc) {
+    return doc.modelContext != null;
+  }
+  function whenBootable(run, opts = {}) {
+    const doc = opts.doc ?? (typeof document !== "undefined" ? document : void 0);
+    const win = opts.win ?? (typeof window !== "undefined" ? window : void 0);
+    if (!doc || !win) return;
+    if (doc.readyState !== "loading") {
+      run();
+      return;
+    }
+    const settleMs = opts.settleMs ?? 800;
+    const nonNativeGraceMs = opts.nonNativeGraceMs ?? 500;
+    const pollMs = opts.pollMs ?? 50;
+    const now = opts.now ?? (() => Date.now());
+    const t0 = now();
+    let settleStart = 0;
+    let done = false;
+    const fire = () => {
+      if (done) return;
+      done = true;
+      run();
+    };
+    const bootable = () => {
+      if (!settleStart) {
+        const loaded = doc.readyState === "complete";
+        if (loaded && hasModelContext(doc)) {
+          settleStart = now();
+        } else if (loaded && now() - t0 >= nonNativeGraceMs) {
+          settleStart = now();
+        } else {
+          return false;
+        }
+      }
+      return now() - settleStart >= settleMs;
+    };
+    const tick = () => {
+      if (done) return;
+      if (bootable()) fire();
+      else win.setTimeout(tick, pollMs);
+    };
+    doc.addEventListener("DOMContentLoaded", tick, { once: true });
+    win.addEventListener("load", tick, { once: true });
+    tick();
+  }
+
   // src/client.ts
   function createClient(ctx = ensureModelContext()) {
     if (!ctx) throw new Error("createClient: no document.modelContext available");
@@ -642,9 +689,20 @@
   }
 
   // src/index.ts
-  if (typeof window !== "undefined") {
-    const api = boot(window.__sightkick_ir);
-    window.__sightkick = api;
-    if (!window.__sightkick_ir) installIrChannel(api);
+  function isBootableDocument() {
+    try {
+      if (window.top !== window.self) return false;
+    } catch {
+      return false;
+    }
+    const proto = window.location.protocol;
+    return proto === "http:" || proto === "https:";
+  }
+  if (typeof window !== "undefined" && isBootableDocument()) {
+    whenBootable(() => {
+      const api = boot(window.__sightkick_ir);
+      window.__sightkick = api;
+      if (!window.__sightkick_ir) installIrChannel(api);
+    });
   }
 })();
