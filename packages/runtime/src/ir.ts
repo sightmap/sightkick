@@ -70,6 +70,15 @@ export interface Step {
    */
   when?: string;
   timeoutMs?: number;
+  /**
+   * Semantic label in corpus vocabulary, set by the generator: the source
+   * compquery for a query step (e.g. `FormField[label*="First" i] FieldInput`),
+   * the destination view name for navigate/goto/waitFor-view, the key for
+   * keypress. Provenance/label only — the runtime shows it in fragments and
+   * status/error projections but still selects via `query`/`route`/`url`. Absent
+   * on IRs generated before this field; renderers fall back to the raw locator.
+   */
+  target?: string;
 }
 
 /**

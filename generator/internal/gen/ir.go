@@ -81,6 +81,15 @@ type Step struct {
 	Query *Query `json:"query,omitempty"`
 	Value string `json:"value,omitempty"`
 	Key   string `json:"key,omitempty"`
+	// Target is the step's semantic label in CORPUS vocabulary: the source
+	// compquery for a query step (e.g. `FormField[label*="First" i] FieldInput`),
+	// the destination view name for navigate/goto/waitFor-view, the key for
+	// keypress. It is provenance/label only — an opaque handle the runtime shows in
+	// fragments and error/status projections so an agent composes in component/view
+	// names instead of raw locators/URLs. The runtime never RESOLVES it (it selects
+	// via Query/Route/URL as before), so the IR firewall holds: this is the same
+	// category as a tool name, not a sightmap construct the runtime interprets.
+	Target string `json:"target,omitempty"`
 	// When is an optional skip guard: the runtime skips the step when When
 	// interpolates to empty (an omitted param). Steps also auto-skip when any
 	// {{param}} they interpolate is absent from args, so When is only needed to
