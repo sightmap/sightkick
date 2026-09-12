@@ -646,23 +646,29 @@
     };
     const metaControllers = [];
     let metaRegistered = false;
-    const registerMetaTool = (def) => {
+    const liveCtx = () => typeof document !== "undefined" && document.modelContext || ctx;
+    const registerMetaTool = async (def) => {
+      const target = liveCtx();
+      if (!target) return;
       const controller = new AbortController();
       metaControllers.push(controller);
-      Promise.resolve(ctx.registerTool(def, { signal: controller.signal })).catch(
-        (e) => console.warn(`[sightkick] registerTool "${def.name}" rejected: ${describeError(e)}`)
-      );
+      try {
+        await target.registerTool(def, { signal: controller.signal });
+      } catch (e) {
+        console.warn(`[sightkick] registerTool "${def.name}" rejected: ${describeError(e)}`);
+      }
     };
     const registerMetaTools = async () => {
       if (metaRegistered || !ctx) return;
       metaRegistered = true;
       let present = /* @__PURE__ */ new Set();
       try {
-        present = new Set((await ctx.getTools()).map((t) => t.name));
+        const target = liveCtx();
+        if (target) present = new Set((await target.getTools()).map((t) => t.name));
       } catch {
       }
       if (!present.has("exec_actions")) {
-        registerMetaTool({
+        await registerMetaTool({
           name: "exec_actions",
           description: "Run an ordered list of action fragments resumably. Pass fragment ids (from get_fragments) in `refs` and any parameter values in `args`. Returns how far it got; if an action is interrupted (e.g. an unexpected modal, a missing field), it STOPS instead of hanging and returns the reason plus the remaining fragment refs. Handle the interruption (dismiss the modal, call another tool), then call exec_actions again with the returned `remaining` refs to resume where it left off.",
           inputSchema: {
@@ -698,7 +704,7 @@
         });
       }
       if (!present.has("get_fragments")) {
-        registerMetaTool({
+        await registerMetaTool({
           name: "get_fragments",
           description: "List the action fragments available on the current view. Each is a pluckable step {id, tool, op, label, uses}: `label` reads in component/view vocabulary, `uses` names the parameters it needs. Compose an ordered list of `id`s and pass them to exec_actions.",
           inputSchema: { type: "object", properties: {} },
