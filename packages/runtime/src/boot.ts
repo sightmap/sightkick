@@ -235,12 +235,26 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
   // churn, so they persist across SPA navigations.
   const metaControllers: AbortController[] = [];
   let metaRegistered = false;
-  const registerMetaTool = (def: WebMCPToolDef) => {
+  // Re-read document.modelContext at call time rather than closing over the ctx
+  // captured at boot: on an SPA that defers boot to post-settle (sites-67f3),
+  // Angular's Zone re-wraps document.modelContext between boot and the async
+  // registerMetaTools pass, so the captured ctx can be stale and its registerTool
+  // never lands in the live registry. The synchronous view-tool registration in
+  // refresh() doesn't hit this because it runs before any await.
+  const liveCtx = (): ModelContext | undefined =>
+    (typeof document !== "undefined" && (document as unknown as { modelContext?: ModelContext }).modelContext) || ctx;
+  const registerMetaTool = async (def: WebMCPToolDef) => {
+    const target = liveCtx();
+    if (!target) return;
     const controller = new AbortController();
     metaControllers.push(controller);
-    Promise.resolve(ctx!.registerTool(def, { signal: controller.signal })).catch((e) =>
-      console.warn(`[sightkick] registerTool "${def.name}" rejected: ${describeError(e)}`),
-    );
+    try {
+      // Await so back-to-back registrations don't race on the native surface
+      // (JetBlue drops the second of two same-tick registerTool calls).
+      await target.registerTool(def, { signal: controller.signal });
+    } catch (e) {
+      console.warn(`[sightkick] registerTool "${def.name}" rejected: ${describeError(e)}`);
+    }
   };
   // Register the always-on meta tools exactly once PER DOCUMENT, not per boot
   // instance. On an SPA like JetBlue the injected bundle boots in several
@@ -254,12 +268,13 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
     metaRegistered = true;
     let present = new Set<string>();
     try {
-      present = new Set((await ctx.getTools()).map((t) => t.name));
+      const target = liveCtx();
+      if (target) present = new Set((await target.getTools()).map((t) => t.name));
     } catch {
       /* getTools may reject on a transitional surface; fall back to registering */
     }
     if (!present.has("exec_actions")) {
-      registerMetaTool({
+      await registerMetaTool({
         name: "exec_actions",
       description:
         "Run an ordered list of action fragments resumably. Pass fragment ids (from get_fragments) " +
@@ -301,7 +316,7 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
       });
     }
     if (!present.has("get_fragments")) {
-      registerMetaTool({
+      await registerMetaTool({
         name: "get_fragments",
       description:
         "List the action fragments available on the current view. Each is a pluckable step " +
