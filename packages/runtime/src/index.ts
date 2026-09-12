@@ -21,7 +21,30 @@ export * from "./ir.js";
  * whenBootable runs synchronously when the document is already loaded (a live
  * inject or a direct install), so nothing changes for those paths.
  */
-if (typeof window !== "undefined") {
+
+/**
+ * Only boot in a real, top-level page document. The persisted document_start
+ * injection also fires on the transient about:blank Chrome shows before it
+ * navigates, and in subframes/iframes. Booting in the about:blank document is
+ * actively harmful on a native WebMCP surface that persists across the same-frame
+ * navigation: that boot registers the always-on tools bound to the (about-to-be
+ * stale) blank context, and the real page's boot then skips re-registering them
+ * (they already appear in the shared registry) — so the tools run against
+ * location "blank" instead of the real path. Gating to a real http(s) top
+ * document keeps registration in the context whose location/IR are correct.
+ */
+function isBootableDocument(): boolean {
+  try {
+    if (window.top !== window.self) return false; // subframe
+  } catch {
+    return false; // cross-origin top → we're framed; don't boot
+  }
+  const proto = window.location.protocol;
+  if (proto !== "http:" && proto !== "https:") return false; // about:blank, data:, etc.
+  return true;
+}
+
+if (typeof window !== "undefined" && isBootableDocument()) {
   whenBootable(() => {
     const api = boot(window.__sightkick_ir);
     window.__sightkick = api;
