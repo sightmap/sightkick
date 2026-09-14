@@ -437,10 +437,34 @@
           index,
           op: step.op,
           label: describeAction(step),
-          uses: fragmentUses(step)
+          uses: fragmentUses(step),
+          ...tool.ensureView ? { view: tool.ensureView.view } : {}
         });
       });
     }
+    return out;
+  }
+  function scopedFragments(ir, path) {
+    const byTool = /* @__PURE__ */ new Map();
+    for (const f of projectFragments(ir)) {
+      const list = byTool.get(f.tool);
+      if (list) list.push(f);
+      else byTool.set(f.tool, [f]);
+    }
+    const base = ir.tools.filter((t) => !t.ensureView || routeMatches(t.ensureView.route, path));
+    const baseNames = new Set(base.map((t) => t.name));
+    const horizonNames = /* @__PURE__ */ new Set();
+    for (const t of base) {
+      for (const s of t.guidance ?? []) {
+        if (!baseNames.has(s.tool)) horizonNames.add(s.tool);
+      }
+    }
+    const out = [];
+    const emit = (name, distance) => {
+      for (const f of byTool.get(name) ?? []) out.push({ ...f, distance });
+    };
+    for (const name of baseNames) emit(name, 0);
+    for (const name of horizonNames) emit(name, 1);
     return out;
   }
   async function execActions(actions, args = {}, options = {}) {
@@ -638,11 +662,7 @@
     const currentFragments = () => {
       const ir = api.ir;
       if (!ir) return [];
-      const path = currentPath();
-      return projectFragments(ir).filter((f) => {
-        const tool = ir.tools.find((t) => t.name === f.tool);
-        return !tool?.ensureView || routeMatches(tool.ensureView.route, path);
-      });
+      return scopedFragments(ir, currentPath());
     };
     const metaControllers = [];
     let metaRegistered = false;
