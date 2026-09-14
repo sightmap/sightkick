@@ -1,5 +1,14 @@
-import type { IR, Tool } from "./ir.js";
-import { routeMatches, runTool, type RunOptions, type ToolResult } from "./executor.js";
+import type { IR, Step, Tool } from "./ir.js";
+import {
+  execActions as execActionList,
+  projectFragments,
+  routeMatches,
+  runTool,
+  type ActionStatus,
+  type Fragment,
+  type RunOptions,
+  type ToolResult,
+} from "./executor.js";
 import { ensureModelContext, isPolyfilled, type ModelContext } from "./webmcp.js";
 import { describeError } from "./errors.js";
 
@@ -29,6 +38,28 @@ export interface SightkickGlobal {
   tools(): { name: string; description?: string }[];
   /** Console convenience: invoke a tool by name. */
   call(name: string, args?: Record<string, unknown>, options?: RunOptions): Promise<ToolResult>;
+  /**
+   * L1 (sites-10b3): run an action list resumably. Takes a raw Step[] ONLY — an
+   * agent composes the list itself (from fragments/guidance) or slices a prior
+   * status's `remaining` to resume after handling an interrupt. It deliberately
+   * does NOT dispatch a tool by name: running a named tool's canned steps is a
+   * separate, explicit act (read `ir.tools[].steps`), so the engine never doubles
+   * as an opaque-tool backdoor. Returns a structured status instead of throwing or
+   * hanging at the first action that doesn't cleanly resolve.
+   */
+  execActions(
+    actions: Step[],
+    args?: Record<string, unknown>,
+    options?: RunOptions,
+  ): Promise<ActionStatus>;
+  /**
+   * L1 (sites-7eba): the fragment index for the loaded IR — every tool step as a
+   * pluckable {id, tool, op, label, uses}. An agent composing an execActions list
+   * reads this to find fragments by the params they use, instead of scanning
+   * ir.tools[].steps and string-matching interpolation values. Empty when no IR
+   * is loaded.
+   */
+  fragments(): Fragment[];
 }
 
 declare global {
@@ -137,6 +168,12 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
       const tool = findTool(this.ir, name);
       if (!tool) return Promise.resolve({ ok: false, message: `unknown tool "${name}"` });
       return runTool(tool, args, options);
+    },
+    execActions(actions, args = {}, options) {
+      return execActionList(actions, args, options);
+    },
+    fragments() {
+      return this.ir ? projectFragments(this.ir) : [];
     },
   };
 

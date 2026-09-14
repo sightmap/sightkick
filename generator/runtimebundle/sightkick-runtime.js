@@ -262,9 +262,21 @@
     const matches = resolveQuery(guard.query, args).length;
     return guard.kind === "present" ? matches > 0 : matches === 0;
   }
-  function describeTarget(step) {
-    const parts = step.query?.parts ?? [];
-    return `query ${JSON.stringify(parts.map((p) => p.locators.join("|")))}`;
+  function renderPred(p) {
+    const prop = p.property ?? "";
+    const ci = p.ci ? " i" : "";
+    return `[${prop}${p.op}"${p.value}"${ci}]`;
+  }
+  function renderTarget(step) {
+    const parts = step.query?.parts;
+    if (parts && parts.length) {
+      return parts.map((p) => (p.locators[0] ?? "*") + (p.preds ?? []).map(renderPred).join("")).join(" ");
+    }
+    if (step.route) return `route ${step.route}`;
+    if (step.url) return step.url;
+    if (step.view) return `view ${step.view}`;
+    if (step.key) return `key ${step.key}`;
+    return step.op;
   }
   function templateParamNames(s, out) {
     if (!s) return;
@@ -320,13 +332,13 @@
       }
       case "fill": {
         const el = target();
-        if (!el) throw new Error(`fill: no element for ${describeTarget(step)}`);
+        if (!el) throw new Error(`fill: no element for ${renderTarget(step)}`);
         typeInto(el, interpolate(step.value ?? "", args));
         return;
       }
       case "click": {
         const el = target();
-        if (!el) throw new Error(`click: no element for ${describeTarget(step)}`);
+        if (!el) throw new Error(`click: no element for ${renderTarget(step)}`);
         await clickElement(el);
         return;
       }
@@ -346,8 +358,7 @@
           if (opts.signal?.aborted) throw new Error("aborted");
           if (satisfied()) return;
           if (Date.now() >= deadline) {
-            const what = step.query ? describeTarget(step) : `route ${step.route}`;
-            throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5e3}ms for ${what}`);
+            throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5e3}ms for ${renderTarget(step)}`);
           }
           await sleep(opts.pollMs);
         }
@@ -400,6 +411,65 @@
     const result = tool.returns ? computeReturn(tool.returns, args) : { ok: true };
     if (tool.guidance && tool.guidance.length) result.guidance = tool.guidance;
     return result;
+  }
+  function projectAction(step) {
+    const view = { op: step.op, target: renderTarget(step) };
+    if (step.when !== void 0) view.when = step.when;
+    return view;
+  }
+  function describeAction(step) {
+    const target = renderTarget(step);
+    return target && target !== step.op ? `${step.op} ${target}` : step.op;
+  }
+  function fragmentUses(step) {
+    const out = new Set(stepParams(step));
+    templateParamNames(step.when, out);
+    return [...out].sort();
+  }
+  function projectFragments(ir) {
+    const out = [];
+    for (const tool of ir.tools) {
+      tool.steps.forEach((step, index) => {
+        out.push({
+          id: `${tool.name}.${index}`,
+          tool: tool.name,
+          index,
+          op: step.op,
+          label: describeAction(step),
+          uses: fragmentUses(step)
+        });
+      });
+    }
+    return out;
+  }
+  async function execActions(actions, args = {}, options = {}) {
+    const opts = resolveOptions(options);
+    const livePath = () => typeof window !== "undefined" ? window.location.pathname : opts.currentPath;
+    for (let i = 0; i < actions.length; i++) {
+      const step = actions[i];
+      if (shouldSkipStep(step, args)) {
+        opts.log(`skip ${step.op} action (optional field absent)`);
+        continue;
+      }
+      try {
+        await runStep(step, args, opts);
+      } catch (err) {
+        return {
+          completedThrough: i,
+          total: actions.length,
+          done: false,
+          interrupt: {
+            at: i,
+            action: describeAction(step),
+            reason: err.message,
+            observed: { path: livePath() }
+          },
+          remaining: actions.slice(i),
+          remainingView: actions.slice(i).map(projectAction)
+        };
+      }
+    }
+    return { completedThrough: actions.length, total: actions.length, done: true, remaining: [], remainingView: [] };
   }
 
   // src/webmcp.ts
@@ -552,6 +622,12 @@
         const tool = findTool(this.ir, name);
         if (!tool) return Promise.resolve({ ok: false, message: `unknown tool "${name}"` });
         return runTool(tool, args, options);
+      },
+      execActions(actions, args = {}, options) {
+        return execActions(actions, args, options);
+      },
+      fragments() {
+        return this.ir ? projectFragments(this.ir) : [];
       }
     };
     if (typeof window !== "undefined" && opts.currentPath === void 0) {
