@@ -40,7 +40,8 @@
               }
             ]
           },
-          "value": "{{text}}"
+          "value": "{{text}}",
+          "target": "NewTodoField"
         },
         {
           "op": "click",
@@ -52,7 +53,8 @@
                 ]
               }
             ]
-          }
+          },
+          "target": "AddButton"
         },
         {
           "op": "waitFor",
@@ -76,6 +78,7 @@
               }
             ]
           },
+          "target": "TodoItem[text=\"{{text}}\"]",
           "timeoutMs": 5000
         }
       ],
@@ -197,7 +200,8 @@
                 ]
               }
             ]
-          }
+          },
+          "target": "FilterButton[label=\"{{filter}}\"]"
         }
       ],
       "guidance": [
@@ -230,7 +234,8 @@
                 ]
               }
             ]
-          }
+          },
+          "target": "ClearCompletedButton"
         }
       ]
     }
