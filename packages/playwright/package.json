@@ -1,0 +1,9 @@
+{
+  "name": "@sightkick/playwright",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"build": "node build.mjs", "typecheck": "tsc --noEmit", "test": "node --test test/*.test.mjs"},
+  "dependencies": {"@sightkick/runtime": "workspace:*"},
+  "devDependencies": {"esbuild": "^0.21.5", "playwright": "^1.58.2", "@types/node": "^22.0.0"}
+}
