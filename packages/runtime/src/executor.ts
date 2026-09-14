@@ -79,10 +79,11 @@ function guardHolds(guard: Guard, args: Record<string, unknown>): boolean {
 }
 
 /** Render one predicate as its authored discriminator, e.g. `[label*="flights only" i]`. */
-function renderPred(p: Pred): string {
+function renderPred(p: Pred, args?: Record<string, unknown>): string {
   const prop = p.property ?? "";
   const ci = p.ci ? " i" : "";
-  return `[${prop}${p.op}"${p.value}"${ci}]`;
+  const value = args ? interpolate(p.value, args) : p.value;
+  return `[${prop}${p.op}"${value}"${ci}]`;
 }
 
 /**
@@ -94,21 +95,27 @@ function renderPred(p: Pred): string {
  * JSON. Locator noise stays minimal by showing the first locator per part (the
  * representative one); the raw Step is untouched and remains the resubmit shape.
  */
-function renderTarget(step: Step): string {
+function renderTarget(step: Step, args?: Record<string, unknown>): string {
   // Prefer the generator's semantic corpus label (component-query / view / key)
   // over reconstructing raw locators from the compiled query (sites-6a1a). The
   // fallbacks below keep older IRs (no `target`) rendering as before.
-  if (step.target) return step.target;
+  // When `args` are supplied, interpolate {{param}} placeholders so error/
+  // interrupt messages show the RESOLVED selector (code="JFK") the matcher
+  // actually searched for, not the raw authored label (code="{{origin}}") — a
+  // raw placeholder in a timeout reason misleads an agent into permuting the
+  // arg value when the arg was never the problem (sites-6d6a).
+  const sub = (s: string) => (args ? interpolate(s, args) : s);
+  if (step.target) return sub(step.target);
   const parts = step.query?.parts;
   if (parts && parts.length) {
     return parts
-      .map((p) => (p.locators[0] ?? "*") + (p.preds ?? []).map(renderPred).join(""))
+      .map((p) => (p.locators[0] ?? "*") + (p.preds ?? []).map((pr) => renderPred(pr, args)).join(""))
       .join(" ");
   }
   if (step.view) return step.view;
   if (step.route) return `route ${step.route}`;
-  if (step.url) return step.url;
-  if (step.key) return `key ${step.key}`;
+  if (step.url) return sub(step.url);
+  if (step.key) return `key ${sub(step.key)}`;
   return step.op;
 }
 
@@ -197,13 +204,13 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
     }
     case "fill": {
       const el = target();
-      if (!el) throw new Error(`fill: no element for ${renderTarget(step)}`);
+      if (!el) throw new Error(`fill: no element for ${renderTarget(step, args)}`);
       typeInto(el, interpolate(step.value ?? "", args));
       return;
     }
     case "click": {
       const el = target();
-      if (!el) throw new Error(`click: no element for ${renderTarget(step)}`);
+      if (!el) throw new Error(`click: no element for ${renderTarget(step, args)}`);
       await clickElement(el);
       return;
     }
@@ -236,7 +243,7 @@ async function runStep(step: Step, args: Record<string, unknown>, opts: Resolved
         if (opts.signal?.aborted) throw new Error("aborted");
         if (satisfied()) return;
         if (Date.now() >= deadline) {
-          throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5000}ms for ${renderTarget(step)}`);
+          throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5000}ms for ${renderTarget(step, args)}`);
         }
         await sleep(opts.pollMs);
       }
@@ -365,14 +372,14 @@ export interface ActionView {
   when?: string;
 }
 
-function projectAction(step: Step): ActionView {
-  const view: ActionView = { op: step.op, target: renderTarget(step) };
+function projectAction(step: Step, args?: Record<string, unknown>): ActionView {
+  const view: ActionView = { op: step.op, target: renderTarget(step, args) };
   if (step.when !== undefined) view.when = step.when;
   return view;
 }
 
-function describeAction(step: Step): string {
-  const target = renderTarget(step);
+function describeAction(step: Step, args?: Record<string, unknown>): string {
+  const target = renderTarget(step, args);
   return target && target !== step.op ? `${step.op} ${target}` : step.op;
 }
 
@@ -500,12 +507,12 @@ export async function execActions(
         done: false,
         interrupt: {
           at: i,
-          action: describeAction(step),
+          action: describeAction(step, args),
           reason: (err as Error).message,
           observed: { path: livePath() },
         },
         remaining: actions.slice(i),
-        remainingView: actions.slice(i).map(projectAction),
+        remainingView: actions.slice(i).map((a) => projectAction(a, args)),
       };
     }
   }

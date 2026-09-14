@@ -295,19 +295,26 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
         required: ["refs"],
       },
       execute: async (rawArgs, options) => {
-        const refs = Array.isArray(rawArgs?.refs) ? (rawArgs.refs as unknown[]).map(String) : [];
-        const callArgs = (rawArgs?.args as Record<string, unknown>) ?? {};
-        if (!api.ir) return metaEnvelope({ error: "no IR loaded" }, true);
-        if (!refs.length) return metaEnvelope({ error: "exec_actions needs a non-empty `refs` array" }, true);
-        const { steps, unknown } = resolveFragmentRefs(api.ir, refs);
-        if (unknown.length) {
-          return metaEnvelope(
-            { error: `unknown fragment ref(s): ${unknown.join(", ")}`, hint: "call get_fragments for valid ids" },
-            true,
-          );
+        // A tool must never crash the caller: any unexpected throw (e.g. a step
+        // racing a navigation teardown) becomes a structured error envelope
+        // rather than a null result + surfaced TypeError (sites-6d6a).
+        try {
+          const refs = Array.isArray(rawArgs?.refs) ? (rawArgs.refs as unknown[]).map(String) : [];
+          const callArgs = (rawArgs?.args as Record<string, unknown>) ?? {};
+          if (!api.ir) return metaEnvelope({ error: "no IR loaded" }, true);
+          if (!refs.length) return metaEnvelope({ error: "exec_actions needs a non-empty `refs` array" }, true);
+          const { steps, unknown } = resolveFragmentRefs(api.ir, refs);
+          if (unknown.length) {
+            return metaEnvelope(
+              { error: `unknown fragment ref(s): ${unknown.join(", ")}`, hint: "call get_fragments for valid ids" },
+              true,
+            );
+          }
+          const status = await execActionList(steps, callArgs, { signal: options?.signal, currentPath: currentPath() });
+          return metaEnvelope(projectExecStatus(status, refs), !status.done);
+        } catch (e) {
+          return metaEnvelope({ error: `exec_actions failed: ${describeError(e)}` }, true);
         }
-        const status = await execActionList(steps, callArgs, { signal: options?.signal, currentPath: currentPath() });
-        return metaEnvelope(projectExecStatus(status, refs), !status.done);
       },
       });
     }

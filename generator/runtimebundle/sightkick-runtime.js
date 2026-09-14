@@ -262,21 +262,23 @@
     const matches = resolveQuery(guard.query, args).length;
     return guard.kind === "present" ? matches > 0 : matches === 0;
   }
-  function renderPred(p) {
+  function renderPred(p, args) {
     const prop = p.property ?? "";
     const ci = p.ci ? " i" : "";
-    return `[${prop}${p.op}"${p.value}"${ci}]`;
+    const value = args ? interpolate(p.value, args) : p.value;
+    return `[${prop}${p.op}"${value}"${ci}]`;
   }
-  function renderTarget(step) {
-    if (step.target) return step.target;
+  function renderTarget(step, args) {
+    const sub = (s) => args ? interpolate(s, args) : s;
+    if (step.target) return sub(step.target);
     const parts = step.query?.parts;
     if (parts && parts.length) {
-      return parts.map((p) => (p.locators[0] ?? "*") + (p.preds ?? []).map(renderPred).join("")).join(" ");
+      return parts.map((p) => (p.locators[0] ?? "*") + (p.preds ?? []).map((pr) => renderPred(pr, args)).join("")).join(" ");
     }
     if (step.view) return step.view;
     if (step.route) return `route ${step.route}`;
-    if (step.url) return step.url;
-    if (step.key) return `key ${step.key}`;
+    if (step.url) return sub(step.url);
+    if (step.key) return `key ${sub(step.key)}`;
     return step.op;
   }
   function templateParamNames(s, out) {
@@ -333,13 +335,13 @@
       }
       case "fill": {
         const el = target();
-        if (!el) throw new Error(`fill: no element for ${renderTarget(step)}`);
+        if (!el) throw new Error(`fill: no element for ${renderTarget(step, args)}`);
         typeInto(el, interpolate(step.value ?? "", args));
         return;
       }
       case "click": {
         const el = target();
-        if (!el) throw new Error(`click: no element for ${renderTarget(step)}`);
+        if (!el) throw new Error(`click: no element for ${renderTarget(step, args)}`);
         await clickElement(el);
         return;
       }
@@ -359,7 +361,7 @@
           if (opts.signal?.aborted) throw new Error("aborted");
           if (satisfied()) return;
           if (Date.now() >= deadline) {
-            throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5e3}ms for ${renderTarget(step)}`);
+            throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5e3}ms for ${renderTarget(step, args)}`);
           }
           await sleep(opts.pollMs);
         }
@@ -413,13 +415,13 @@
     if (tool.guidance && tool.guidance.length) result.guidance = tool.guidance;
     return result;
   }
-  function projectAction(step) {
-    const view = { op: step.op, target: renderTarget(step) };
+  function projectAction(step, args) {
+    const view = { op: step.op, target: renderTarget(step, args) };
     if (step.when !== void 0) view.when = step.when;
     return view;
   }
-  function describeAction(step) {
-    const target = renderTarget(step);
+  function describeAction(step, args) {
+    const target = renderTarget(step, args);
     return target && target !== step.op ? `${step.op} ${target}` : step.op;
   }
   function fragmentUses(step) {
@@ -485,12 +487,12 @@
           done: false,
           interrupt: {
             at: i,
-            action: describeAction(step),
+            action: describeAction(step, args),
             reason: err.message,
             observed: { path: livePath() }
           },
           remaining: actions.slice(i),
-          remainingView: actions.slice(i).map(projectAction)
+          remainingView: actions.slice(i).map((a) => projectAction(a, args))
         };
       }
     }
@@ -707,19 +709,23 @@
             required: ["refs"]
           },
           execute: async (rawArgs, options) => {
-            const refs = Array.isArray(rawArgs?.refs) ? rawArgs.refs.map(String) : [];
-            const callArgs = rawArgs?.args ?? {};
-            if (!api.ir) return metaEnvelope({ error: "no IR loaded" }, true);
-            if (!refs.length) return metaEnvelope({ error: "exec_actions needs a non-empty `refs` array" }, true);
-            const { steps, unknown } = resolveFragmentRefs(api.ir, refs);
-            if (unknown.length) {
-              return metaEnvelope(
-                { error: `unknown fragment ref(s): ${unknown.join(", ")}`, hint: "call get_fragments for valid ids" },
-                true
-              );
+            try {
+              const refs = Array.isArray(rawArgs?.refs) ? rawArgs.refs.map(String) : [];
+              const callArgs = rawArgs?.args ?? {};
+              if (!api.ir) return metaEnvelope({ error: "no IR loaded" }, true);
+              if (!refs.length) return metaEnvelope({ error: "exec_actions needs a non-empty `refs` array" }, true);
+              const { steps, unknown } = resolveFragmentRefs(api.ir, refs);
+              if (unknown.length) {
+                return metaEnvelope(
+                  { error: `unknown fragment ref(s): ${unknown.join(", ")}`, hint: "call get_fragments for valid ids" },
+                  true
+                );
+              }
+              const status = await execActions(steps, callArgs, { signal: options?.signal, currentPath: currentPath() });
+              return metaEnvelope(projectExecStatus(status, refs), !status.done);
+            } catch (e) {
+              return metaEnvelope({ error: `exec_actions failed: ${describeError(e)}` }, true);
             }
-            const status = await execActions(steps, callArgs, { signal: options?.signal, currentPath: currentPath() });
-            return metaEnvelope(projectExecStatus(status, refs), !status.done);
           }
         });
       }
