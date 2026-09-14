@@ -1,5 +1,27 @@
 # @sightmap/sightkick
 
+## 0.9.0
+
+### Minor Changes
+
+- 436b57a: Expose the resumable executor as always-on WebMCP tools, and carry corpus vocabulary into fragments.
+
+  **exec_actions + get_fragments (fallback surface).** Two always-on WebMCP tools now register alongside the view-scoped tools. `get_fragments` lists the action fragments available on the current view — each a pluckable `{id, tool, op, label, uses}`. `exec_actions` runs an agent-composed list of those fragment ids resumably: it consumes fragment **references** (not raw compiled steps), so raw selectors/URLs never cross the tool boundary; on an interruption (an unexpected modal, a missing field) it stops instead of hanging and returns the reason plus the **remaining fragment refs**, which the agent re-submits to resume. Registration dedups against the shared native registry (`getTools()`) so the tools appear exactly once even when the bundle boots in several execution contexts (Angular/Zone SPAs).
+
+  **Semantic fragment targets.** The generator now carries each step's corpus-vocabulary target into the IR (`Step.target`): the source compquery for a query step (`FormField[label*="First" i] FieldInput`), the destination view name for navigate/goto/waitFor-view (a `goto` deep link resolves to its view), the key for keypress. Fragment labels and the execActions tail/interrupt projection render this instead of reconstructing raw locators, so an agent composes and reads in component/view names. It is label/provenance only — the runtime still selects via the compiled query, so the IR firewall holds.
+
+### Patch Changes
+
+- cbd35bf: get_fragments: return the current view's base set plus a 1-hop guidance horizon, tiered by distance.
+
+  Previously get_fragments returned only the tools offered on the current view. It now also includes the immediate next step — the tools one navigation away, reached via the current view's tools' guidance graph — so an agent can pre-compose across a navigation instead of hitting a hard cut at the view boundary. Each fragment is tagged with `view` (its owning tool's view) and `distance` (0 = current view, 1 = one hop away). Reachability rides the per-tool `guidance` (Suggestion[]) only and stops at one hop deliberately; deeper is journey territory.
+
+- a73dbb5: Fix persisted (document_start) runtime injection so tools survive a full page reload on an SPA.
+
+  The persisted runtime script re-fires at `document_start` on every navigation, before the SPA has bootstrapped and before the WebMCP native surface (`document.modelContext`) exists. Booting there either polyfilled `document.modelContext` and registered tools onto the polyfill — so a reloaded page had a native surface but no tools — or, once it waited for the native surface, registered mid-bootstrap and crashed the renderer (`RESULT_CODE_KILLED_BAD_MESSAGE`) on Angular/Zone pages like JetBlue.
+
+  A new readiness gate (`whenBootable`) defers auto-boot: a live inject or a direct install into an already-loaded document boots synchronously (the known-safe timing, unchanged), while a `document_start` re-injection waits for the document to finish loading and, on a native page, for the native surface to appear, then a short settle before registering. The launcher now sets `window.__sightkick_ir` before the bundle instead of appending `window.__sightkick.load(ir)`, since the deferred boot means the global isn't defined yet when a trailing line would run.
+
 ## 0.8.0
 
 ### Minor Changes
