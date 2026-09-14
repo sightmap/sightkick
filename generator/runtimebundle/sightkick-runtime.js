@@ -268,13 +268,14 @@
     return `[${prop}${p.op}"${p.value}"${ci}]`;
   }
   function renderTarget(step) {
+    if (step.target) return step.target;
     const parts = step.query?.parts;
     if (parts && parts.length) {
       return parts.map((p) => (p.locators[0] ?? "*") + (p.preds ?? []).map(renderPred).join("")).join(" ");
     }
+    if (step.view) return step.view;
     if (step.route) return `route ${step.route}`;
     if (step.url) return step.url;
-    if (step.view) return `view ${step.view}`;
     if (step.key) return `key ${step.key}`;
     return step.op;
   }
@@ -557,6 +558,38 @@
   function toEnvelope(result) {
     return { content: [{ type: "text", text: JSON.stringify(result) }], isError: !result.ok };
   }
+  function metaEnvelope(payload, isError = false) {
+    return { content: [{ type: "text", text: JSON.stringify(payload) }], isError };
+  }
+  function fragmentStep(ir, ref) {
+    if (!ir) return void 0;
+    const dot = ref.lastIndexOf(".");
+    if (dot < 0) return void 0;
+    const idx = Number(ref.slice(dot + 1));
+    if (!Number.isInteger(idx) || idx < 0) return void 0;
+    const tool = ir.tools.find((t) => t.name === ref.slice(0, dot));
+    return tool?.steps[idx];
+  }
+  function resolveFragmentRefs(ir, refs) {
+    const steps = [];
+    const unknown = [];
+    for (const ref of refs) {
+      const step = fragmentStep(ir, ref);
+      if (step) steps.push(step);
+      else unknown.push(ref);
+    }
+    return { steps, unknown };
+  }
+  function projectExecStatus(status, refs) {
+    return {
+      done: status.done,
+      completedThrough: status.completedThrough,
+      total: status.total,
+      interrupt: status.interrupt,
+      remaining: refs.slice(status.completedThrough),
+      remainingView: status.remainingView
+    };
+  }
   var historyPatched = false;
   function patchHistory() {
     if (historyPatched || typeof history === "undefined" || typeof window === "undefined") return;
@@ -602,6 +635,83 @@
         ).catch((e) => console.warn(`[sightkick] registerTool "${tool.name}" rejected: ${describeError(e)}`));
       }
     };
+    const currentFragments = () => {
+      const ir = api.ir;
+      if (!ir) return [];
+      const path = currentPath();
+      return projectFragments(ir).filter((f) => {
+        const tool = ir.tools.find((t) => t.name === f.tool);
+        return !tool?.ensureView || routeMatches(tool.ensureView.route, path);
+      });
+    };
+    const metaControllers = [];
+    let metaRegistered = false;
+    const liveCtx = () => typeof document !== "undefined" && document.modelContext || ctx;
+    const registerMetaTool = async (def) => {
+      const target = liveCtx();
+      if (!target) return;
+      const controller = new AbortController();
+      metaControllers.push(controller);
+      try {
+        await target.registerTool(def, { signal: controller.signal });
+      } catch (e) {
+        console.warn(`[sightkick] registerTool "${def.name}" rejected: ${describeError(e)}`);
+      }
+    };
+    const registerMetaTools = async () => {
+      if (metaRegistered || !ctx) return;
+      metaRegistered = true;
+      let present = /* @__PURE__ */ new Set();
+      try {
+        const target = liveCtx();
+        if (target) present = new Set((await target.getTools()).map((t) => t.name));
+      } catch {
+      }
+      if (!present.has("exec_actions")) {
+        await registerMetaTool({
+          name: "exec_actions",
+          description: "Run an ordered list of action fragments resumably. Pass fragment ids (from get_fragments) in `refs` and any parameter values in `args`. Returns how far it got; if an action is interrupted (e.g. an unexpected modal, a missing field), it STOPS instead of hanging and returns the reason plus the remaining fragment refs. Handle the interruption (dismiss the modal, call another tool), then call exec_actions again with the returned `remaining` refs to resume where it left off.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              refs: {
+                type: "array",
+                items: { type: "string" },
+                description: 'Fragment ids to run in order, e.g. ["set_contact.0", "set_contact.1"].'
+              },
+              args: {
+                type: "object",
+                description: "Parameter values the fragments interpolate (see each fragment's `uses`)."
+              }
+            },
+            required: ["refs"]
+          },
+          execute: async (rawArgs, options) => {
+            const refs = Array.isArray(rawArgs?.refs) ? rawArgs.refs.map(String) : [];
+            const callArgs = rawArgs?.args ?? {};
+            if (!api.ir) return metaEnvelope({ error: "no IR loaded" }, true);
+            if (!refs.length) return metaEnvelope({ error: "exec_actions needs a non-empty `refs` array" }, true);
+            const { steps, unknown } = resolveFragmentRefs(api.ir, refs);
+            if (unknown.length) {
+              return metaEnvelope(
+                { error: `unknown fragment ref(s): ${unknown.join(", ")}`, hint: "call get_fragments for valid ids" },
+                true
+              );
+            }
+            const status = await execActions(steps, callArgs, { signal: options?.signal, currentPath: currentPath() });
+            return metaEnvelope(projectExecStatus(status, refs), !status.done);
+          }
+        });
+      }
+      if (!present.has("get_fragments")) {
+        await registerMetaTool({
+          name: "get_fragments",
+          description: "List the action fragments available on the current view. Each is a pluckable step {id, tool, op, label, uses}: `label` reads in component/view vocabulary, `uses` names the parameters it needs. Compose an ordered list of `id`s and pass them to exec_actions.",
+          inputSchema: { type: "object", properties: {} },
+          execute: async () => metaEnvelope({ fragments: currentFragments() })
+        });
+      }
+    };
     const api = {
       mode: detectMode(),
       ir: null,
@@ -610,6 +720,7 @@
       load(ir) {
         this.ir = ir;
         refresh();
+        registerMetaTools();
         console.info(
           `[sightkick] loaded IR "${ir.name}" (${ir.tools.length} tools, ${this.mode}, ${this.polyfilled ? "polyfilled" : "native"} modelContext)`
         );
