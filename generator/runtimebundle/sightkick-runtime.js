@@ -154,29 +154,52 @@
     }
   }
   function dispatchPointerClick(target, clientX, clientY) {
-    const init = (buttons) => ({
+    const hasPE = typeof PointerEvent !== "undefined";
+    const view = typeof window !== "undefined" ? window : void 0;
+    const init = (buttons, detail) => ({
       bubbles: true,
       cancelable: true,
       composed: true,
+      view,
       clientX,
       clientY,
+      screenX: clientX,
+      screenY: clientY,
       button: 0,
-      buttons
+      buttons,
+      detail
     });
-    const hasPE = typeof PointerEvent !== "undefined";
-    const emit = (type, buttons, pointer) => {
+    const emit = (type, buttons, detail, pointer) => {
       if (pointer && hasPE) {
         target.dispatchEvent(
-          new PointerEvent(type, { ...init(buttons), pointerId: 1, pointerType: "mouse", isPrimary: true })
+          new PointerEvent(type, {
+            ...init(buttons, detail),
+            pointerId: 1,
+            pointerType: "mouse",
+            isPrimary: true,
+            // width/height/pressure make this a REAL pointer: react-aria's usePress
+            // treats a 0-size, 0-pressure mouse pointer as a "virtual" (assistive)
+            // click and routes it down a different path.
+            width: 1,
+            height: 1,
+            pressure: buttons ? 0.5 : 0
+          })
         );
       } else {
-        target.dispatchEvent(new MouseEvent(type, init(buttons)));
+        target.dispatchEvent(new MouseEvent(type, init(buttons, detail)));
       }
     };
-    emit("pointerdown", 1, true);
-    emit("mousedown", 1, false);
-    emit("pointerup", 0, true);
-    emit("mouseup", 0, false);
+    emit("pointerover", 0, 0, true);
+    emit("mouseover", 0, 0, false);
+    emit("pointerenter", 0, 0, true);
+    emit("mouseenter", 0, 0, false);
+    emit("pointermove", 0, 0, true);
+    emit("mousemove", 0, 0, false);
+    emit("pointerdown", 1, 1, true);
+    emit("mousedown", 1, 1, false);
+    if (typeof target.focus === "function") target.focus();
+    emit("pointerup", 0, 1, true);
+    emit("mouseup", 0, 1, false);
     target.click();
   }
   function deepestElementAt(root, x, y) {
