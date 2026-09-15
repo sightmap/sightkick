@@ -641,7 +641,8 @@
     const refresh = () => {
       unregisterAll();
       const ir = api.ir;
-      if (!ir || !ctx) return;
+      const target = liveCtx();
+      if (!ir || !target) return;
       const path = currentPath();
       for (const tool of ir.tools) {
         if (tool.ensureView && !routeMatches(tool.ensureView.route, path)) continue;
@@ -649,7 +650,7 @@
         registrations.push(controller);
         registered.push({ name: tool.name, description: tool.description });
         Promise.resolve(
-          ctx.registerTool(
+          target.registerTool(
             {
               name: tool.name,
               description: tool.description ?? "",
@@ -734,7 +735,13 @@
           name: "get_fragments",
           description: "List the action fragments available on the current view. Each is a pluckable step {id, tool, op, label, uses}: `label` reads in component/view vocabulary, `uses` names the parameters it needs. Compose an ordered list of `id`s and pass them to exec_actions.",
           inputSchema: { type: "object", properties: {} },
-          execute: async () => metaEnvelope({ fragments: currentFragments() })
+          execute: async () => {
+            try {
+              return metaEnvelope({ fragments: currentFragments() });
+            } catch (e) {
+              return metaEnvelope({ error: `get_fragments failed: ${describeError(e)}` }, true);
+            }
+          }
         });
       }
     };

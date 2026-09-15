@@ -189,7 +189,15 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
   const refresh = () => {
     unregisterAll();
     const ir = api.ir;
-    if (!ir || !ctx) return;
+    // Register against the LIVE document.modelContext (same target the meta tools
+    // use via liveCtx), not the boot-captured `ctx`. On an SPA where Angular's
+    // Zone re-wraps document.modelContext, a captured ctx and the live one can
+    // diverge; registering both surfaces against the same live object keeps the
+    // per-view tools and the meta tools consistent, so a WebMCP client that
+    // resolves a tool from getTools() and passes it back to executeTool doesn't
+    // hit a cross-context 'not of type RegisteredTool' (sites-ab96).
+    const target = liveCtx();
+    if (!ir || !target) return;
     const path = currentPath();
     for (const tool of ir.tools) {
       // View-scoped registration: a tool is offered only on its view. This is
@@ -202,7 +210,7 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
       // registerTool is fire-and-forget, but a rejected native call must NOT
       // become an "Uncaught (in promise) {}" — surface the real reason.
       Promise.resolve(
-        ctx.registerTool(
+        target.registerTool(
           {
             name: tool.name,
             description: tool.description ?? "",
@@ -326,7 +334,15 @@ export function boot(initial?: IR, opts: BootOptions = {}): SightkickGlobal {
         "{id, tool, op, label, uses}: `label` reads in component/view vocabulary, `uses` names the " +
         "parameters it needs. Compose an ordered list of `id`s and pass them to exec_actions.",
       inputSchema: { type: "object", properties: {} },
-      execute: async () => metaEnvelope({ fragments: currentFragments() }),
+      execute: async () => {
+        // Never return null + a surfaced TypeError: a throw in currentFragments
+        // becomes a structured error envelope (matches exec_actions, sites-6d6a).
+        try {
+          return metaEnvelope({ fragments: currentFragments() });
+        } catch (e) {
+          return metaEnvelope({ error: `get_fragments failed: ${describeError(e)}` }, true);
+        }
+      },
       });
     }
   };
