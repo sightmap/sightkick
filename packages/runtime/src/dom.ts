@@ -276,29 +276,57 @@ export function typeInto(el: Element, value: string): void {
  * it already handled, so it doesn't double-fire.
  */
 function dispatchPointerClick(target: HTMLElement, clientX: number, clientY: number): void {
-  const init = (buttons: number): MouseEventInit => ({
+  const hasPE = typeof PointerEvent !== "undefined";
+  const view = typeof window !== "undefined" ? window : undefined;
+  const init = (buttons: number, detail: number): MouseEventInit => ({
     bubbles: true,
     cancelable: true,
     composed: true,
+    view,
     clientX,
     clientY,
+    screenX: clientX,
+    screenY: clientY,
     button: 0,
     buttons,
+    detail,
   });
-  const hasPE = typeof PointerEvent !== "undefined";
-  const emit = (type: string, buttons: number, pointer: boolean) => {
+  const emit = (type: string, buttons: number, detail: number, pointer: boolean) => {
     if (pointer && hasPE) {
       target.dispatchEvent(
-        new PointerEvent(type, { ...init(buttons), pointerId: 1, pointerType: "mouse", isPrimary: true }),
+        new PointerEvent(type, {
+          ...init(buttons, detail),
+          pointerId: 1,
+          pointerType: "mouse",
+          isPrimary: true,
+          // width/height/pressure make this a REAL pointer: react-aria's usePress
+          // treats a 0-size, 0-pressure mouse pointer as a "virtual" (assistive)
+          // click and routes it down a different path.
+          width: 1,
+          height: 1,
+          pressure: buttons ? 0.5 : 0,
+        }),
       );
     } else {
-      target.dispatchEvent(new MouseEvent(type, init(buttons)));
+      target.dispatchEvent(new MouseEvent(type, init(buttons, detail)));
     }
   };
-  emit("pointerdown", 1, true);
-  emit("mousedown", 1, false);
-  emit("pointerup", 0, true);
-  emit("mouseup", 0, false);
+  // A faithful click is more than down+up: the cursor arrives (over/enter/move),
+  // the element is pressed, focused, then released. Some widgets only arm their
+  // press on a pointer that actually moved onto them, and activation-gated overlays
+  // (e.g. JetBlue's react-aria fare calendar) won't open from a bare down/up even
+  // WITH user activation — they need this fuller sequence (sites-6d6a).
+  emit("pointerover", 0, 0, true);
+  emit("mouseover", 0, 0, false);
+  emit("pointerenter", 0, 0, true);
+  emit("mouseenter", 0, 0, false);
+  emit("pointermove", 0, 0, true);
+  emit("mousemove", 0, 0, false);
+  emit("pointerdown", 1, 1, true);
+  emit("mousedown", 1, 1, false);
+  if (typeof target.focus === "function") target.focus();
+  emit("pointerup", 0, 1, true);
+  emit("mouseup", 0, 1, false);
   target.click();
 }
 

@@ -154,29 +154,52 @@
     }
   }
   function dispatchPointerClick(target, clientX, clientY) {
-    const init = (buttons) => ({
+    const hasPE = typeof PointerEvent !== "undefined";
+    const view = typeof window !== "undefined" ? window : void 0;
+    const init = (buttons, detail) => ({
       bubbles: true,
       cancelable: true,
       composed: true,
+      view,
       clientX,
       clientY,
+      screenX: clientX,
+      screenY: clientY,
       button: 0,
-      buttons
+      buttons,
+      detail
     });
-    const hasPE = typeof PointerEvent !== "undefined";
-    const emit = (type, buttons, pointer) => {
+    const emit = (type, buttons, detail, pointer) => {
       if (pointer && hasPE) {
         target.dispatchEvent(
-          new PointerEvent(type, { ...init(buttons), pointerId: 1, pointerType: "mouse", isPrimary: true })
+          new PointerEvent(type, {
+            ...init(buttons, detail),
+            pointerId: 1,
+            pointerType: "mouse",
+            isPrimary: true,
+            // width/height/pressure make this a REAL pointer: react-aria's usePress
+            // treats a 0-size, 0-pressure mouse pointer as a "virtual" (assistive)
+            // click and routes it down a different path.
+            width: 1,
+            height: 1,
+            pressure: buttons ? 0.5 : 0
+          })
         );
       } else {
-        target.dispatchEvent(new MouseEvent(type, init(buttons)));
+        target.dispatchEvent(new MouseEvent(type, init(buttons, detail)));
       }
     };
-    emit("pointerdown", 1, true);
-    emit("mousedown", 1, false);
-    emit("pointerup", 0, true);
-    emit("mouseup", 0, false);
+    emit("pointerover", 0, 0, true);
+    emit("mouseover", 0, 0, false);
+    emit("pointerenter", 0, 0, true);
+    emit("mouseenter", 0, 0, false);
+    emit("pointermove", 0, 0, true);
+    emit("mousemove", 0, 0, false);
+    emit("pointerdown", 1, 1, true);
+    emit("mousedown", 1, 1, false);
+    if (typeof target.focus === "function") target.focus();
+    emit("pointerup", 0, 1, true);
+    emit("mouseup", 0, 1, false);
     target.click();
   }
   function deepestElementAt(root, x, y) {
@@ -262,21 +285,23 @@
     const matches = resolveQuery(guard.query, args).length;
     return guard.kind === "present" ? matches > 0 : matches === 0;
   }
-  function renderPred(p) {
+  function renderPred(p, args) {
     const prop = p.property ?? "";
     const ci = p.ci ? " i" : "";
-    return `[${prop}${p.op}"${p.value}"${ci}]`;
+    const value = args ? interpolate(p.value, args) : p.value;
+    return `[${prop}${p.op}"${value}"${ci}]`;
   }
-  function renderTarget(step) {
-    if (step.target) return step.target;
+  function renderTarget(step, args) {
+    const sub = (s) => args ? interpolate(s, args) : s;
+    if (step.target) return sub(step.target);
     const parts = step.query?.parts;
     if (parts && parts.length) {
-      return parts.map((p) => (p.locators[0] ?? "*") + (p.preds ?? []).map(renderPred).join("")).join(" ");
+      return parts.map((p) => (p.locators[0] ?? "*") + (p.preds ?? []).map((pr) => renderPred(pr, args)).join("")).join(" ");
     }
     if (step.view) return step.view;
     if (step.route) return `route ${step.route}`;
-    if (step.url) return step.url;
-    if (step.key) return `key ${step.key}`;
+    if (step.url) return sub(step.url);
+    if (step.key) return `key ${sub(step.key)}`;
     return step.op;
   }
   function templateParamNames(s, out) {
@@ -333,13 +358,13 @@
       }
       case "fill": {
         const el = target();
-        if (!el) throw new Error(`fill: no element for ${renderTarget(step)}`);
+        if (!el) throw new Error(`fill: no element for ${renderTarget(step, args)}`);
         typeInto(el, interpolate(step.value ?? "", args));
         return;
       }
       case "click": {
         const el = target();
-        if (!el) throw new Error(`click: no element for ${renderTarget(step)}`);
+        if (!el) throw new Error(`click: no element for ${renderTarget(step, args)}`);
         await clickElement(el);
         return;
       }
@@ -359,7 +384,7 @@
           if (opts.signal?.aborted) throw new Error("aborted");
           if (satisfied()) return;
           if (Date.now() >= deadline) {
-            throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5e3}ms for ${renderTarget(step)}`);
+            throw new Error(`waitFor: timed out after ${step.timeoutMs ?? 5e3}ms for ${renderTarget(step, args)}`);
           }
           await sleep(opts.pollMs);
         }
@@ -413,13 +438,13 @@
     if (tool.guidance && tool.guidance.length) result.guidance = tool.guidance;
     return result;
   }
-  function projectAction(step) {
-    const view = { op: step.op, target: renderTarget(step) };
+  function projectAction(step, args) {
+    const view = { op: step.op, target: renderTarget(step, args) };
     if (step.when !== void 0) view.when = step.when;
     return view;
   }
-  function describeAction(step) {
-    const target = renderTarget(step);
+  function describeAction(step, args) {
+    const target = renderTarget(step, args);
     return target && target !== step.op ? `${step.op} ${target}` : step.op;
   }
   function fragmentUses(step) {
@@ -485,12 +510,12 @@
           done: false,
           interrupt: {
             at: i,
-            action: describeAction(step),
+            action: describeAction(step, args),
             reason: err.message,
             observed: { path: livePath() }
           },
           remaining: actions.slice(i),
-          remainingView: actions.slice(i).map(projectAction)
+          remainingView: actions.slice(i).map((a) => projectAction(a, args))
         };
       }
     }
@@ -639,7 +664,8 @@
     const refresh = () => {
       unregisterAll();
       const ir = api.ir;
-      if (!ir || !ctx) return;
+      const target = liveCtx();
+      if (!ir || !target) return;
       const path = currentPath();
       for (const tool of ir.tools) {
         if (tool.ensureView && !routeMatches(tool.ensureView.route, path)) continue;
@@ -647,7 +673,7 @@
         registrations.push(controller);
         registered.push({ name: tool.name, description: tool.description });
         Promise.resolve(
-          ctx.registerTool(
+          target.registerTool(
             {
               name: tool.name,
               description: tool.description ?? "",
@@ -707,19 +733,23 @@
             required: ["refs"]
           },
           execute: async (rawArgs, options) => {
-            const refs = Array.isArray(rawArgs?.refs) ? rawArgs.refs.map(String) : [];
-            const callArgs = rawArgs?.args ?? {};
-            if (!api.ir) return metaEnvelope({ error: "no IR loaded" }, true);
-            if (!refs.length) return metaEnvelope({ error: "exec_actions needs a non-empty `refs` array" }, true);
-            const { steps, unknown } = resolveFragmentRefs(api.ir, refs);
-            if (unknown.length) {
-              return metaEnvelope(
-                { error: `unknown fragment ref(s): ${unknown.join(", ")}`, hint: "call get_fragments for valid ids" },
-                true
-              );
+            try {
+              const refs = Array.isArray(rawArgs?.refs) ? rawArgs.refs.map(String) : [];
+              const callArgs = rawArgs?.args ?? {};
+              if (!api.ir) return metaEnvelope({ error: "no IR loaded" }, true);
+              if (!refs.length) return metaEnvelope({ error: "exec_actions needs a non-empty `refs` array" }, true);
+              const { steps, unknown } = resolveFragmentRefs(api.ir, refs);
+              if (unknown.length) {
+                return metaEnvelope(
+                  { error: `unknown fragment ref(s): ${unknown.join(", ")}`, hint: "call get_fragments for valid ids" },
+                  true
+                );
+              }
+              const status = await execActions(steps, callArgs, { signal: options?.signal, currentPath: currentPath() });
+              return metaEnvelope(projectExecStatus(status, refs), !status.done);
+            } catch (e) {
+              return metaEnvelope({ error: `exec_actions failed: ${describeError(e)}` }, true);
             }
-            const status = await execActions(steps, callArgs, { signal: options?.signal, currentPath: currentPath() });
-            return metaEnvelope(projectExecStatus(status, refs), !status.done);
           }
         });
       }
@@ -728,7 +758,13 @@
           name: "get_fragments",
           description: "List the action fragments available on the current view. Each is a pluckable step {id, tool, op, label, uses}: `label` reads in component/view vocabulary, `uses` names the parameters it needs. Compose an ordered list of `id`s and pass them to exec_actions.",
           inputSchema: { type: "object", properties: {} },
-          execute: async () => metaEnvelope({ fragments: currentFragments() })
+          execute: async () => {
+            try {
+              return metaEnvelope({ fragments: currentFragments() });
+            } catch (e) {
+              return metaEnvelope({ error: `get_fragments failed: ${describeError(e)}` }, true);
+            }
+          }
         });
       }
     };
