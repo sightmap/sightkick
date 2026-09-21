@@ -1,5 +1,15 @@
 # @sightmap/sightkick
 
+## 0.9.1
+
+### Patch Changes
+
+- f96b44a: runtime: dispatch a faithful pointer-click sequence so press-gated widgets actually actuate.
+
+  The lean click (bare `pointerdown`/`mousedown`/`pointerup`/`mouseup` + `target.click()`, with a virtual-looking zero-size pointer) could not drive widgets that arm their press on a real cursor arriving — notably react-aria `usePress` controls like JetBlue's fare calendar and the checkout `jb-select` dropdowns. `dispatchPointerClick` now emits the full sequence a real click produces: the cursor arrives (`pointerover`/`enter`/`move`), the element is pressed, **focused**, then released, and every pointer event carries real geometry (`width`/`height`/`pressure`) so react-aria treats it as a genuine (not assistive/virtual) pointer. The `focus()` is also the actual trigger for focus-gated overlays once the page holds focus (paired with the sightmap-side focus emulation). Verified end-to-end on JetBlue: `select_fare`, `set_passenger` (Title/Gender), and `set_dob` (three dropdowns) all commit via the runtime.
+
+- f96b44a: runtime: interrupt/timeout/no-element messages now interpolate params, so an agent sees the RESOLVED selector it actually searched for (e.g. `code="JFK"`, `tier="ZZZ"`) instead of the raw authored placeholder (`code="{{origin}}"`). A raw placeholder in a timeout reason misled agents into permuting the argument value when the argument was never the problem. `exec_actions` and `get_fragments` also now return a structured error envelope for any unexpected throw (e.g. a step racing a navigation teardown) instead of a null result + surfaced TypeError. And view-scoped tools are registered against the live `document.modelContext` (the same context the always-on meta tools use) rather than the boot-captured reference, so a WebMCP client resolving a tool from `getTools()` and passing it back to `executeTool` sees one consistent registration context.
+
 ## 0.9.0
 
 ### Minor Changes
