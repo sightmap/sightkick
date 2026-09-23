@@ -68,6 +68,7 @@ jobs:
         run: |
           pnpm -r build
           pnpm -r typecheck
+          pnpm --filter @sightkick/playwright exec playwright install --with-deps chromium
           pnpm -r test
 
       # pnpm -r build produced packages/runtime/dist/sightkick-runtime.js; the
@@ -78,4 +79,12 @@ jobs:
           go generate ./runtimebundle/...
           git diff --exit-code -- runtimebundle || {
             echo "::error::embedded runtime bundle is stale — rebuild the runtime and run 'go generate ./runtimebundle/...'"; exit 1;
+          }
+
+      - name: Embedded Playwright executor in sync
+        working-directory: generator
+        run: |
+          go generate ./playwrightbundle/...
+          git diff --exit-code -- playwrightbundle || {
+            echo "::error::embedded Playwright executor is stale — rebuild and run go generate ./playwrightbundle/..."; exit 1;
           }
